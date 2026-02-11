@@ -6,8 +6,8 @@ const NAV_ITEMS = [
   { path: '/dashboard', label: 'Главная', icon: '⚔️' },
   { path: '/quests', label: 'Квесты', icon: '📋' },
   { path: '/bosses', label: 'Боссы', icon: '👹' },
+  { path: '/analytics', label: 'Графики', icon: '📈' },
   { path: '/stats', label: 'Статы', icon: '📊' },
-  { path: '/settings', label: 'Ещё', icon: '⚙️' },
 ];
 
 export default function BottomNav() {
@@ -44,7 +44,6 @@ export default function BottomNav() {
               backgroundColor: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              transition: 'all 0.15s',
             }}
           >
             <span style={{
