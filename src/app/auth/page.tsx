@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
@@ -11,8 +11,33 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const router = useRouter();
   const supabase = createClient();
+
+  // Проверяем — может уже залогинен
+  useEffect(() => {
+    async function check() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace('/dashboard');
+      } else {
+        setChecking(false);
+      }
+    }
+    check();
+  }, [router, supabase.auth]);
+
+  // Слушаем изменения авторизации
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        router.replace('/dashboard');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router, supabase.auth]);
 
   async function handleLogin() {
     if (!email || !password) {
@@ -32,8 +57,6 @@ export default function AuthPage() {
     }
 
     toast.success('Добро пожаловать, Охотник!');
-    router.push('/dashboard');
-    router.refresh();
   }
 
   async function handleRegister() {
@@ -56,7 +79,20 @@ export default function AuthPage() {
       return;
     }
 
-    toast.success('Аккаунт создан! Проверь почту.');
+    toast.success('Аккаунт создан! Входим...');
+  }
+
+  // Пока проверяем сессию — показываем загрузку
+  if (checking) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa',
+        fontSize: '24px',
+      }}>
+        ⚔️ Проверка сессии...
+      </div>
+    );
   }
 
   return (
@@ -148,6 +184,7 @@ export default function AuthPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="hunter@example.com"
+              autoComplete="email"
               style={{
                 width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
                 border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
@@ -165,6 +202,12 @@ export default function AuthPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Минимум 6 символов"
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  isLogin ? handleLogin() : handleRegister();
+                }
+              }}
               style={{
                 width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
                 border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
