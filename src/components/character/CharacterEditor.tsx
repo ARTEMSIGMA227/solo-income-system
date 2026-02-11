@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import type { CharacterConfig, LevelImages } from '@/types/database';
@@ -21,20 +21,93 @@ const LEVEL_TIERS = [
   { key: 'monarch' as const, label: 'Монарх', levels: 'LV 40+', rank: 'SS', color: '#f59e0b' },
 ];
 
-const BODY_TYPES = [
-  { value: 'male_1', label: '👤 Мужской' },
-  { value: 'female_1', label: '👩 Женский' },
-];
-
 export default function CharacterEditor({ userId, config, onSave, onClose }: CharacterEditorProps) {
   const [tab, setTab] = useState<'single' | 'levels'>('single');
   const [singleImage, setSingleImage] = useState(config?.custom_image_url || '');
   const [levelImages, setLevelImages] = useState<LevelImages>(config?.level_images || {});
   const [bodyType, setBodyType] = useState(config?.body_type || 'male_1');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTarget, setUploadTarget] = useState<string>('single');
 
-  function updateLevelImage(key: keyof LevelImages, url: string) {
-    setLevelImages(prev => ({ ...prev, [key]: url }));
+  async function uploadImage(file: File, target: string) {
+    setUploading(target);
+    const supabase = createClient();
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}/${target}_${Date.now()}.${fileExt}`;
+
+    // Удалить старую если есть
+    const { data: oldFiles } = await supabase.storage
+      .from('avatars')
+      .list(userId, { search: target });
+
+    if (oldFiles && oldFiles.length > 0) {
+      const toDelete = oldFiles
+        .filter(f => f.name.startsWith(target))
+        .map(f => `${userId}/${f.name}`);
+      if (toDelete.length > 0) {
+        await supabase.storage.from('avatars').remove(toDelete);
+      }
+    }
+
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, { upsert: true });
+
+    if (error) {
+      toast.error('Ошибка загрузки: ' + error.message);
+      setUploading(null);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(fileName);
+
+    setUploading(null);
+    return urlData.publicUrl;
+  }
+
+  function triggerFileUpload(target: string) {
+    setUploadTarget(target);
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Проверка размера (макс 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Файл слишком большой. Максимум 5MB');
+      return;
+    }
+
+    // Проверка типа
+    if (!file.type.startsWith('image/')) {
+      toast.error('Можно загружать только картинки');
+      return;
+    }
+
+    const url = await uploadImage(file, uploadTarget);
+    if (!url) return;
+
+    if (uploadTarget === 'single') {
+      setSingleImage(url);
+    } else {
+      setLevelImages(prev => ({ ...prev, [uploadTarget]: url }));
+    }
+
+    toast.success('Картинка загружена! 🎨');
+
+    // Сбросить input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   }
 
   async function handleSave() {
@@ -57,7 +130,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
       updated_at: new Date().toISOString(),
     };
 
-    if (config) {
+    if (config?.id) {
       await supabase.from('character_config').update(data).eq('user_id', userId);
     } else {
       await supabase.from('character_config').insert(data);
@@ -75,6 +148,15 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '16px',
     }}>
+      {/* Скрытый input для файлов */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+      />
+
       <div style={{
         backgroundColor: '#0a0a0f', borderRadius: '20px', border: '1px solid #1e1e2e',
         padding: '24px', width: '100%', maxWidth: '450px', maxHeight: '85vh',
@@ -90,11 +172,14 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           }}>✕</button>
         </div>
 
-        {/* Тип тела */}
+        {/* Тип персонажа */}
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Тип персонажа</div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {BODY_TYPES.map(bt => (
+            {[
+              { value: 'male_1', label: '👤 Мужской' },
+              { value: 'female_1', label: '👩 Женский' },
+            ].map(bt => (
               <button key={bt.value} onClick={() => setBodyType(bt.value)} style={{
                 flex: 1, padding: '10px', borderRadius: '8px',
                 backgroundColor: bodyType === bt.value ? '#7c3aed20' : '#16161f',
@@ -107,7 +192,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           </div>
         </div>
 
-        {/* Табы: одна картинка / по уровням */}
+        {/* Табы */}
         <div style={{
           display: 'flex', marginBottom: '20px', backgroundColor: '#16161f',
           borderRadius: '8px', padding: '4px',
@@ -126,81 +211,138 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
             backgroundColor: tab === 'levels' ? '#7c3aed' : 'transparent',
             color: tab === 'levels' ? '#fff' : '#94a3b8',
           }}>
-            ⚔️ По уровням (6 шт)
+            ⚔️ По уровням
           </button>
         </div>
 
         {tab === 'single' ? (
           <div>
-            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-              Ссылка на картинку
+            {/* Превью */}
+            <div style={{
+              width: '160px', height: '200px', margin: '0 auto 16px',
+              borderRadius: '16px', overflow: 'hidden',
+              border: '2px dashed #1e1e2e', backgroundColor: '#16161f',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', cursor: 'pointer',
+            }}
+              onClick={() => triggerFileUpload('single')}
+            >
+              {singleImage ? (
+                <img src={singleImage} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <>
+                  <div style={{ fontSize: '40px', marginBottom: '8px' }}>📷</div>
+                  <div style={{ fontSize: '12px', color: '#475569', textAlign: 'center', padding: '0 8px' }}>
+                    Нажми чтобы загрузить
+                  </div>
+                </>
+              )}
             </div>
-            <input
-              type="text"
-              value={singleImage}
-              onChange={(e) => setSingleImage(e.target.value)}
-              placeholder="https://i.imgur.com/xxxxx.png"
+
+            {/* Кнопки */}
+            <button
+              onClick={() => triggerFileUpload('single')}
+              disabled={uploading === 'single'}
               style={{
-                width: '100%', padding: '12px', backgroundColor: '#16161f',
-                border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
-                fontSize: '14px', outline: 'none', boxSizing: 'border-box',
+                width: '100%', padding: '12px',
+                backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+                borderRadius: '10px', color: '#e2e8f0', cursor: 'pointer',
+                fontSize: '14px', marginBottom: '8px',
               }}
-            />
+            >
+              {uploading === 'single' ? '⏳ Загружаю...' : '📱 Загрузить с устройства'}
+            </button>
+
             {singleImage && (
-              <div style={{
-                width: '150px', height: '180px', margin: '12px auto 0',
-                borderRadius: '12px', overflow: 'hidden', border: '2px solid #7c3aed40',
-              }}>
-                <img src={singleImage} alt="Preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              </div>
+              <button
+                onClick={() => setSingleImage('')}
+                style={{
+                  width: '100%', padding: '10px',
+                  backgroundColor: 'transparent', border: '1px solid #ef444430',
+                  borderRadius: '10px', color: '#ef4444', cursor: 'pointer',
+                  fontSize: '13px',
+                }}
+              >
+                🗑️ Удалить картинку
+              </button>
             )}
-            <div style={{ fontSize: '11px', color: '#475569', marginTop: '8px', textAlign: 'center' }}>
-              Эта картинка будет использоваться для всех уровней
-            </div>
           </div>
         ) : (
           <div>
             <div style={{ fontSize: '12px', color: '#475569', marginBottom: '12px' }}>
-              Загрузи разные картинки для каждого этапа прокачки.
-              Персонаж будет меняться с ростом уровня!
+              Загрузи картинки для каждого этапа. Персонаж будет меняться с ростом уровня!
             </div>
+
             {LEVEL_TIERS.map((tier) => (
               <div key={tier.key} style={{
-                marginBottom: '12px', padding: '12px', backgroundColor: '#16161f',
+                marginBottom: '10px', padding: '12px', backgroundColor: '#16161f',
                 borderRadius: '10px', border: `1px solid ${tier.color}20`,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <span style={{
-                    padding: '2px 8px', borderRadius: '6px', fontSize: '11px',
-                    fontWeight: 800, backgroundColor: tier.color + '20', color: tier.color,
-                  }}>
-                    {tier.rank}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 600 }}>{tier.label}</span>
-                  <span style={{ fontSize: '11px', color: '#475569' }}>{tier.levels}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      padding: '2px 8px', borderRadius: '6px', fontSize: '11px',
+                      fontWeight: 800, backgroundColor: tier.color + '20', color: tier.color,
+                    }}>
+                      {tier.rank}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 600 }}>{tier.label}</span>
+                    <span style={{ fontSize: '11px', color: '#475569' }}>{tier.levels}</span>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    value={levelImages[tier.key] || ''}
-                    onChange={(e) => updateLevelImage(tier.key, e.target.value)}
-                    placeholder="https://i.imgur.com/..."
+                  {/* Превью */}
+                  <div
+                    onClick={() => triggerFileUpload(tier.key)}
                     style={{
-                      flex: 1, padding: '8px', backgroundColor: '#0a0a0f',
-                      border: '1px solid #1e1e2e', borderRadius: '6px', color: '#e2e8f0',
-                      fontSize: '12px', outline: 'none',
+                      width: '50px', height: '60px', borderRadius: '8px',
+                      overflow: 'hidden', border: `1px dashed ${tier.color}30`,
+                      backgroundColor: '#0a0a0f', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
                     }}
-                  />
-                  {levelImages[tier.key] && (
-                    <div style={{
-                      width: '40px', height: '50px', borderRadius: '6px',
-                      overflow: 'hidden', border: `1px solid ${tier.color}30`, flexShrink: 0,
-                    }}>
+                  >
+                    {levelImages[tier.key] ? (
                       <img src={levelImages[tier.key]} alt={tier.label}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
+                    ) : (
+                      <span style={{ fontSize: '16px', opacity: 0.3 }}>+</span>
+                    )}
+                  </div>
+
+                  {/* Кнопка загрузки */}
+                  <button
+                    onClick={() => triggerFileUpload(tier.key)}
+                    disabled={uploading === tier.key}
+                    style={{
+                      flex: 1, padding: '10px',
+                      backgroundColor: '#0a0a0f', border: `1px solid ${tier.color}20`,
+                      borderRadius: '8px', color: '#94a3b8', cursor: 'pointer',
+                      fontSize: '12px', textAlign: 'center',
+                    }}
+                  >
+                    {uploading === tier.key ? '⏳...' : levelImages[tier.key] ? '🔄 Заменить' : '📱 Загрузить'}
+                  </button>
+
+                  {/* Удалить */}
+                  {levelImages[tier.key] && (
+                    <button
+                      onClick={() => setLevelImages(prev => {
+                        const next = { ...prev };
+                        delete next[tier.key];
+                        return next;
+                      })}
+                      style={{
+                        width: '36px', height: '36px',
+                        backgroundColor: '#0a0a0f', border: '1px solid #ef444420',
+                        borderRadius: '8px', color: '#ef4444', cursor: 'pointer',
+                        fontSize: '12px', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      🗑️
+                    </button>
                   )}
                 </div>
               </div>
@@ -215,20 +357,8 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           color: '#fff', border: 'none', borderRadius: '10px',
           fontSize: '16px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
         }}>
-          {saving ? '⏳ Сохраняю...' : '✅ Сохранить'}
+          {saving ? '⏳ Сохраняю...' : '✅ Сохранить персонажа'}
         </button>
-
-        {/* Инструкция */}
-        <div style={{
-          marginTop: '16px', padding: '12px', backgroundColor: '#16161f',
-          borderRadius: '8px', fontSize: '11px', color: '#475569', lineHeight: 1.6,
-        }}>
-          💡 <strong style={{ color: '#94a3b8' }}>Как добавить картинку:</strong><br />
-          1. Сгенерируй на leonardo.ai или bing.com/create<br />
-          2. Сохрани картинку<br />
-          3. Загрузи на imgur.com → Copy image link<br />
-          4. Вставь ссылку сюда
-        </div>
       </div>
     </div>
   );
