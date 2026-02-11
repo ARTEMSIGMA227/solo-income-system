@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
-import type { CharacterConfig } from '@/types/database';
+import type { CharacterConfig, LevelImages } from '@/types/database';
 
 interface CharacterEditorProps {
   userId: string;
@@ -12,49 +12,48 @@ interface CharacterEditorProps {
   onClose: () => void;
 }
 
+const LEVEL_TIERS = [
+  { key: 'novice' as const, label: 'Новичок', levels: 'LV 1-4', rank: 'E', color: '#475569' },
+  { key: 'hunter' as const, label: 'Охотник', levels: 'LV 5-11', rank: 'C', color: '#22c55e' },
+  { key: 'warrior' as const, label: 'Воин', levels: 'LV 12-19', rank: 'B', color: '#ef4444' },
+  { key: 'knight' as const, label: 'Рыцарь', levels: 'LV 20-29', rank: 'A', color: '#3b82f6' },
+  { key: 'srank' as const, label: 'S-ранг', levels: 'LV 30-39', rank: 'S', color: '#7c3aed' },
+  { key: 'monarch' as const, label: 'Монарх', levels: 'LV 40+', rank: 'SS', color: '#f59e0b' },
+];
+
 const BODY_TYPES = [
   { value: 'male_1', label: '👤 Мужской' },
   { value: 'female_1', label: '👩 Женский' },
 ];
 
-const HAIR_STYLES = [
-  { value: 'spiky', label: 'Острые' },
-  { value: 'long', label: 'Длинные' },
-  { value: 'short', label: 'Короткие' },
-  { value: 'mohawk', label: 'Ирокез' },
-  { value: 'bald', label: 'Без волос' },
-];
-
-const SKIN_COLORS = ['#f5d0a9', '#e8b88a', '#d4956b', '#a0714f', '#6b4423', '#f9e0c8'];
-const HAIR_COLORS = ['#1a1a2e', '#4a2511', '#8b4513', '#daa520', '#c0c0c0', '#ff4444', '#7c3aed', '#3b82f6', '#22c55e'];
-const EYE_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#f59e0b', '#7c3aed', '#475569', '#000000'];
-const OUTFIT_COLORS = ['#7c3aed', '#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#ec4899', '#1a1a2e', '#475569'];
-
 export default function CharacterEditor({ userId, config, onSave, onClose }: CharacterEditorProps) {
-  const [useCustomImage, setUseCustomImage] = useState(config?.use_custom_image || false);
-  const [imageUrl, setImageUrl] = useState(config?.custom_image_url || '');
+  const [tab, setTab] = useState<'single' | 'levels'>('single');
+  const [singleImage, setSingleImage] = useState(config?.custom_image_url || '');
+  const [levelImages, setLevelImages] = useState<LevelImages>(config?.level_images || {});
   const [bodyType, setBodyType] = useState(config?.body_type || 'male_1');
-  const [skinColor, setSkinColor] = useState(config?.skin_color || '#f5d0a9');
-  const [hairStyle, setHairStyle] = useState(config?.hair_style || 'spiky');
-  const [hairColor, setHairColor] = useState(config?.hair_color || '#1a1a2e');
-  const [eyeColor, setEyeColor] = useState(config?.eye_color || '#3b82f6');
-  const [outfitColor, setOutfitColor] = useState(config?.outfit_color || '#7c3aed');
   const [saving, setSaving] = useState(false);
+
+  function updateLevelImage(key: keyof LevelImages, url: string) {
+    setLevelImages(prev => ({ ...prev, [key]: url }));
+  }
 
   async function handleSave() {
     setSaving(true);
     const supabase = createClient();
 
+    const useSingle = tab === 'single' && singleImage;
+
     const data = {
       user_id: userId,
-      use_custom_image: useCustomImage,
-      custom_image_url: useCustomImage ? imageUrl : null,
+      use_custom_image: !!useSingle,
+      custom_image_url: useSingle ? singleImage : null,
       body_type: bodyType,
-      skin_color: skinColor,
-      hair_style: hairStyle,
-      hair_color: hairColor,
-      eye_color: eyeColor,
-      outfit_color: outfitColor,
+      skin_color: config?.skin_color || '#f5d0a9',
+      hair_style: config?.hair_style || 'spiky',
+      hair_color: config?.hair_color || '#1a1a2e',
+      eye_color: config?.eye_color || '#3b82f6',
+      outfit_color: config?.outfit_color || '#7c3aed',
+      level_images: tab === 'levels' ? levelImages : (config?.level_images || {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -65,157 +64,171 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
     }
 
     setSaving(false);
-    toast.success('Персонаж сохранён!');
+    toast.success('Персонаж сохранён! ⚔️');
     onSave({ ...data, id: config?.id || '', created_at: config?.created_at || '' } as CharacterConfig);
-  }
-
-  function ColorPicker({ colors, value, onChange, label }: {
-    colors: string[]; value: string; onChange: (c: string) => void; label: string;
-  }) {
-    return (
-      <div style={{ marginBottom: '16px' }}>
-        <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>{label}</div>
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {colors.map(c => (
-            <button key={c} onClick={() => onChange(c)} style={{
-              width: '32px', height: '32px', borderRadius: '8px',
-              backgroundColor: c, border: value === c ? '3px solid #fff' : '2px solid #1e1e2e',
-              cursor: 'pointer', transition: 'transform 0.1s',
-              transform: value === c ? 'scale(1.15)' : 'scale(1)',
-            }} />
-          ))}
-        </div>
-      </div>
-    );
   }
 
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100,
+      backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '16px',
     }}>
       <div style={{
-        backgroundColor: '#0a0a0f', borderRadius: '16px', border: '1px solid #1e1e2e',
+        backgroundColor: '#0a0a0f', borderRadius: '20px', border: '1px solid #1e1e2e',
         padding: '24px', width: '100%', maxWidth: '450px', maxHeight: '85vh',
         overflowY: 'auto',
       }}>
+        {/* Шапка */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 700 }}>✏️ Редактор персонажа</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 700 }}>⚔️ Персонаж</h2>
           <button onClick={onClose} style={{
-            padding: '6px 12px', backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-            borderRadius: '8px', color: '#94a3b8', cursor: 'pointer',
+            width: '32px', height: '32px', backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+            borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', fontSize: '16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>✕</button>
         </div>
 
-        {/* Переключатель: конструктор / своя картинка */}
+        {/* Тип тела */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Тип персонажа</div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {BODY_TYPES.map(bt => (
+              <button key={bt.value} onClick={() => setBodyType(bt.value)} style={{
+                flex: 1, padding: '10px', borderRadius: '8px',
+                backgroundColor: bodyType === bt.value ? '#7c3aed20' : '#16161f',
+                border: `1px solid ${bodyType === bt.value ? '#7c3aed' : '#1e1e2e'}`,
+                color: '#e2e8f0', cursor: 'pointer', fontSize: '14px',
+              }}>
+                {bt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Табы: одна картинка / по уровням */}
         <div style={{
           display: 'flex', marginBottom: '20px', backgroundColor: '#16161f',
           borderRadius: '8px', padding: '4px',
         }}>
-          <button onClick={() => setUseCustomImage(false)} style={{
+          <button onClick={() => setTab('single')} style={{
             flex: 1, padding: '8px', borderRadius: '6px', border: 'none',
-            cursor: 'pointer', fontSize: '13px', fontWeight: 500,
-            backgroundColor: !useCustomImage ? '#7c3aed' : 'transparent',
-            color: !useCustomImage ? '#fff' : '#94a3b8',
+            cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+            backgroundColor: tab === 'single' ? '#7c3aed' : 'transparent',
+            color: tab === 'single' ? '#fff' : '#94a3b8',
           }}>
-            🎨 Конструктор
+            🖼️ Одна картинка
           </button>
-          <button onClick={() => setUseCustomImage(true)} style={{
+          <button onClick={() => setTab('levels')} style={{
             flex: 1, padding: '8px', borderRadius: '6px', border: 'none',
-            cursor: 'pointer', fontSize: '13px', fontWeight: 500,
-            backgroundColor: useCustomImage ? '#7c3aed' : 'transparent',
-            color: useCustomImage ? '#fff' : '#94a3b8',
+            cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+            backgroundColor: tab === 'levels' ? '#7c3aed' : 'transparent',
+            color: tab === 'levels' ? '#fff' : '#94a3b8',
           }}>
-            🖼️ Своя картинка
+            ⚔️ По уровням (6 шт)
           </button>
         </div>
 
-        {useCustomImage ? (
+        {tab === 'single' ? (
           <div>
             <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-              Ссылка на картинку (URL)
+              Ссылка на картинку
             </div>
             <input
               type="text"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://example.com/my-avatar.png"
+              value={singleImage}
+              onChange={(e) => setSingleImage(e.target.value)}
+              placeholder="https://i.imgur.com/xxxxx.png"
               style={{
                 width: '100%', padding: '12px', backgroundColor: '#16161f',
                 border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
                 fontSize: '14px', outline: 'none', boxSizing: 'border-box',
-                marginBottom: '12px',
               }}
             />
-            {imageUrl && (
+            {singleImage && (
               <div style={{
-                width: '120px', height: '120px', margin: '0 auto',
-                borderRadius: '12px', overflow: 'hidden', border: '2px solid #1e1e2e',
+                width: '150px', height: '180px', margin: '12px auto 0',
+                borderRadius: '12px', overflow: 'hidden', border: '2px solid #7c3aed40',
               }}>
-                <img src={imageUrl} alt="Preview" style={{
-                  width: '100%', height: '100%', objectFit: 'cover',
-                }} />
+                <img src={singleImage} alt="Preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
             )}
             <div style={{ fontSize: '11px', color: '#475569', marginTop: '8px', textAlign: 'center' }}>
-              Совет: загрузи картинку на imgur.com и вставь ссылку
+              Эта картинка будет использоваться для всех уровней
             </div>
           </div>
         ) : (
           <div>
-            {/* Тип тела */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Тип тела</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {BODY_TYPES.map(bt => (
-                  <button key={bt.value} onClick={() => setBodyType(bt.value)} style={{
-                    flex: 1, padding: '10px', borderRadius: '8px',
-                    backgroundColor: bodyType === bt.value ? '#7c3aed20' : '#16161f',
-                    border: `1px solid ${bodyType === bt.value ? '#7c3aed' : '#1e1e2e'}`,
-                    color: '#e2e8f0', cursor: 'pointer', fontSize: '14px',
-                  }}>
-                    {bt.label}
-                  </button>
-                ))}
-              </div>
+            <div style={{ fontSize: '12px', color: '#475569', marginBottom: '12px' }}>
+              Загрузи разные картинки для каждого этапа прокачки.
+              Персонаж будет меняться с ростом уровня!
             </div>
-
-            <ColorPicker colors={SKIN_COLORS} value={skinColor} onChange={setSkinColor} label="Цвет кожи" />
-
-            {/* Причёска */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Причёска</div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {HAIR_STYLES.map(hs => (
-                  <button key={hs.value} onClick={() => setHairStyle(hs.value)} style={{
-                    padding: '6px 12px', borderRadius: '8px',
-                    backgroundColor: hairStyle === hs.value ? '#7c3aed20' : '#16161f',
-                    border: `1px solid ${hairStyle === hs.value ? '#7c3aed' : '#1e1e2e'}`,
-                    color: '#e2e8f0', cursor: 'pointer', fontSize: '12px',
+            {LEVEL_TIERS.map((tier) => (
+              <div key={tier.key} style={{
+                marginBottom: '12px', padding: '12px', backgroundColor: '#16161f',
+                borderRadius: '10px', border: `1px solid ${tier.color}20`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '6px', fontSize: '11px',
+                    fontWeight: 800, backgroundColor: tier.color + '20', color: tier.color,
                   }}>
-                    {hs.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    {tier.rank}
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 600 }}>{tier.label}</span>
+                  <span style={{ fontSize: '11px', color: '#475569' }}>{tier.levels}</span>
+                </div>
 
-            <ColorPicker colors={HAIR_COLORS} value={hairColor} onChange={setHairColor} label="Цвет волос" />
-            <ColorPicker colors={EYE_COLORS} value={eyeColor} onChange={setEyeColor} label="Цвет глаз" />
-            <ColorPicker colors={OUTFIT_COLORS} value={outfitColor} onChange={setOutfitColor} label="Цвет одежды" />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={levelImages[tier.key] || ''}
+                    onChange={(e) => updateLevelImage(tier.key, e.target.value)}
+                    placeholder="https://i.imgur.com/..."
+                    style={{
+                      flex: 1, padding: '8px', backgroundColor: '#0a0a0f',
+                      border: '1px solid #1e1e2e', borderRadius: '6px', color: '#e2e8f0',
+                      fontSize: '12px', outline: 'none',
+                    }}
+                  />
+                  {levelImages[tier.key] && (
+                    <div style={{
+                      width: '40px', height: '50px', borderRadius: '6px',
+                      overflow: 'hidden', border: `1px solid ${tier.color}30`, flexShrink: 0,
+                    }}>
+                      <img src={levelImages[tier.key]} alt={tier.label}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Кнопка сохранить */}
+        {/* Сохранить */}
         <button onClick={handleSave} disabled={saving} style={{
           width: '100%', padding: '14px', marginTop: '20px',
           backgroundColor: saving ? '#4c1d95' : '#7c3aed',
           color: '#fff', border: 'none', borderRadius: '10px',
           fontSize: '16px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
         }}>
-          {saving ? '⏳ Сохраняю...' : '✅ Сохранить персонажа'}
+          {saving ? '⏳ Сохраняю...' : '✅ Сохранить'}
         </button>
+
+        {/* Инструкция */}
+        <div style={{
+          marginTop: '16px', padding: '12px', backgroundColor: '#16161f',
+          borderRadius: '8px', fontSize: '11px', color: '#475569', lineHeight: 1.6,
+        }}>
+          💡 <strong style={{ color: '#94a3b8' }}>Как добавить картинку:</strong><br />
+          1. Сгенерируй на leonardo.ai или bing.com/create<br />
+          2. Сохрани картинку<br />
+          3. Загрузи на imgur.com → Copy image link<br />
+          4. Вставь ссылку сюда
+        </div>
       </div>
     </div>
   );

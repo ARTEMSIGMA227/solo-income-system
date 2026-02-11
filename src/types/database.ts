@@ -160,6 +160,16 @@ export interface CharacterConfig {
   hair_color: string;
   eye_color: string;
   outfit_color: string;
+  level_images: LevelImages;
   created_at: string;
   updated_at: string;
+}
+
+export interface LevelImages {
+  novice?: string;
+  hunter?: string;
+  warrior?: string;
+  knight?: string;
+  srank?: string;
+  monarch?: string;
 }
