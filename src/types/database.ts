@@ -148,3 +148,18 @@ export interface DailySummary {
   notes: string | null;
   created_at: string;
 }
+
+export interface CharacterConfig {
+  id: string;
+  user_id: string;
+  use_custom_image: boolean;
+  custom_image_url: string | null;
+  body_type: string;
+  skin_color: string;
+  hair_style: string;
+  hair_color: string;
+  eye_color: string;
+  outfit_color: string;
+  created_at: string;
+  updated_at: string;
+}

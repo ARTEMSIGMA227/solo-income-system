@@ -8,46 +8,44 @@ import { formatCurrency, formatNumber } from '@/lib/utils';
 import { XP_REWARDS } from '@/lib/constants';
 import { toast } from 'sonner';
 import HunterAvatar from '@/components/character/HunterAvatar';
-import type { Stats, Profile } from '@/types/database';
+import CharacterEditor from '@/components/character/CharacterEditor';
+import type { Stats, Profile, CharacterConfig } from '@/types/database';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [charConfig, setCharConfig] = useState<CharacterConfig | null>(null);
   const [todayActions, setTodayActions] = useState(0);
   const [todayIncome, setTodayIncome] = useState(0);
   const [monthIncome, setMonthIncome] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentHour, setCurrentHour] = useState(12);
   const [todayDate, setTodayDate] = useState('');
+  const [showEditor, setShowEditor] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
-    setTodayDate(new Date().toLocaleDateString('ru-RU', {
-      weekday: 'long', day: 'numeric', month: 'long',
-    }));
+    setTodayDate(new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }));
 
     const supabase = createClient();
-
-    function getToday() {
-      return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
-    }
-    function getMonthStart() {
-      const n = new Date();
-      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
-    }
+    function getToday() { return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' }); }
+    function getMonthStart() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`; }
 
     async function loadData() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) { router.push('/auth'); return; }
       setUser(authUser);
 
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
-      setProfile(profileData);
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+      setProfile(p);
 
-      const { data: statsData } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
-      setStats(statsData);
+      const { data: s } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
+      setStats(s);
+
+      const { data: cc } = await supabase.from('character_config').select('*').eq('user_id', authUser.id).single();
+      setCharConfig(cc);
 
       const today = getToday();
       const { data: ct } = await supabase.from('completions').select('count_done').eq('user_id', authUser.id).eq('completion_date', today);
@@ -127,8 +125,7 @@ export default function DashboardPage() {
     );
   }
 
-  const levelInfo = stats
-    ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
+  const levelInfo = stats ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
     : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Безымянный', titleIcon: '💀', totalXPEarned: 0 };
 
   const actionsTarget = profile?.daily_actions_target || 30;
@@ -144,7 +141,17 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
 
-      {/* Дата */}
+      {/* Редактор персонажа */}
+      {showEditor && user && (
+        <CharacterEditor
+          userId={user.id}
+          config={charConfig}
+          onSave={(newConfig) => { setCharConfig(newConfig); setShowEditor(false); }}
+          onClose={() => setShowEditor(false)}
+        />
+      )}
+
+      {/* Шапка */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>{todayDate}</div>
@@ -159,24 +166,16 @@ export default function DashboardPage() {
       </div>
 
       {/* ПЕРСОНАЖ */}
-      <HunterAvatar level={levelInfo.level} title={levelInfo.title} />
+      <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
-      {/* Уровень и XP */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginTop: '12px', marginBottom: '12px',
-      }}>
+      {/* Уровень */}
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginTop: '12px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '24px', fontWeight: 800, color: '#a78bfa' }}>LV. {levelInfo.level}</span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            {formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP
-          </span>
+          <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP</span>
         </div>
         <div style={{ width: '100%', height: '12px', backgroundColor: '#16161f', borderRadius: '6px', overflow: 'hidden', border: '1px solid #1e1e2e' }}>
-          <div style={{
-            width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px',
-            background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease',
-          }} />
+          <div style={{ width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease' }} />
         </div>
       </div>
 
@@ -218,8 +217,7 @@ export default function DashboardPage() {
             <button key={i} onClick={btn.fn} style={{
               padding: '12px 8px', backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
               border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`,
-              borderRadius: '10px', color: i === 5 ? '#22c55e' : '#e2e8f0', cursor: 'pointer',
-              fontSize: '13px', textAlign: 'center',
+              borderRadius: '10px', color: i === 5 ? '#22c55e' : '#e2e8f0', cursor: 'pointer', fontSize: '13px', textAlign: 'center',
             }}>
               <div>{btn.icon}</div>
               <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
