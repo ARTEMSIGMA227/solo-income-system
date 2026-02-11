@@ -12,9 +12,13 @@ export default function BossesPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const [now, setNow] = useState<number>(0);
 
   useEffect(() => {
+    setNow(Date.now());
+
+    const supabase = createClient();
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -39,15 +43,15 @@ export default function BossesPage() {
     load();
   }, []);
 
-  function getBossProgress(boss: Boss) {
-    if (!stats) return [];
+  function getBossProgress(boss: Boss, currentStats: Stats | null) {
+    if (!currentStats) return [];
     return boss.requirements.map((req) => {
       let current = 0;
       switch (req.metric) {
-        case 'actions': current = stats.total_actions; break;
-        case 'clients': current = stats.total_clients; break;
-        case 'income': current = Number(stats.total_income); break;
-        case 'sales': current = stats.total_sales; break;
+        case 'actions': current = currentStats.total_actions; break;
+        case 'clients': current = currentStats.total_clients; break;
+        case 'income': current = Number(currentStats.total_income); break;
+        case 'sales': current = currentStats.total_sales; break;
       }
       const percent = Math.min(Math.round((current / req.target) * 100), 100);
       return { ...req, current, percent };
@@ -69,15 +73,24 @@ export default function BossesPage() {
     return formatNumber(value);
   }
 
+  function getDaysLeft(deadline: string) {
+    if (!now) return 0;
+    return Math.max(0, Math.ceil(
+      (new Date(deadline).getTime() - now) / (1000 * 60 * 60 * 24)
+    ));
+  }
+
   async function tryDefeatBoss(boss: Boss) {
     if (!userId || !stats) return;
-    const progress = getBossProgress(boss);
+    const progress = getBossProgress(boss, stats);
     const allDone = progress.every(p => p.percent >= 100);
 
     if (!allDone) {
       toast.error('Ещё не все требования выполнены!');
       return;
     }
+
+    const supabase = createClient();
 
     await supabase
       .from('bosses')
@@ -129,11 +142,9 @@ export default function BossesPage() {
   const monthly = bosses.filter(b => b.boss_type === 'monthly');
 
   function renderBoss(boss: Boss) {
-    const progress = getBossProgress(boss);
+    const progress = getBossProgress(boss, stats);
     const allDone = progress.every(p => p.percent >= 100);
-    const daysLeft = Math.max(0, Math.ceil(
-      (new Date(boss.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    ));
+    const daysLeft = getDaysLeft(boss.deadline);
 
     return (
       <div key={boss.id} style={{
