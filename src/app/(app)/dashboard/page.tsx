@@ -11,6 +11,7 @@ import HunterAvatar from '@/components/character/HunterAvatar';
 import CharacterEditor from '@/components/character/CharacterEditor';
 import type { Stats, Profile, CharacterConfig } from '@/types/database';
 import StreakBanner from '@/components/streak/StreakBanner';
+import DeathScreen from '@/components/streak/DeathScreen';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -24,6 +25,10 @@ export default function DashboardPage() {
   const [currentHour, setCurrentHour] = useState(12);
   const [todayDate, setTodayDate] = useState('');
   const [showEditor, setShowEditor] = useState(false);
+  const [showDeath, setShowDeath] = useState(false);
+  const [deathType, setDeathType] = useState<'miss' | 'level_down'>('miss');
+  const [deathXP, setDeathXP] = useState(100);
+  const [deathMisses, setDeathMisses] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
@@ -58,6 +63,78 @@ export default function DashboardPage() {
       const { data: im } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
+      // Проверка вчерашнего дня
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+
+      const { data: yesterdayCompletions } = await supabase
+        .from('completions')
+        .select('count_done')
+        .eq('user_id', authUser.id)
+        .eq('completion_date', yesterdayStr);
+
+      const yesterdayActions = yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
+      const target = p?.daily_actions_target || 30;
+
+      // Проверяем был ли уже штраф за вчера
+      const { data: penaltyCheck } = await supabase
+        .from('xp_events')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .eq('event_type', 'penalty_miss')
+        .eq('event_date', yesterdayStr);
+
+      const alreadyPenalized = (penaltyCheck && penaltyCheck.length > 0);
+
+      if (yesterdayActions < target && !alreadyPenalized && yesterdayStr !== today) {
+        const penaltyXP = p?.penalty_xp || 100;
+        const newMisses = (p?.consecutive_misses || 0) + 1;
+
+        // Записать штраф
+        await supabase.from('xp_events').insert({
+          user_id: authUser.id, event_type: 'penalty_miss',
+          xp_amount: -penaltyXP, description: `Пропуск дня: ${yesterdayStr}`,
+          event_date: yesterdayStr,
+        });
+
+        // Обновить профиль
+        await supabase.from('profiles').update({
+          consecutive_misses: newMisses,
+          streak_current: 0,
+          updated_at: new Date().toISOString(),
+        }).eq('id', authUser.id);
+
+        // Обновить статы
+        const newTotalLost = (s?.total_xp_lost || 0) + penaltyXP;
+        const updateData: any = { total_xp_lost: newTotalLost, updated_at: new Date().toISOString() };
+
+        if (newMisses >= 3) {
+          // Потеря уровня
+          const newLevel = Math.max((s?.level || 1) - 1, 1);
+          updateData.level = newLevel;
+          updateData.current_xp = 0;
+          setDeathType('level_down');
+
+          // Сбросить счётчик
+          await supabase.from('profiles').update({ consecutive_misses: 0 }).eq('id', authUser.id);
+        } else {
+          setDeathType('miss');
+        }
+
+        await supabase.from('stats').update(updateData).eq('user_id', authUser.id);
+
+        setDeathXP(penaltyXP);
+        setDeathMisses(newMisses);
+        setShowDeath(true);
+
+        // Перезагрузить статы
+        const { data: freshStats } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
+        if (freshStats) setStats(freshStats);
+
+        const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+        if (freshProfile) setProfile(freshProfile);
+      }      
       setLoading(false);
     }
     loadData();
@@ -207,6 +284,16 @@ export default function DashboardPage() {
       padding: '16px', maxWidth: '600px', margin: '0 auto',
     }}>
 
+      {/* Экран смерти */}
+      {showDeath && (
+        <DeathScreen
+          type={deathType}
+          xpLost={deathXP}
+          consecutiveMisses={deathMisses}
+          onAccept={() => setShowDeath(false)}
+        />
+      )}
+      
       {/* Редактор персонажа */}
       {showEditor && user && (
         <CharacterEditor
@@ -255,7 +342,7 @@ export default function DashboardPage() {
           bestStreak={profile?.streak_best || 0}
         />
       </div>
-      
+
       {/* Уровень */}
       <div style={{
         backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
