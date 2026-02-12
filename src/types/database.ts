@@ -26,6 +26,9 @@ export interface Stats {
   total_clients: number;
   total_income: number;
   total_actions: number;
+  gold: number;
+  total_gold_earned: number;
+  total_gold_spent: number;
   created_at: string;
   updated_at: string;
 }
