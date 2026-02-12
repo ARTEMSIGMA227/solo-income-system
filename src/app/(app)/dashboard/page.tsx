@@ -49,29 +49,37 @@ export default function DashboardPage() {
 
       const today = getToday();
       const { data: ct } = await supabase.from('completions').select('count_done').eq('user_id', authUser.id).eq('completion_date', today);
-      setTodayActions(ct?.reduce((s, c) => s + c.count_done, 0) || 0);
+      setTodayActions(ct?.reduce((sum, c) => sum + c.count_done, 0) || 0);
 
       const { data: it } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).eq('event_date', today);
-      setTodayIncome(it?.reduce((s, i) => s + Number(i.amount), 0) || 0);
+      setTodayIncome(it?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
       const { data: im } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).gte('event_date', getMonthStart());
-      setMonthIncome(im?.reduce((s, i) => s + Number(i.amount), 0) || 0);
+      setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
       setLoading(false);
     }
     loadData();
   }, [router]);
 
-    async function quickAction(type: string, label: string) {
+  async function quickAction(type: string, label: string) {
     if (!user || !stats) return;
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
     const xp = XP_REWARDS[type as keyof typeof XP_REWARDS] || 5;
     const gold = Math.round(xp * 0.5);
 
-    await supabase.from('completions').insert({ user_id: user.id, completion_date: today, count_done: 1, notes: label });
-    await supabase.from('xp_events').insert({ user_id: user.id, event_type: type, xp_amount: xp, description: label, event_date: today });
-    await supabase.from('gold_events').insert({ user_id: user.id, amount: gold, event_type: 'quest_reward', description: label, event_date: today });
+    await supabase.from('completions').insert({
+      user_id: user.id, completion_date: today, count_done: 1, notes: label,
+    });
+
+    await supabase.from('xp_events').insert({
+      user_id: user.id, event_type: type, xp_amount: xp, description: label, event_date: today,
+    });
+
+    await supabase.from('gold_events').insert({
+      user_id: user.id, amount: gold, event_type: 'quest_reward', description: label, event_date: today,
+    });
 
     const newTotalEarned = stats.total_xp_earned + xp;
     const newActions = stats.total_actions + 1;
@@ -80,13 +88,25 @@ export default function DashboardPage() {
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     await supabase.from('stats').update({
-      level: levelInfo.level, current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned, total_actions: newActions,
-      gold: newGold, total_gold_earned: newTotalGold,
+      level: levelInfo.level,
+      current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned,
+      total_actions: newActions,
+      gold: newGold,
+      total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold });
+    setStats({
+      ...stats,
+      level: levelInfo.level,
+      current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned,
+      total_actions: newActions,
+      gold: newGold,
+      total_gold_earned: newTotalGold,
+    });
+
     setTodayActions(prev => prev + 1);
     toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
   }
@@ -96,41 +116,78 @@ export default function DashboardPage() {
     const amountStr = prompt('Сумма дохода (₽):');
     if (!amountStr) return;
     const amount = Number(amountStr);
-    if (isNaN(amount) || amount <= 0) { toast.error('Некорректная сумма'); return; }
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('Некорректная сумма');
+      return;
+    }
 
     const source = prompt('Источник (sale/contract/freelance/bonus/other):', 'sale') || 'sale';
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    await supabase.from('income_events').insert({ user_id: user.id, amount, source, event_date: today });
+    await supabase.from('income_events').insert({
+      user_id: user.id, amount, source, event_date: today,
+    });
+
     const xp = XP_REWARDS.sale;
-    await supabase.from('xp_events').insert({ user_id: user.id, event_type: 'sale', xp_amount: xp, description: `Доход: ${amount}₽`, event_date: today });
+    const gold = 50;
+
+    await supabase.from('xp_events').insert({
+      user_id: user.id, event_type: 'sale', xp_amount: xp,
+      description: `Доход: ${amount}₽`, event_date: today,
+    });
+
+    await supabase.from('gold_events').insert({
+      user_id: user.id, amount: gold, event_type: 'quest_reward',
+      description: `Доход: ${amount}₽`, event_date: today,
+    });
 
     const newTotalEarned = stats.total_xp_earned + xp;
     const newIncome = Number(stats.total_income) + amount;
+    const newGold = (stats.gold || 0) + gold;
+    const newTotalGold = (stats.total_gold_earned || 0) + gold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     await supabase.from('stats').update({
-      level: levelInfo.level, current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned, total_income: newIncome,
-      total_sales: stats.total_sales + 1, updated_at: new Date().toISOString(),
+      level: levelInfo.level,
+      current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned,
+      total_income: newIncome,
+      total_sales: stats.total_sales + 1,
+      gold: newGold,
+      total_gold_earned: newTotalGold,
+      updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_income: newIncome, total_sales: stats.total_sales + 1 });
+    setStats({
+      ...stats,
+      level: levelInfo.level,
+      current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned,
+      total_income: newIncome,
+      total_sales: stats.total_sales + 1,
+      gold: newGold,
+      total_gold_earned: newTotalGold,
+    });
+
     setTodayIncome(prev => prev + amount);
     setMonthIncome(prev => prev + amount);
-    toast.success(`+${formatCurrency(amount)} доход! +${xp} XP`);
+    toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
   }
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa', fontSize: '24px' }}>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa', fontSize: '24px',
+      }}>
         ⚔️ Загрузка...
       </div>
     );
   }
 
-  const levelInfo = stats ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
+  const levelInfo = stats
+    ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
     : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Безымянный', titleIcon: '💀', totalXPEarned: 0 };
 
   const actionsTarget = profile?.daily_actions_target || 30;
@@ -144,7 +201,10 @@ export default function DashboardPage() {
   else if (currentHour >= 21) { dayStatusColor = '#ef4444'; dayStatusText = '🔴 Мало времени!'; }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
+    <div style={{
+      minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
+      padding: '16px', maxWidth: '600px', margin: '0 auto',
+    }}>
 
       {/* Редактор персонажа */}
       {showEditor && user && (
@@ -171,7 +231,8 @@ export default function DashboardPage() {
           </div>
           <div style={{
             padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-            color: dayStatusColor, backgroundColor: dayStatusColor + '20', border: `1px solid ${dayStatusColor}30`,
+            color: dayStatusColor, backgroundColor: dayStatusColor + '20',
+            border: `1px solid ${dayStatusColor}30`,
           }}>
             {dayStatusText}
           </div>
@@ -179,36 +240,64 @@ export default function DashboardPage() {
       </div>
 
       {/* ПЕРСОНАЖ */}
-      <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
+      <HunterAvatar
+        level={levelInfo.level}
+        title={levelInfo.title}
+        config={charConfig}
+        onEdit={() => setShowEditor(true)}
+      />
 
       {/* Уровень */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginTop: '12px', marginBottom: '12px' }}>
+      <div style={{
+        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
+        padding: '16px', marginTop: '12px', marginBottom: '12px',
+      }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '24px', fontWeight: 800, color: '#a78bfa' }}>LV. {levelInfo.level}</span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP</span>
+          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+            {formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP
+          </span>
         </div>
-        <div style={{ width: '100%', height: '12px', backgroundColor: '#16161f', borderRadius: '6px', overflow: 'hidden', border: '1px solid #1e1e2e' }}>
-          <div style={{ width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease' }} />
+        <div style={{
+          width: '100%', height: '12px', backgroundColor: '#16161f', borderRadius: '6px',
+          overflow: 'hidden', border: '1px solid #1e1e2e',
+        }}>
+          <div style={{
+            width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px',
+            background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease',
+          }} />
         </div>
       </div>
 
       {/* Прогресс */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+      <div style={{
+        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
+        padding: '16px', marginBottom: '12px',
+      }}>
         <div style={{ marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
             <span>Действия</span>
             <span style={{ color: '#a78bfa' }}>{todayActions} / {actionsTarget}</span>
           </div>
-          <div style={{ width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${actionsPercent}%`, height: '100%', borderRadius: '4px', backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed' }} />
+          <div style={{
+            width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${actionsPercent}%`, height: '100%', borderRadius: '4px',
+              backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed',
+            }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+          <div style={{
+            flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center',
+          }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>Сегодня</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(todayIncome)}</div>
           </div>
-          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+          <div style={{
+            flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center',
+          }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>Месяц ({monthPercent}%)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(monthIncome)}</div>
           </div>
@@ -216,25 +305,38 @@ export default function DashboardPage() {
       </div>
 
       {/* Быстрые действия */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+      <div style={{
+        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
+        padding: '16px', marginBottom: '12px',
+      }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>⚡ Быстрые действия</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           {[
-            { fn: () => quickAction('action', '+1 Звонок'), icon: '📞', label: 'Звонок', xp: 5 },
-            { fn: () => quickAction('action', '+1 Касание'), icon: '💬', label: 'Касание', xp: 5 },
-            { fn: () => quickAction('action', '+1 Лид'), icon: '🎯', label: 'Лид', xp: 5 },
-            { fn: () => quickAction('task', 'Задача'), icon: '✅', label: 'Задача', xp: 25 },
-            { fn: () => quickAction('hard_task', 'Сложная'), icon: '🔥', label: 'Сложная', xp: 50 },
-            { fn: addIncome, icon: '💰', label: 'Доход', xp: 100 },
+            { fn: () => quickAction('action', '+1 Звонок'), icon: '📞', label: 'Звонок', xp: 5, gold: 2 },
+            { fn: () => quickAction('action', '+1 Касание'), icon: '💬', label: 'Касание', xp: 5, gold: 2 },
+            { fn: () => quickAction('action', '+1 Лид'), icon: '🎯', label: 'Лид', xp: 5, gold: 2 },
+            { fn: () => quickAction('task', 'Задача'), icon: '✅', label: 'Задача', xp: 25, gold: 12 },
+            { fn: () => quickAction('hard_task', 'Сложная'), icon: '🔥', label: 'Сложная', xp: 50, gold: 25 },
+            { fn: addIncome, icon: '💰', label: 'Доход', xp: 100, gold: 50 },
           ].map((btn, i) => (
             <button key={i} onClick={btn.fn} style={{
-              padding: '12px 8px', backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
+              padding: '12px 8px',
+              backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
               border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`,
-              borderRadius: '10px', color: i === 5 ? '#22c55e' : '#e2e8f0', cursor: 'pointer', fontSize: '13px', textAlign: 'center',
+              borderRadius: '10px',
+              color: i === 5 ? '#22c55e' : '#e2e8f0',
+              cursor: 'pointer',
+              fontSize: '13px',
+              textAlign: 'center',
             }}>
               <div>{btn.icon}</div>
               <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
-              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>+{btn.xp}</div>
+              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>
+                +{btn.xp} XP
+              </div>
+              <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>
+                +{btn.gold} 🪙
+              </div>
             </button>
           ))}
         </div>

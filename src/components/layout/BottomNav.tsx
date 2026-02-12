@@ -6,13 +6,6 @@ import { useState } from 'react';
 const MAIN_NAV = [
   { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
   { path: '/quests', label: 'Квесты', icon: '📋' },
-  { path: '/bosses', label: 'Боссы', icon: '👹' },
-  { path: '/more', label: 'Ещё', icon: '☰' },
-];
-
-const MAIN_NAV = [
-  { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
-  { path: '/quests', label: 'Квесты', icon: '📋' },
   { path: '/shop', label: 'Магазин', icon: '🏪' },
   { path: '/more', label: 'Ещё', icon: '☰' },
 ];
@@ -42,7 +35,6 @@ export default function BottomNav() {
 
   return (
     <>
-      {/* Выпадающее меню "Ещё" */}
       {showMore && (
         <>
           <div
@@ -96,7 +88,6 @@ export default function BottomNav() {
         </>
       )}
 
-      {/* Нижняя навигация */}
       <nav style={{
         position: 'fixed',
         bottom: 0,
