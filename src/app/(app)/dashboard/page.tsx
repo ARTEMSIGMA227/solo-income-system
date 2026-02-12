@@ -62,28 +62,33 @@ export default function DashboardPage() {
     loadData();
   }, [router]);
 
-  async function quickAction(type: string, label: string) {
+    async function quickAction(type: string, label: string) {
     if (!user || !stats) return;
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
     const xp = XP_REWARDS[type as keyof typeof XP_REWARDS] || 5;
+    const gold = Math.round(xp * 0.5);
 
     await supabase.from('completions').insert({ user_id: user.id, completion_date: today, count_done: 1, notes: label });
     await supabase.from('xp_events').insert({ user_id: user.id, event_type: type, xp_amount: xp, description: label, event_date: today });
+    await supabase.from('gold_events').insert({ user_id: user.id, amount: gold, event_type: 'quest_reward', description: label, event_date: today });
 
     const newTotalEarned = stats.total_xp_earned + xp;
     const newActions = stats.total_actions + 1;
+    const newGold = (stats.gold || 0) + gold;
+    const newTotalGold = (stats.total_gold_earned || 0) + gold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     await supabase.from('stats').update({
       level: levelInfo.level, current_xp: levelInfo.currentXP,
       total_xp_earned: newTotalEarned, total_actions: newActions,
+      gold: newGold, total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions });
+    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold });
     setTodayActions(prev => prev + 1);
-    toast.success(`+${xp} XP — ${label}`);
+    toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
   }
 
   async function addIncome() {
@@ -157,11 +162,19 @@ export default function DashboardPage() {
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>{todayDate}</div>
           <div style={{ fontSize: '14px', color: '#94a3b8' }}>{profile?.display_name || 'Охотник'}</div>
         </div>
-        <div style={{
-          padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-          color: dayStatusColor, backgroundColor: dayStatusColor + '20', border: `1px solid ${dayStatusColor}30`,
-        }}>
-          {dayStatusText}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{
+            padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600,
+            backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30',
+          }}>
+            🪙 {formatNumber(stats?.gold || 0)}
+          </div>
+          <div style={{
+            padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
+            color: dayStatusColor, backgroundColor: dayStatusColor + '20', border: `1px solid ${dayStatusColor}30`,
+          }}>
+            {dayStatusText}
+          </div>
         </div>
       </div>
 

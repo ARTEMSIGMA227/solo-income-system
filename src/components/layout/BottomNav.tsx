@@ -10,7 +10,15 @@ const MAIN_NAV = [
   { path: '/more', label: 'Ещё', icon: '☰' },
 ];
 
+const MAIN_NAV = [
+  { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
+  { path: '/quests', label: 'Квесты', icon: '📋' },
+  { path: '/shop', label: 'Магазин', icon: '🏪' },
+  { path: '/more', label: 'Ещё', icon: '☰' },
+];
+
 const MORE_ITEMS = [
+  { path: '/bosses', label: 'Боссы', icon: '👹' },
   { path: '/analytics', label: 'Аналитика', icon: '📈' },
   { path: '/stats', label: 'Статы', icon: '📊' },
   { path: '/settings', label: 'Настройки', icon: '⚙️' },

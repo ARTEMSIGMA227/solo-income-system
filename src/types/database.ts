@@ -173,3 +173,41 @@ export interface LevelImages {
   srank?: string;
   monarch?: string;
 }
+
+export interface ShopItem {
+  id: string;
+  item_key: string;
+  name: string;
+  description: string;
+  category: 'potion' | 'artifact' | 'scroll';
+  price: number;
+  icon: string;
+  effect_type: string;
+  effect_value: number;
+  duration_hours: number | null;
+  max_stack: number;
+  min_level: number;
+  is_available: boolean;
+  created_at: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  user_id: string;
+  item_key: string;
+  quantity: number;
+  is_active: boolean;
+  activated_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface GoldEvent {
+  id: string;
+  user_id: string;
+  amount: number;
+  event_type: string;
+  description: string | null;
+  event_date: string;
+  created_at: string;
+}
