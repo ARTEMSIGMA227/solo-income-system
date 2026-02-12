@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import HunterAvatar from '@/components/character/HunterAvatar';
 import CharacterEditor from '@/components/character/CharacterEditor';
 import type { Stats, Profile, CharacterConfig } from '@/types/database';
+import StreakBanner from '@/components/streak/StreakBanner';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -247,6 +248,14 @@ export default function DashboardPage() {
         onEdit={() => setShowEditor(true)}
       />
 
+      {/* Streak */}
+      <div style={{ marginTop: '12px' }}>
+        <StreakBanner
+          streak={profile?.streak_current || 0}
+          bestStreak={profile?.streak_best || 0}
+        />
+      </div>
+      
       {/* Уровень */}
       <div style={{
         backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
