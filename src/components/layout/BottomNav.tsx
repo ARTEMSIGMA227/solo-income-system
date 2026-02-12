@@ -11,6 +11,7 @@ const MAIN_NAV = [
 ];
 
 const MORE_ITEMS = [
+  { path: '/focus', label: 'Фокус', icon: '🎯' },
   { path: '/bosses', label: 'Боссы', icon: '👹' },
   { path: '/analytics', label: 'Аналитика', icon: '📈' },
   { path: '/stats', label: 'Статы', icon: '📊' },
