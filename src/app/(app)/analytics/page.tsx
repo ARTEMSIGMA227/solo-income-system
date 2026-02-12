@@ -284,10 +284,7 @@ export default function AnalyticsPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
             <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
-            <Tooltip
-  contentStyle={tooltipStyle}
-  formatter={(value) => formatCurrency(value ?? 0)}
-/>
+            <Tooltip  contentStyle={tooltipStyle}  formatter={(value) => formatCurrency(value ?? 0)} />
             <Line type="monotone" dataKey="income" name="Доход" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 5 }} activeDot={{ r: 7 }} />
           </LineChart>
         </ResponsiveContainer>
