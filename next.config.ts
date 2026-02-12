@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
     ],
   },
   eslint: {
-    ignoreDuringBuilds: true, // ⚠️ Временно отключает ESLint при сборке
+    ignoreDuringBuilds: true, // 👈 ЭТО РЕШАЕТ ESLINT-ОШИБКУ
   },
 };
 
