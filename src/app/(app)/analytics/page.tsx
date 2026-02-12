@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import type { XPEvent, IncomeEvent } from '@/types/database';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, AreaChart, Area, CartesianGrid, PieChart, Pie, Cell,
+} from 'recharts';
 
 interface DayData {
   date: string;
@@ -20,9 +23,9 @@ export default function AnalyticsPage() {
   const [monthXP, setMonthXP] = useState(0);
   const [avgDailyActions, setAvgDailyActions] = useState(0);
   const [avgDailyIncome, setAvgDailyIncome] = useState(0);
-  const [bestDay, setBestDay] = useState<DayData | null>(null);
   const [tips, setTips] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [incomeBySource, setIncomeBySource] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -79,7 +82,7 @@ export default function AnalyticsPage() {
       // Income за неделю
       const { data: incomeEvents } = await supabase
         .from('income_events')
-        .select('event_date, amount')
+        .select('event_date, amount, source')
         .eq('user_id', user.id)
         .gte('event_date', weekStart)
         .lte('event_date', weekEnd);
@@ -97,75 +100,88 @@ export default function AnalyticsPage() {
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
       const { data: monthCompletions } = await supabase
-        .from('completions')
-        .select('count_done')
-        .eq('user_id', user.id)
-        .gte('completion_date', monthStart);
+        .from('completions').select('count_done').eq('user_id', user.id).gte('completion_date', monthStart);
       const mActions = monthCompletions?.reduce((s, c) => s + c.count_done, 0) || 0;
       setMonthActions(mActions);
 
       const { data: monthXPEvents } = await supabase
-        .from('xp_events')
-        .select('xp_amount')
-        .eq('user_id', user.id)
-        .gte('event_date', monthStart);
+        .from('xp_events').select('xp_amount').eq('user_id', user.id).gte('event_date', monthStart);
       const mXP = monthXPEvents?.reduce((s, e) => s + (e.xp_amount > 0 ? e.xp_amount : 0), 0) || 0;
       setMonthXP(mXP);
 
       const { data: monthIncomeEvents } = await supabase
-        .from('income_events')
-        .select('amount')
-        .eq('user_id', user.id)
-        .gte('event_date', monthStart);
+        .from('income_events').select('amount, source').eq('user_id', user.id).gte('event_date', monthStart);
       const mIncome = monthIncomeEvents?.reduce((s, i) => s + Number(i.amount), 0) || 0;
       setMonthIncome(mIncome);
+
+      // Доход по источникам
+      const sourceMap: Record<string, number> = {};
+      if (monthIncomeEvents) {
+        for (const ie of monthIncomeEvents) {
+          const src = ie.source || 'other';
+          sourceMap[src] = (sourceMap[src] || 0) + Number(ie.amount);
+        }
+      }
+      const sourceLabels: Record<string, string> = {
+        sale: 'Продажи', contract: 'Контракты', freelance: 'Фриланс',
+        bonus: 'Бонусы', other: 'Другое',
+      };
+      setIncomeBySource(
+        Object.entries(sourceMap).map(([key, val]) => ({
+          name: sourceLabels[key] || key,
+          value: val,
+        }))
+      );
 
       // Средние
       const daysInMonth = now.getDate();
       setAvgDailyActions(Math.round(mActions / daysInMonth));
       setAvgDailyIncome(Math.round(mIncome / daysInMonth));
 
-      // Лучший день
-      const best = days.reduce((max, d) => d.actions > max.actions ? d : max, days[0]);
-      setBestDay(best);
-
       // Rule-based анализ
       const newTips: string[] = [];
-
       const totalWeekActions = days.reduce((s, d) => s + d.actions, 0);
       const avgWeekActions = Math.round(totalWeekActions / 7);
 
       if (avgWeekActions < 30) {
-        newTips.push('⚠️ Среднее число действий в день ниже 30. Увеличь количество звонков и касаний.');
+        newTips.push('⚠️ Среднее число действий ниже 30/день. Увеличь активность.');
       } else {
         newTips.push('✅ Хороший темп действий! Держи планку.');
       }
 
       if (mIncome < 75000 && daysInMonth > 15) {
-        newTips.push('🔴 Доход ниже 50% от цели на середину месяца. Нужен рывок!');
+        newTips.push('🔴 Доход ниже 50% от цели. Нужен рывок!');
       } else if (mIncome >= 150000) {
-        newTips.push('🏆 Цель месяца достигнута! Ставь новую планку.');
+        newTips.push('🏆 Цель месяца достигнута!');
       }
 
       const zeroDays = days.filter(d => d.actions === 0).length;
       if (zeroDays >= 2) {
-        newTips.push(`💀 ${zeroDays} дней без действий за неделю. Каждый пропуск = -100 XP.`);
+        newTips.push(`💀 ${zeroDays} дней без действий за неделю.`);
       }
 
       const weekIncome = days.reduce((s, d) => s + d.income, 0);
       if (weekIncome === 0 && totalWeekActions > 50) {
-        newTips.push('🤔 Много действий, но нет дохода. Проверь качество касаний и конверсию.');
-      }
-
-      if (best && best.actions >= 40) {
-        newTips.push(`🔥 Лучший день: ${best.label} (${best.actions} действий). Повтори этот результат!`);
+        newTips.push('🤔 Много действий, но нет дохода. Проверь конверсию.');
       }
 
       const trend = days[6].actions - days[0].actions;
       if (trend > 10) {
-        newTips.push('📈 Восходящий тренд! Ты набираешь обороты.');
+        newTips.push('📈 Восходящий тренд! Набираешь обороты.');
       } else if (trend < -10) {
-        newTips.push('📉 Нисходящий тренд. Не сбавляй темп к концу недели.');
+        newTips.push('📉 Нисходящий тренд. Не сбавляй темп.');
+      }
+
+      // Прогноз дохода
+      if (mIncome > 0 && daysInMonth > 3) {
+        const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - daysInMonth;
+        const dailyRate = mIncome / daysInMonth;
+        const forecast = mIncome + dailyRate * daysLeft;
+        if (forecast >= 150000) {
+          newTips.push(`📊 Прогноз: ${formatCurrency(Math.round(forecast))} к концу месяца. На пути к цели!`);
+        } else {
+          newTips.push(`📊 Прогноз: ${formatCurrency(Math.round(forecast))}. Нужно ускориться до ${formatCurrency(Math.round((150000 - mIncome) / Math.max(daysLeft, 1)))}/день.`);
+        }
       }
 
       setTips(newTips);
@@ -176,33 +192,29 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa',
-      }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa' }}>
         ⏳ Загрузка аналитики...
       </div>
     );
   }
 
-  const maxActions = Math.max(...weekData.map(d => d.actions), 1);
-  const maxXP = Math.max(...weekData.map(d => d.xp), 1);
-  const maxIncome = Math.max(...weekData.map(d => d.income), 1);
+  const PIE_COLORS = ['#7c3aed', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
+
+  const tooltipStyle = {
+    backgroundColor: '#12121a',
+    border: '1px solid #1e1e2e',
+    borderRadius: '8px',
+    color: '#e2e8f0',
+    fontSize: '12px',
+  };
 
   return (
-    <div style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
-      padding: '16px', maxWidth: '600px', margin: '0 auto',
-    }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>
-        📈 Аналитика
-      </h1>
+    <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
+
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>📈 Аналитика</h1>
 
       {/* Месячная сводка */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '16px',
-      }}>
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>📅 Этот месяц</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
@@ -230,110 +242,94 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* График действий за неделю */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '16px',
-      }}>
+      {/* График действий — столбцы */}
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>📊 Действия за неделю</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '120px' }}>
-          {weekData.map((day, i) => {
-            const height = maxActions > 0 ? (day.actions / maxActions) * 100 : 0;
-            return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '10px', color: '#a78bfa', fontWeight: 600 }}>
-                  {day.actions > 0 ? day.actions : ''}
-                </span>
-                <div style={{
-                  width: '100%', borderRadius: '4px 4px 0 0',
-                  backgroundColor: day.actions >= 30 ? '#22c55e' : day.actions > 0 ? '#7c3aed' : '#1e1e2e',
-                  height: `${Math.max(height, 4)}%`,
-                  transition: 'height 0.5s ease',
-                }} />
-                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{day.label}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '8px', fontSize: '10px' }}>
-          <span><span style={{ color: '#22c55e' }}>■</span> ≥30</span>
-          <span><span style={{ color: '#7c3aed' }}>■</span> &lt;30</span>
-        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={weekData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
+            <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Bar dataKey="actions" name="Действия" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* График XP за неделю */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '16px',
-      }}>
+      {/* График XP — линия */}
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>⚡ XP за неделю</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
-          {weekData.map((day, i) => {
-            const height = maxXP > 0 ? (day.xp / maxXP) * 100 : 0;
-            return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '9px', color: '#a78bfa' }}>
-                  {day.xp > 0 ? day.xp : ''}
-                </span>
-                <div style={{
-                  width: '100%', borderRadius: '4px 4px 0 0',
-                  background: day.xp > 0 ? 'linear-gradient(180deg, #7c3aed, #3b82f6)' : '#1e1e2e',
-                  height: `${Math.max(height, 4)}%`,
-                }} />
-                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{day.label}</span>
-              </div>
-            );
-          })}
-        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <AreaChart data={weekData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
+            <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <Tooltip contentStyle={tooltipStyle} />
+            <defs>
+              <linearGradient id="xpGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.4} />
+                <stop offset="100%" stopColor="#7c3aed" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area type="monotone" dataKey="xp" name="XP" stroke="#7c3aed" strokeWidth={2} fill="url(#xpGradient)" />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* График дохода за неделю */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '16px',
-      }}>
+      {/* График дохода — линия с точками */}
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>💰 Доход за неделю</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '100px' }}>
-          {weekData.map((day, i) => {
-            const height = maxIncome > 0 ? (day.income / maxIncome) * 100 : 0;
-            return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '9px', color: '#22c55e' }}>
-                  {day.income > 0 ? `${Math.round(day.income / 1000)}k` : ''}
-                </span>
-                <div style={{
-                  width: '100%', borderRadius: '4px 4px 0 0',
-                  backgroundColor: day.income > 0 ? '#22c55e' : '#1e1e2e',
-                  height: `${Math.max(height, 4)}%`,
-                }} />
-                <span style={{ fontSize: '9px', color: '#94a3b8' }}>{day.label}</span>
-              </div>
-            );
-          })}
-        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={weekData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
+            <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+            <Line type="monotone" dataKey="income" name="Доход" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 5 }} activeDot={{ r: 7 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* AI-анализ (rule-based) */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '16px',
-      }}>
+      {/* Доход по источникам — круговая */}
+      {incomeBySource.length > 0 && (
+        <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>🎯 Доход по источникам</div>
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={incomeBySource}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={3}
+                dataKey="value"
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              >
+                {incomeBySource.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Анализ и рекомендации */}
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>🧠 Анализ и рекомендации</div>
         {tips.map((tip, i) => (
           <div key={i} style={{
-            padding: '10px 12px',
-            backgroundColor: '#16161f',
-            borderRadius: '8px',
-            marginBottom: '8px',
-            fontSize: '13px',
-            lineHeight: '1.5',
+            padding: '10px 12px', backgroundColor: '#16161f', borderRadius: '8px',
+            marginBottom: '8px', fontSize: '13px', lineHeight: '1.5',
           }}>
             {tip}
           </div>
         ))}
       </div>
 
-      <div style={{ height: '32px' }} />
+      <div style={{ height: '80px' }} />
     </div>
   );
 }
