@@ -51,7 +51,8 @@ export default function DashboardPage() {
       const { data: s } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
       setStats(s);
 
-      const { data: cc } = await supabase.from('character_config').select('*').eq('user_id', authUser.id).maybeSingle();
+      const { data: ccRows } = await supabase.from('character_config').select('*').eq('user_id', authUser.id);
+const cc = ccRows?.[0] ?? null;
       setCharConfig(cc);
 
       const today = getToday();
