@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solo Income System — Оффлайн</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #0a0a0f;
+      color: #e2e8f0;
+      font-family: Inter, system-ui, sans-serif;
+      padding: 24px;
+      text-align: center;
+    }
+    .icon { font-size: 64px; margin-bottom: 16px; }
+    h1 { font-size: 24px; color: #a78bfa; margin-bottom: 12px; }
+    p { font-size: 14px; color: #94a3b8; margin-bottom: 24px; line-height: 1.6; }
+    button {
+      padding: 14px 32px;
+      background-color: #7c3aed;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="icon">📡</div>
+    <h1>Нет подключения</h1>
+    <p>
+      Проверь интернет и попробуй снова.<br>
+      Охотник не сдаётся!
+    </p>
+    <button onclick="window.location.reload()">🔄 Обновить</button>
+  </div>
+</body>
+</html>
