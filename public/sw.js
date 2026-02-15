@@ -1,23 +1,20 @@
-const CACHE_NAME = 'solo-income-v1';
+var CACHE_NAME = 'solo-income-v1';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', function() {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', function(event) {
   event.waitUntil(clients.claim());
 });
 
-self.addEventListener('fetch', (event) => {
-  // Skip non-http(s) requests (chrome-extension, etc)
+self.addEventListener('fetch', function(event) {
   if (!event.request.url.startsWith('http')) {
     return;
   }
-
   event.respondWith(
-    fetch(event.request).catch(() => {
+    fetch(event.request).catch(function() {
       return caches.match(event.request);
     })
   );
 });
-```
