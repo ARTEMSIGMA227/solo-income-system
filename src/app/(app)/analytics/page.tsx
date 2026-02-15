@@ -284,7 +284,7 @@ export default function AnalyticsPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
             <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
-            <Tooltip  contentStyle={tooltipStyle}  formatter={(value) => formatCurrency(value ?? 0)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(Number(value ?? 0))} />
             <Line type="monotone" dataKey="income" name="Доход" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 5 }} activeDot={{ r: 7 }} />
           </LineChart>
         </ResponsiveContainer>
@@ -304,13 +304,13 @@ export default function AnalyticsPage() {
                 outerRadius={80}
                 paddingAngle={3}
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
               >
                 {incomeBySource.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => formatCurrency(value)} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(Number(value ?? 0))} />
             </PieChart>
           </ResponsiveContainer>
         </div>
