@@ -119,6 +119,22 @@ export default function AchievementsPage() {
   const totalUnlocked = unlocked.length;
   const totalAchievements = ACHIEVEMENTS.length;
 
+  // Sort: claimable first → unlocked → locked
+  const sorted = [...filtered].sort((a, b) => {
+    const aUnlocked = unlockedKeys.has(a.key);
+    const bUnlocked = unlockedKeys.has(b.key);
+    const aCanClaim = !aUnlocked && a.check(achievementStats);
+    const bCanClaim = !bUnlocked && b.check(achievementStats);
+
+    // Claimable first
+    if (aCanClaim && !bCanClaim) return -1;
+    if (!aCanClaim && bCanClaim) return 1;
+    // Then unlocked
+    if (aUnlocked && !bUnlocked) return -1;
+    if (!aUnlocked && bUnlocked) return 1;
+    return 0;
+  });
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
 
@@ -162,7 +178,7 @@ export default function AchievementsPage() {
       </div>
 
       {/* Список */}
-      {filtered.map(ach => {
+      {sorted.map(ach => {
         const isUnlocked = unlockedKeys.has(ach.key);
         const canClaim = !isUnlocked && ach.check(achievementStats);
         const color = getRarityColor(ach.rarity);

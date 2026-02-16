@@ -24,13 +24,6 @@ export default function BossesPage() {
       if (!user) return;
       setUserId(user.id);
 
-      const { data: bossesData } = await supabase
-        .from('bosses')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('boss_type');
-      setBosses(bossesData || []);
-
       const { data: statsData } = await supabase
         .from('stats')
         .select('*')
@@ -38,6 +31,63 @@ export default function BossesPage() {
         .single();
       setStats(statsData);
 
+      // Load bosses
+      let { data: bossesData } = await supabase
+        .from('bosses')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('boss_type');
+
+      // Auto-create if no active bosses exist
+      const activeBosses = (bossesData || []).filter(b => !b.is_defeated && new Date(b.deadline) >= new Date());
+      if (activeBosses.length === 0) {
+        const today = new Date();
+        const sundayOffset = 7 - today.getDay();
+        const weekDeadline = new Date(today);
+        weekDeadline.setDate(today.getDate() + sundayOffset);
+        const weekDeadlineStr = weekDeadline.toLocaleDateString('en-CA');
+
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        const monthDeadlineStr = lastDay.toLocaleDateString('en-CA');
+
+        await supabase.from('bosses').insert([
+          {
+            user_id: user.id,
+            title: 'Страж рутины',
+            boss_type: 'weekly',
+            description: 'Выполни недельный план действий и дохода!',
+            requirements: [
+              { metric: 'actions', target: 150 },
+              { metric: 'income', target: 25000 },
+            ],
+            xp_reward: 500,
+            deadline: weekDeadlineStr,
+          },
+          {
+            user_id: user.id,
+            title: 'Теневой Монарх',
+            boss_type: 'monthly',
+            description: 'Достигни месячной цели дохода и действий!',
+            requirements: [
+              { metric: 'actions', target: 600 },
+              { metric: 'income', target: 150000 },
+              { metric: 'sales', target: 10 },
+            ],
+            xp_reward: 2000,
+            deadline: monthDeadlineStr,
+          },
+        ]);
+
+        // Reload bosses
+        const { data: refreshed } = await supabase
+          .from('bosses')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('boss_type');
+        bossesData = refreshed;
+      }
+
+      setBosses(bossesData || []);
       setLoading(false);
     }
     load();
@@ -221,6 +271,16 @@ export default function BossesPage() {
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>
         👹 Боссы
       </h1>
+
+      {weekly.length === 0 && monthly.length === 0 && (
+        <div style={{
+          textAlign: 'center', padding: '48px 16px', color: '#475569',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '12px' }}>👹</div>
+          <div style={{ fontSize: '16px' }}>Боссы появятся скоро...</div>
+          <div style={{ fontSize: '13px', marginTop: '8px' }}>Обнови страницу</div>
+        </div>
+      )}
 
       {weekly.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
