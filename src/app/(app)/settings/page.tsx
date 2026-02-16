@@ -1,15 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import {
+  isPushSupported,
+  getPermissionState,
+  subscribeToPush,
+  unsubscribeFromPush,
+  getCurrentSubscription,
+  serializeSubscription,
+} from '@/lib/push';
 import type { Profile } from '@/types/database';
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
   const router = useRouter();
 
   // Форма
@@ -49,6 +60,66 @@ export default function SettingsPage() {
     }
     load();
   }, [router]);
+
+  // Check push subscription status
+  useEffect(() => {
+    setPushSupported(isPushSupported());
+    async function checkPush() {
+      if (!isPushSupported()) return;
+      const sub = await getCurrentSubscription();
+      setPushEnabled(!!sub);
+    }
+    checkPush();
+  }, []);
+
+  const handlePushToggle = useCallback(async () => {
+    setPushLoading(true);
+    try {
+      if (pushEnabled) {
+        // Unsubscribe
+        const sub = await getCurrentSubscription();
+        if (sub) {
+          const serialized = serializeSubscription(sub);
+          await fetch('/api/notifications/subscribe', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: serialized.endpoint }),
+          });
+        }
+        await unsubscribeFromPush();
+        setPushEnabled(false);
+        toast.success('Уведомления отключены');
+      } else {
+        // Subscribe
+        const sub = await subscribeToPush();
+        if (!sub) {
+          const perm = getPermissionState();
+          if (perm === 'denied') {
+            toast.error('Уведомления заблокированы в настройках браузера');
+          } else {
+            toast.error('Не удалось подписаться на уведомления');
+          }
+          setPushLoading(false);
+          return;
+        }
+        const serialized = serializeSubscription(sub);
+        const res = await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(serialized),
+        });
+        if (res.ok) {
+          setPushEnabled(true);
+          toast.success('Уведомления включены! Ты будешь получать напоминания.');
+        } else {
+          toast.error('Ошибка сохранения подписки');
+        }
+      }
+    } catch {
+      toast.error('Ошибка при настройке уведомлений');
+    }
+    setPushLoading(false);
+  }, [pushEnabled]);
 
   async function handleSave() {
     if (!profile) return;
@@ -338,6 +409,64 @@ export default function SettingsPage() {
           📊 Статы и перки
         </button>
       </div>
+
+      {/* Push-уведомления */}
+      {pushSupported && (
+        <div style={{
+          backgroundColor: '#12121a', border: '1px solid #1e1e2e',
+          borderRadius: '12px', padding: '20px', marginBottom: '16px',
+        }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+            🔔 Push-уведомления
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div>
+              <div style={{ fontSize: '14px' }}>Напоминания о плане</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                Утром, вечером и перед дедлайном
+              </div>
+            </div>
+            <button
+              onClick={handlePushToggle}
+              disabled={pushLoading}
+              style={{
+                padding: '8px 20px',
+                borderRadius: '20px',
+                border: 'none',
+                backgroundColor: pushEnabled ? '#22c55e' : '#16161f',
+                color: pushEnabled ? '#fff' : '#94a3b8',
+                cursor: pushLoading ? 'not-allowed' : 'pointer',
+                fontSize: '13px',
+                fontWeight: 600,
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {pushLoading ? '...' : pushEnabled ? '✓ Вкл' : 'Выкл'}
+            </button>
+          </div>
+
+          {pushEnabled && (
+            <div style={{
+              fontSize: '11px', color: '#475569', padding: '8px 12px',
+              backgroundColor: '#16161f', borderRadius: '8px',
+            }}>
+              📌 10:00 — утренняя мотивация<br />
+              📌 18:00 — предупреждение если &lt;50%<br />
+              📌 21:00 — последний шанс закрыть день
+            </div>
+          )}
+
+          {!pushEnabled && getPermissionState() === 'denied' && (
+            <div style={{
+              fontSize: '11px', color: '#ef4444', padding: '8px 12px',
+              backgroundColor: '#1a0f0f', borderRadius: '8px',
+            }}>
+              Уведомления заблокированы в браузере. Разблокируй в настройках сайта.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Опасная зона */}
       <div style={{
