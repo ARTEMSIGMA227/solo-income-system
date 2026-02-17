@@ -13,6 +13,8 @@ import type { User } from '@supabase/supabase-js';
 import type { Stats, Profile, CharacterConfig } from '@/types/database';
 import StreakBanner from '@/components/streak/StreakBanner';
 import DeathScreen from '@/components/streak/DeathScreen';
+import AdvisorCard from '@/components/advisor/AdvisorCard';
+import { generateAdvice } from '@/lib/advisor';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -51,8 +53,7 @@ export default function DashboardPage() {
       const { data: s } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
       setStats(s);
 
-      const { data: ccRows } = await supabase.from('character_config').select('*').eq('user_id', authUser.id);
-const cc = ccRows?.[0] ?? null;
+      const { data: cc } = await supabase.from('character_config').select('*').eq('user_id', authUser.id).single();
       setCharConfig(cc);
 
       const today = getToday();
@@ -371,6 +372,24 @@ const cc = ccRows?.[0] ?? null;
           }} />
         </div>
       </div>
+
+      {/* AI Советник */}
+      {profile && stats && (() => {
+        const now = new Date();
+        const { greeting, advice } = generateAdvice({
+          stats,
+          profile,
+          todayActions,
+          todayIncome,
+          monthIncome,
+          hour: currentHour,
+          dayOfWeek: now.getDay(),
+          dayOfMonth: now.getDate(),
+          daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+        });
+        if (advice.length === 0) return null;
+        return <AdvisorCard greeting={greeting} advice={advice} />;
+      })()}
 
       {/* Прогресс */}
       <div style={{
