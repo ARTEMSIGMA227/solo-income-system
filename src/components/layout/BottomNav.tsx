@@ -7,13 +7,14 @@ const MAIN_NAV = [
   { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
   { path: '/quests', label: 'Квесты', icon: '📋' },
   { path: '/shop', label: 'Магазин', icon: '🏪' },
-  { path: '/more', label: 'Ещё', icon: '☰' },
+  { path: '/more', label: 'Ещё', icon: '⋯' },
 ];
 
 const MORE_ITEMS = [
+  { path: '/advisor', label: 'Советник', icon: '🤖' },
   { path: '/focus', label: 'Фокус', icon: '🎯' },
   { path: '/achievements', label: 'Ачивки', icon: '🏆' },
-  { path: '/bosses', label: 'Боссы', icon: '👹' },
+  { path: '/bosses', label: 'Боссы', icon: '💀' },
   { path: '/analytics', label: 'Аналитика', icon: '📈' },
   { path: '/stats', label: 'Статы', icon: '📊' },
   { path: '/settings', label: 'Настройки', icon: '⚙️' },
@@ -78,7 +79,7 @@ export default function BottomNav() {
                     color: isActive ? '#a78bfa' : '#e2e8f0',
                     fontSize: '14px',
                     fontWeight: isActive ? 600 : 400,
-                    textAlign: 'left',
+                    textAlign: 'left' as const,
                   }}
                 >
                   <span style={{ fontSize: '18px' }}>{item.icon}</span>
@@ -114,7 +115,7 @@ export default function BottomNav() {
               onClick={() => handleNav(item.path)}
               style={{
                 display: 'flex',
-                flexDirection: 'column',
+                flexDirection: 'column' as const,
                 alignItems: 'center',
                 gap: '2px',
                 padding: '4px 16px',
