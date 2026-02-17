@@ -16,9 +16,54 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+export function isPushSupported(): boolean {
+  if (typeof window === "undefined") return false;
+  return "serviceWorker" in navigator && "PushManager" in window;
+}
+
+export function getPermissionState(): NotificationPermission | "unsupported" {
+  if (typeof window === "undefined") return "unsupported";
+  if (!("Notification" in window)) return "unsupported";
+  return Notification.permission;
+}
+
+export async function getCurrentSubscription(): Promise<PushSubscription | null> {
+  try {
+    if (!isPushSupported()) return null;
+
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return null;
+
+    return await registration.pushManager.getSubscription();
+  } catch {
+    return null;
+  }
+}
+
+export interface SerializedSubscription {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+export function serializeSubscription(
+  sub: PushSubscription
+): SerializedSubscription {
+  const json = sub.toJSON();
+  return {
+    endpoint: json.endpoint ?? "",
+    keys: {
+      p256dh: json.keys?.p256dh ?? "",
+      auth: json.keys?.auth ?? "",
+    },
+  };
+}
+
 export async function subscribeToPush(): Promise<boolean> {
   try {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (!isPushSupported()) {
       console.warn("Push notifications not supported");
       return false;
     }
@@ -45,18 +90,12 @@ export async function subscribeToPush(): Promise<boolean> {
       });
     }
 
-    const subJson = subscription.toJSON();
+    const serialized = serializeSubscription(subscription);
 
     const response = await fetch("/api/notifications/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        endpoint: subJson.endpoint,
-        keys: {
-          p256dh: subJson.keys?.p256dh ?? "",
-          auth: subJson.keys?.auth ?? "",
-        },
-      }),
+      body: JSON.stringify(serialized),
     });
 
     if (!response.ok) {
@@ -97,13 +136,6 @@ export async function unsubscribeFromPush(): Promise<boolean> {
 }
 
 export async function isPushSubscribed(): Promise<boolean> {
-  try {
-    const registration = await navigator.serviceWorker.getRegistration();
-    if (!registration) return false;
-
-    const subscription = await registration.pushManager.getSubscription();
-    return subscription !== null;
-  } catch {
-    return false;
-  }
+  const sub = await getCurrentSubscription();
+  return sub !== null;
 }
