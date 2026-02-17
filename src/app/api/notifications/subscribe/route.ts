@@ -10,8 +10,8 @@ interface SubscribeBody {
   };
 }
 
-function createSupabaseServer() {
-  const cookieStore = cookies();
+async function createSupabaseServer() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +37,7 @@ function createSupabaseServer() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createSupabaseServer();
+    const supabase = await createSupabaseServer();
 
     const {
       data: { user },
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const supabase = createSupabaseServer();
+    const supabase = await createSupabaseServer();
 
     const {
       data: { user },

@@ -10,7 +10,6 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
   getCurrentSubscription,
-  serializeSubscription,
 } from '@/lib/push';
 import type { Profile } from '@/types/database';
 
@@ -61,7 +60,6 @@ export default function SettingsPage() {
     load();
   }, [router]);
 
-  // Check push subscription status
   useEffect(() => {
     setPushSupported(isPushSupported());
     async function checkPush() {
@@ -76,43 +74,27 @@ export default function SettingsPage() {
     setPushLoading(true);
     try {
       if (pushEnabled) {
-        // Unsubscribe
-        const sub = await getCurrentSubscription();
-        if (sub) {
-          const serialized = serializeSubscription(sub);
-          await fetch('/api/notifications/subscribe', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint: serialized.endpoint }),
-          });
+        const success = await unsubscribeFromPush();
+        if (success) {
+          setPushEnabled(false);
+          toast.success('Уведомления отключены');
+        } else {
+          toast.error('Не удалось отключить уведомления');
         }
-        await unsubscribeFromPush();
-        setPushEnabled(false);
-        toast.success('Уведомления отключены');
       } else {
-        // Subscribe
-        const sub = await subscribeToPush();
-        if (!sub) {
-          const perm = getPermissionState();
-          if (perm === 'denied') {
-            toast.error('Уведомления заблокированы в настройках браузера');
-          } else {
-            toast.error('Не удалось подписаться на уведомления');
-          }
+        const perm = getPermissionState();
+        if (perm === 'denied') {
+          toast.error('Уведомления заблокированы в настройках браузера');
           setPushLoading(false);
           return;
         }
-        const serialized = serializeSubscription(sub);
-        const res = await fetch('/api/notifications/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(serialized),
-        });
-        if (res.ok) {
+
+        const success = await subscribeToPush();
+        if (success) {
           setPushEnabled(true);
           toast.success('Уведомления включены! Ты будешь получать напоминания.');
         } else {
-          toast.error('Ошибка сохранения подписки');
+          toast.error('Не удалось подписаться на уведомления');
         }
       }
     } catch {
@@ -196,7 +178,6 @@ export default function SettingsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Удаляем данные
     await supabase.from('character_config').delete().eq('user_id', user.id);
     await supabase.from('perk_unlocks').delete().eq('user_id', user.id);
     await supabase.from('xp_events').delete().eq('user_id', user.id);

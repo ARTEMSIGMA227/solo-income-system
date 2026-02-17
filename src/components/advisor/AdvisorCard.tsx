@@ -1,170 +1,97 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { generateAdvice } from "@/lib/advisor";
-import { createBrowserClient } from "@supabase/ssr";
+import { useState } from "react";
 
-interface QuestRow {
-  completed_at: string | null;
-  difficulty: string;
-  xp_reward: number;
-  category: string;
-}
-
-interface ProfileRow {
-  level: number;
-  streak: number;
-  total_xp: number;
-  gold: number;
-}
-
-interface BossRow {
-  defeated: boolean;
-  boss_name: string;
-}
-
-interface AdviceState {
+interface AdvisorCardProps {
   greeting: string;
-  tips: string[];
-  motivation: string;
-  focusArea: string;
+  advice: string[];
 }
 
-export function AdvisorCard() {
-  const [advice, setAdvice] = useState<AdviceState | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AdvisorCard({ greeting, advice }: AdvisorCardProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  if (advice.length === 0) return null;
 
-  const loadAdvice = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      const [profileRes, questsRes, bossesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("level, streak, total_xp, gold")
-          .eq("id", user.id)
-          .single(),
-        supabase
-          .from("quests")
-          .select("completed_at, difficulty, xp_reward, category")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(50),
-        supabase
-          .from("boss_fights")
-          .select("defeated, boss_name")
-          .eq("user_id", user.id),
-      ]);
-
-      const profile = profileRes.data as ProfileRow | null;
-      const quests = (questsRes.data ?? []) as QuestRow[];
-      const bosses = (bossesRes.data ?? []) as BossRow[];
-
-      const result = generateAdvice(profile, quests, bosses);
-      setAdvice(result);
-    } catch (error) {
-      console.error("Advisor error:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    void loadAdvice();
-  }, [loadAdvice]);
-
-  if (loading) {
-    return (
-      <div className="rounded-xl border border-purple-500/30 bg-gray-900/50 p-4">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
-          <span className="text-sm text-gray-400">
-            Советник анализирует данные...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!advice) return null;
-
-  const focusColors: Record<string, string> = {
-    "streak-recovery": "border-red-500/50 bg-red-950/20",
-    quests: "border-blue-500/50 bg-blue-950/20",
-    boss: "border-orange-500/50 bg-orange-950/20",
-    onboarding: "border-green-500/50 bg-green-950/20",
-    general: "border-purple-500/50 bg-purple-950/20",
-  };
-
-  const borderClass =
-    focusColors[advice.focusArea] ?? focusColors.general;
+  const visibleAdvice = expanded ? advice : advice.slice(0, 2);
 
   return (
     <div
-      className={`rounded-xl border ${borderClass} p-4 transition-all duration-300`}
+      style={{
+        backgroundColor: "#12121a",
+        border: "1px solid #7c3aed30",
+        borderRadius: "12px",
+        padding: "16px",
+        marginBottom: "12px",
+      }}
     >
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🤖</span>
-          <h3 className="text-sm font-bold text-white">
-            AI-Советник
-          </h3>
-        </div>
-        <button
-          onClick={() => void loadAdvice()}
-          className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-          title="Обновить совет"
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "10px",
+        }}
+      >
+        <span style={{ fontSize: "18px" }}>🤖</span>
+        <span
+          style={{ fontSize: "13px", fontWeight: 700, color: "#a78bfa" }}
         >
-          🔄
-        </button>
+          AI-Советник
+        </span>
       </div>
 
       {/* Greeting */}
-      <p className="mb-3 text-sm font-medium text-gray-200">
-        {advice.greeting}
-      </p>
-
-      {/* Tips */}
-      <div className="space-y-2">
-        {advice.tips
-          .slice(0, expanded ? undefined : 2)
-          .map((tip, i) => (
-            <p key={i} className="text-xs leading-relaxed text-gray-300">
-              {tip}
-            </p>
-          ))}
+      <div
+        style={{
+          fontSize: "14px",
+          fontWeight: 600,
+          color: "#e2e8f0",
+          marginBottom: "10px",
+        }}
+      >
+        {greeting}
       </div>
 
-      {advice.tips.length > 2 && (
+      {/* Advice items */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+        {visibleAdvice.map((tip, i) => (
+          <div
+            key={i}
+            style={{
+              fontSize: "12px",
+              lineHeight: "1.5",
+              color: "#cbd5e1",
+              padding: "8px 10px",
+              backgroundColor: "#16161f",
+              borderRadius: "8px",
+              border: "1px solid #1e1e2e",
+            }}
+          >
+            {tip}
+          </div>
+        ))}
+      </div>
+
+      {/* Expand button */}
+      {advice.length > 2 && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-2 text-xs text-purple-400 hover:text-purple-300"
+          style={{
+            marginTop: "8px",
+            fontSize: "11px",
+            color: "#a78bfa",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "4px 0",
+          }}
         >
           {expanded
-            ? "Свернуть"
-            : `Ещё ${advice.tips.length - 2} советов...`}
+            ? "Свернуть ▲"
+            : `Ещё ${advice.length - 2} советов ▼`}
         </button>
       )}
-
-      {/* Motivation */}
-      <div className="mt-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
-        <p className="text-xs italic text-gray-400">
-          &quot;{advice.motivation}&quot;
-        </p>
-      </div>
     </div>
   );
 }

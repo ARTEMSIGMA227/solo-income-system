@@ -30,10 +30,8 @@ export function getPermissionState(): NotificationPermission | "unsupported" {
 export async function getCurrentSubscription(): Promise<PushSubscription | null> {
   try {
     if (!isPushSupported()) return null;
-
     const registration = await navigator.serviceWorker.getRegistration();
     if (!registration) return null;
-
     return await registration.pushManager.getSubscription();
   } catch {
     return null;
@@ -84,9 +82,11 @@ export async function subscribeToPush(): Promise<boolean> {
     let subscription = await registration.pushManager.getSubscription();
 
     if (!subscription) {
+      const keyArray = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: keyArray.buffer as ArrayBuffer,
       });
     }
 
