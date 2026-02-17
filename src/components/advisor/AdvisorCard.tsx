@@ -1,112 +1,169 @@
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
-import type { Advice } from '@/lib/advisor';
+import { useState, useEffect, useCallback } from "react";
+import { generateAdvice } from "@/lib/advisor";
+import { createBrowserClient } from "@supabase/ssr";
 
-const priorityStyles: Record<Advice['priority'], { bg: string; border: string; accent: string }> = {
-  critical: { bg: '#1a0f0f', border: '#ef444440', accent: '#ef4444' },
-  warning: { bg: '#1a1a0f', border: '#f59e0b40', accent: '#f59e0b' },
-  positive: { bg: '#0f1a12', border: '#22c55e40', accent: '#22c55e' },
-  info: { bg: '#0f1219', border: '#3b82f640', accent: '#3b82f6' },
-};
-
-interface AdvisorCardProps {
-  greeting: string;
-  advice: Advice[];
-  onQuickAction?: () => void;
+interface QuestRow {
+  completed_at: string | null;
+  difficulty: string;
+  xp_reward: number;
+  category: string;
 }
 
-export default function AdvisorCard({ greeting, advice, onQuickAction }: AdvisorCardProps) {
-  const router = useRouter();
+interface ProfileRow {
+  level: number;
+  streak: number;
+  total_xp: number;
+  gold: number;
+}
 
-  if (advice.length === 0) return null;
+interface BossRow {
+  defeated: boolean;
+  boss_name: string;
+}
+
+interface AdviceState {
+  greeting: string;
+  tips: string[];
+  motivation: string;
+  focusArea: string;
+}
+
+export function AdvisorCard() {
+  const [advice, setAdvice] = useState<AdviceState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const loadAdvice = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const [profileRes, questsRes, bossesRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("level, streak, total_xp, gold")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from("quests")
+          .select("completed_at, difficulty, xp_reward, category")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("boss_fights")
+          .select("defeated, boss_name")
+          .eq("user_id", user.id),
+      ]);
+
+      const profile = profileRes.data as ProfileRow | null;
+      const quests = (questsRes.data ?? []) as QuestRow[];
+      const bosses = (bossesRes.data ?? []) as BossRow[];
+
+      const result = generateAdvice(profile, quests, bosses);
+      setAdvice(result);
+    } catch (error) {
+      console.error("Advisor error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    void loadAdvice();
+  }, [loadAdvice]);
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-purple-500/30 bg-gray-900/50 p-4">
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+          <span className="text-sm text-gray-400">
+            Советник анализирует данные...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!advice) return null;
+
+  const focusColors: Record<string, string> = {
+    "streak-recovery": "border-red-500/50 bg-red-950/20",
+    quests: "border-blue-500/50 bg-blue-950/20",
+    boss: "border-orange-500/50 bg-orange-950/20",
+    onboarding: "border-green-500/50 bg-green-950/20",
+    general: "border-purple-500/50 bg-purple-950/20",
+  };
+
+  const borderClass =
+    focusColors[advice.focusArea] ?? focusColors.general;
 
   return (
-    <div style={{
-      backgroundColor: '#12121a',
-      border: '1px solid #1e1e2e',
-      borderRadius: '16px',
-      padding: '16px',
-      marginBottom: '16px',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        marginBottom: '12px',
-      }}>
-        <span style={{ fontSize: '20px' }}>🤖</span>
-        <span style={{ fontSize: '14px', fontWeight: 600, color: '#a78bfa' }}>
-          AI-советник
-        </span>
+    <div
+      className={`rounded-xl border ${borderClass} p-4 transition-all duration-300`}
+    >
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🤖</span>
+          <h3 className="text-sm font-bold text-white">
+            AI-Советник
+          </h3>
+        </div>
+        <button
+          onClick={() => void loadAdvice()}
+          className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+          title="Обновить совет"
+        >
+          🔄
+        </button>
       </div>
 
-      <div style={{
-        fontSize: '13px', color: '#94a3b8', marginBottom: '12px',
-        fontStyle: 'italic',
-      }}>
-        {greeting}
+      {/* Greeting */}
+      <p className="mb-3 text-sm font-medium text-gray-200">
+        {advice.greeting}
+      </p>
+
+      {/* Tips */}
+      <div className="space-y-2">
+        {advice.tips
+          .slice(0, expanded ? undefined : 2)
+          .map((tip, i) => (
+            <p key={i} className="text-xs leading-relaxed text-gray-300">
+              {tip}
+            </p>
+          ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {advice.map((item, i) => {
-          const style = priorityStyles[item.priority];
-          return (
-            <div
-              key={i}
-              style={{
-                backgroundColor: style.bg,
-                border: `1px solid ${style.border}`,
-                borderRadius: '10px',
-                padding: '12px',
-              }}
-            >
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: '10px',
-              }}>
-                <span style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }}>
-                  {item.icon}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: '13px', fontWeight: 600,
-                    color: style.accent, marginBottom: '3px',
-                  }}>
-                    {item.title}
-                  </div>
-                  <div style={{
-                    fontSize: '12px', color: '#94a3b8',
-                    lineHeight: '1.4',
-                  }}>
-                    {item.message}
-                  </div>
-                  {item.action && (
-                    <button
-                      onClick={() => {
-                        if (item.actionRoute) {
-                          router.push(item.actionRoute);
-                        } else if (onQuickAction) {
-                          onQuickAction();
-                        }
-                      }}
-                      style={{
-                        marginTop: '8px',
-                        padding: '5px 12px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        backgroundColor: style.accent + '20',
-                        color: style.accent,
-                        border: `1px solid ${style.accent}40`,
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {item.action} →
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {advice.tips.length > 2 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-2 text-xs text-purple-400 hover:text-purple-300"
+        >
+          {expanded
+            ? "Свернуть"
+            : `Ещё ${advice.tips.length - 2} советов...`}
+        </button>
+      )}
+
+      {/* Motivation */}
+      <div className="mt-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+        <p className="text-xs italic text-gray-400">
+          &quot;{advice.motivation}&quot;
+        </p>
       </div>
     </div>
   );

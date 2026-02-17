@@ -1,210 +1,192 @@
-import type { Stats, Profile } from '@/types/database';
-
-export interface Advice {
-  icon: string;
-  title: string;
-  message: string;
-  priority: 'critical' | 'warning' | 'info' | 'positive';
-  action?: string;
-  actionRoute?: string;
+interface QuestData {
+  completed_at: string | null;
+  difficulty: string;
+  xp_reward: number;
+  category: string;
 }
 
-interface AdvisorInput {
-  stats: Stats;
-  profile: Profile;
-  todayActions: number;
-  todayIncome: number;
-  monthIncome: number;
-  hour: number;
-  dayOfWeek: number;
-  dayOfMonth: number;
-  daysInMonth: number;
+interface ProfileData {
+  level: number;
+  streak: number;
+  total_xp: number;
+  gold: number;
 }
 
-function getTimeGreeting(hour: number, name: string): string {
-  if (hour < 6) return `Ночной охотник, ${name}! 🌙`;
-  if (hour < 12) return `Доброе утро, ${name}! ☀️`;
-  if (hour < 18) return `${name}, день в разгаре! 🔥`;
-  if (hour < 22) return `Вечерний спринт, ${name}! 🌆`;
-  return `Поздний воин, ${name}! 🦉`;
+interface BossData {
+  defeated: boolean;
+  boss_name: string;
 }
 
-export function generateAdvice(input: AdvisorInput): {
+interface AdviceResult {
   greeting: string;
-  advice: Advice[];
-} {
-  const {
-    stats, profile, todayActions, todayIncome, monthIncome,
-    hour, dayOfWeek, dayOfMonth, daysInMonth,
-  } = input;
+  tips: string[];
+  motivation: string;
+  focusArea: string;
+}
 
-  const advice: Advice[] = [];
-  const target = profile.daily_actions_target || 30;
-  const monthlyTarget = profile.monthly_income_target || 150000;
-  const streak = profile.streak_current || 0;
-  const percent = Math.round((todayActions / target) * 100);
-  const daysLeft = daysInMonth - dayOfMonth;
-  const monthPercent = monthlyTarget > 0 ? Math.round((monthIncome / monthlyTarget) * 100) : 0;
-  const dailyNeeded = daysLeft > 0 ? Math.round((monthlyTarget - monthIncome) / daysLeft) : 0;
+export function generateAdvice(
+  profile: ProfileData | null,
+  quests: QuestData[],
+  bosses: BossData[]
+): AdviceResult {
+  const tips: string[] = [];
+  let focusArea = "general";
 
-  // === CRITICAL ===
-  if (hour >= 18 && todayActions === 0) {
-    advice.push({
-      icon: '💀',
-      title: 'Серия под угрозой!',
-      message: streak > 0
-        ? `${streak} дней серии сгорят если не сделаешь хотя бы 1 действие!`
-        : 'Ни одного действия сегодня. Начни прямо сейчас!',
-      priority: 'critical',
-      action: 'Быстрое действие',
-    });
+  if (!profile) {
+    return {
+      greeting: "Добро пожаловать, Охотник!",
+      tips: ["Начни с создания первого квеста в разделе Квесты."],
+      motivation: "Каждый великий охотник начинал с первого шага.",
+      focusArea: "onboarding",
+    };
   }
 
-  if ((profile.consecutive_misses || 0) >= 2) {
-    advice.push({
-      icon: '⚠️',
-      title: 'Штраф приближается!',
-      message: `${profile.consecutive_misses} пропуска подряд. Ещё один и потеряешь ${profile.penalty_xp || 100} XP!`,
-      priority: 'critical',
-    });
+  const level = profile.level;
+  const streak = profile.streak;
+  const totalXp = profile.total_xp;
+  const gold = profile.gold;
+
+  // Streak analysis
+  if (streak === 0) {
+    tips.push(
+      "⚠️ Серия прервана! Выполни хотя бы 1 квест сегодня, чтобы начать новую."
+    );
+    focusArea = "streak-recovery";
+  } else if (streak >= 7) {
+    tips.push(
+      `🔥 Серия ${streak} дней! Невероятно. Не останавливайся.`
+    );
+  } else if (streak >= 3) {
+    tips.push(
+      `🔥 ${streak} дней подряд! До недельной серии осталось ${7 - streak}.`
+    );
   }
 
-  // === WARNING ===
-  if (hour >= 14 && percent < 50 && todayActions > 0) {
-    advice.push({
-      icon: '📊',
-      title: 'Темп ниже нормы',
-      message: `${todayActions}/${target} действий (${percent}%). Ускорься — осталось ${target - todayActions}.`,
-      priority: 'warning',
-    });
+  // Quest completion analysis
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const todayQuests = quests.filter(
+    (q) => q.completed_at && q.completed_at.startsWith(todayStr)
+  );
+  const pendingQuests = quests.filter((q) => !q.completed_at);
+
+  if (todayQuests.length === 0 && pendingQuests.length > 0) {
+    tips.push(
+      `📋 У тебя ${pendingQuests.length} незавершённых квестов. Начни с самого простого.`
+    );
+    if (focusArea === "general") focusArea = "quests";
+  } else if (todayQuests.length >= 5) {
+    tips.push("💪 Уже 5+ квестов сегодня! Ты в ударе.");
   }
 
-  if (dayOfMonth >= 10 && monthPercent < Math.round((dayOfMonth / daysInMonth) * 100) - 10) {
-    advice.push({
-      icon: '💰',
-      title: 'Доход отстаёт от плана',
-      message: `${monthPercent}% месячной цели. Нужно ${formatRub(dailyNeeded)}/день чтобы успеть.`,
-      priority: 'warning',
-      action: 'Добавить доход',
-    });
+  // Difficulty analysis
+  const hardQuests = quests.filter(
+    (q) => q.difficulty === "S" || q.difficulty === "A"
+  );
+  const easyQuests = quests.filter(
+    (q) => q.difficulty === "E" || q.difficulty === "D"
+  );
+
+  if (hardQuests.length === 0 && quests.length > 5) {
+    tips.push(
+      "🎯 Попробуй квесты ранга A или S — больше XP и быстрее рост."
+    );
+  } else if (easyQuests.length === 0 && quests.length > 3) {
+    tips.push(
+      "💡 Добавь пару лёгких квестов (D/E) для поддержания streak в тяжёлые дни."
+    );
   }
 
-  if (stats.total_actions > 100 && stats.level <= 1) {
-    advice.push({
-      icon: '📈',
-      title: 'Пора расти!',
-      message: 'Много действий, но уровень низкий. Делай сложные задачи для большего XP.',
-      priority: 'warning',
-    });
+  // Boss analysis
+  const defeatedBosses = bosses.filter((b) => b.defeated);
+  const activeBosses = bosses.filter((b) => !b.defeated);
+
+  if (activeBosses.length > 0) {
+    tips.push(
+      `💀 Босс "${activeBosses[0].boss_name}" ждёт! Выполняй квесты, чтобы нанести урон.`
+    );
+    if (focusArea === "general") focusArea = "boss";
   }
 
-  // === INFO ===
-  if (dayOfWeek === 1 && hour < 12) {
-    advice.push({
-      icon: '🎯',
-      title: 'Новая неделя — новые цели',
-      message: 'Запланируй ключевые задачи. Недельный босс ждёт!',
-      priority: 'info',
-      action: 'К боссам',
-      actionRoute: '/bosses',
-    });
+  if (defeatedBosses.length > 0 && activeBosses.length === 0) {
+    tips.push(
+      "🏆 Все боссы побеждены! Жди нового испытания."
+    );
   }
 
-  if (dayOfWeek === 5) {
-    advice.push({
-      icon: '⚡',
-      title: 'Пятничный рывок',
-      message: 'Последний рабочий день. Закрой максимум до конца недели!',
-      priority: 'info',
-    });
+  // Gold analysis
+  if (gold >= 500) {
+    tips.push(
+      `💰 У тебя ${gold} золота. Загляни в магазин — можешь себя наградить.`
+    );
   }
 
-  if ((stats.gold || 0) >= 100 && stats.level >= 2) {
-    advice.push({
-      icon: '🪙',
-      title: 'Используй золото',
-      message: `${stats.gold} монет копятся. Купи зелье XP в магазине!`,
-      priority: 'info',
-      action: 'Магазин',
-      actionRoute: '/shop',
-    });
+  // Level-based advice
+  if (level <= 5) {
+    tips.push(
+      "📈 Фокусируйся на ежедневных квестах — стабильность важнее скорости."
+    );
+  } else if (level <= 15) {
+    tips.push(
+      "📊 Проверь аналитику — найди свои лучшие дни и оптимизируй расписание."
+    );
+  } else {
+    tips.push(
+      "👑 Высокий уровень! Ставь амбициозные цели и бери S-ранг квесты."
+    );
   }
 
-  if (hour >= 9 && hour <= 11 && todayActions < 5) {
-    advice.push({
-      icon: '🎯',
-      title: 'Время для фокуса',
-      message: 'Утро — лучшее время для глубокой работы. Включи фокус-режим!',
-      priority: 'info',
-      action: 'Фокус',
-      actionRoute: '/focus',
-    });
+  // Category diversity
+  const categories = new Set(quests.map((q) => q.category));
+  if (categories.size === 1 && quests.length > 5) {
+    tips.push(
+      "🔄 Все квесты в одной категории. Попробуй разнообразить — это ускорит рост."
+    );
   }
 
-  // === POSITIVE ===
-  if (percent >= 100) {
-    advice.push({
-      icon: '🏆',
-      title: 'План выполнен!',
-      message: todayIncome > 0
-        ? `${todayActions} действий + ${formatRub(todayIncome)} дохода. Отличный день!`
-        : `${todayActions} действий сделано. Можешь добавить доход если был.`,
-      priority: 'positive',
-    });
-  }
+  // Limit tips
+  const finalTips = tips.slice(0, 5);
 
-  if (streak >= 7) {
-    advice.push({
-      icon: '🔥',
-      title: `Серия ${streak} дней!`,
-      message: streak >= 30
-        ? 'Месяц без пропусков. Легендарный статус!'
-        : streak >= 14
-        ? 'Две недели подряд. Привычка формируется!'
-        : 'Неделя на серии. Не останавливайся!',
-      priority: 'positive',
-    });
-  }
+  // Motivation quotes
+  const motivations = [
+    "Я — охотник, который превращает хаос в систему.",
+    "Каждый квест — это шаг к вершине.",
+    "Слабые сдаются. Ты — нет.",
+    "Система не даёт выходных. И ты не должен.",
+    "Level up — это не конец. Это новое начало.",
+    "Даже S-ранг охотники начинали с E-квестов.",
+    "Боль временна. Ранг — навсегда.",
+    "Не жди мотивации. Создавай её действиями.",
+  ];
 
-  const xpInfo = getLevelXPInfo(stats.total_xp_earned, stats.total_xp_lost);
-  if (xpInfo.xpForNext <= 50 && xpInfo.xpForNext > 0) {
-    advice.push({
-      icon: '⬆️',
-      title: 'Почти новый уровень!',
-      message: `Осталось ${xpInfo.xpForNext} XP до уровня ${stats.level + 1}!`,
-      priority: 'positive',
-    });
-  }
-
-  // Sort: critical → warning → positive → info
-  const order = { critical: 0, warning: 1, positive: 2, info: 3 };
-  advice.sort((a, b) => order[a.priority] - order[b.priority]);
+  const greeting = getGreeting(profile);
 
   return {
-    greeting: getTimeGreeting(hour, profile.display_name || 'Охотник'),
-    advice: advice.slice(0, 3),
+    greeting,
+    tips: finalTips,
+    motivation:
+      motivations[Math.floor(Math.random() * motivations.length)],
+    focusArea,
   };
 }
 
-function formatRub(n: number): string {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    maximumFractionDigits: 0,
-  }).format(n);
+function getGreeting(profile: ProfileData): string {
+  const hour = new Date().getHours();
+  const levelTitle = getLevelTitle(profile.level);
+
+  if (hour < 6) return `🌙 Ночной рейд, ${levelTitle}?`;
+  if (hour < 12) return `☀️ Доброе утро, ${levelTitle}!`;
+  if (hour < 18) return `⚡ Продолжай, ${levelTitle}!`;
+  return `🌆 Вечерний гринд, ${levelTitle}!`;
 }
 
-function getLevelXPInfo(totalEarned: number, totalLost: number): { xpForNext: number } {
-  const netXP = totalEarned - totalLost;
-  let level = 1;
-  let xpForLevel = 750;
-  let accumulated = 0;
-
-  while (accumulated + xpForLevel <= netXP) {
-    accumulated += xpForLevel;
-    level++;
-    xpForLevel = Math.round(750 * Math.pow(1.15, level - 1));
-  }
-
-  return { xpForNext: xpForLevel - (netXP - accumulated) };
+function getLevelTitle(level: number): string {
+  if (level >= 50) return "Монарх";
+  if (level >= 40) return "Национальный охотник";
+  if (level >= 30) return "S-ранг охотник";
+  if (level >= 20) return "A-ранг охотник";
+  if (level >= 15) return "B-ранг охотник";
+  if (level >= 10) return "C-ранг охотник";
+  if (level >= 5) return "D-ранг охотник";
+  return "E-ранг охотник";
 }

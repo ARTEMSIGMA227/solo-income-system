@@ -13,7 +13,7 @@ import type { User } from '@supabase/supabase-js';
 import type { Stats, Profile, CharacterConfig } from '@/types/database';
 import StreakBanner from '@/components/streak/StreakBanner';
 import DeathScreen from '@/components/streak/DeathScreen';
-import AdvisorCard from '@/components/advisor/AdvisorCard';
+import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { generateAdvice } from '@/lib/advisor';
 
 export default function DashboardPage() {

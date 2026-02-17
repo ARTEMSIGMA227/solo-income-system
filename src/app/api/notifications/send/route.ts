@@ -1,137 +1,176 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import webpush from 'web-push';
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import webpush from "web-push";
 
-// Use service role for cron — bypasses RLS
-function createAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+interface PushSubscriptionRecord {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
 }
 
-export async function GET(request: NextRequest) {
-  // Verify cron secret
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+interface UserStats {
+  streak: number;
+  level: number;
+  display_name: string | null;
+}
+
+function getVapidKeys() {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const email = process.env.VAPID_EMAIL;
+
+  if (!publicKey || !privateKey || !email) {
+    throw new Error("VAPID keys not configured");
   }
 
-  const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
-  const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@solo-income.app';
+  return { publicKey, privateKey, email };
+}
 
-  if (!vapidPublic || !vapidPrivate) {
-    return NextResponse.json({ error: 'VAPID keys not configured' }, { status: 500 });
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    throw new Error("Supabase admin credentials not configured");
   }
 
-  webpush.setVapidDetails(vapidEmail, vapidPublic, vapidPrivate);
+  return createClient(url, serviceKey);
+}
 
-  const supabase = createAdminClient();
+function buildNotificationPayload(stats: UserStats | null): string {
+  const messages = [
+    "⚔️ Охотник, твои квесты ждут! Не дай рангу упасть.",
+    "🔥 Серия активна! Не сломай streak.",
+    "💀 Босс появился в подземелье. Готов сразиться?",
+    "🏆 Проверь магазин — новые награды доступны!",
+    "📊 Зайди в аналитику и оцени свой прогресс.",
+  ];
 
-  // Get all subscriptions with user profiles and today's activity
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
-  const currentHour = new Date().toLocaleString('en-US', {
-    timeZone: 'Europe/Berlin',
-    hour: 'numeric',
-    hour12: false,
+  let title = "Solo Income System";
+  let body = messages[Math.floor(Math.random() * messages.length)];
+
+  if (stats) {
+    if (stats.streak > 0) {
+      body = `🔥 Streak: ${stats.streak} дней! ${body}`;
+    }
+    title = stats.display_name
+      ? `${stats.display_name}, Level ${stats.level}`
+      : `Охотник Level ${stats.level}`;
+  }
+
+  return JSON.stringify({
+    title,
+    body,
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    data: { url: "/dashboard" },
   });
-  const hour = parseInt(currentHour, 10);
+}
 
-  const { data: subscriptions } = await supabase
-    .from('push_subscriptions')
-    .select('*, profiles!inner(display_name, daily_actions_target, notifications_enabled)');
+export async function GET(request: Request) {
+  try {
+    // Verify cron secret
+    const { searchParams } = new URL(request.url);
+    const secret = searchParams.get("secret");
+    const cronSecret = process.env.CRON_SECRET;
 
-  if (!subscriptions || subscriptions.length === 0) {
-    return NextResponse.json({ sent: 0, skipped: 0 });
-  }
-
-  let sent = 0;
-  let skipped = 0;
-  const failed: string[] = [];
-
-  for (const sub of subscriptions) {
-    const profile = (sub as Record<string, unknown>).profiles as {
-      display_name: string;
-      daily_actions_target: number;
-      notifications_enabled: boolean;
-    } | null;
-
-    if (!profile?.notifications_enabled) {
-      skipped++;
-      continue;
-    }
-
-    // Get today's completions for this user
-    const { data: completions } = await supabase
-      .from('completions')
-      .select('count_done')
-      .eq('user_id', sub.user_id)
-      .eq('completion_date', today);
-
-    const todayActions = completions?.reduce(
-      (sum: number, c: { count_done: number }) => sum + c.count_done,
-      0,
-    ) ?? 0;
-
-    const target = profile.daily_actions_target || 30;
-    const percent = Math.round((todayActions / target) * 100);
-
-    // Decide notification message
-    let title = '';
-    let body = '';
-    let shouldSend = false;
-
-    if (hour >= 10 && hour < 12 && todayActions === 0) {
-      // Morning reminder
-      title = '⚔️ Утренняя охота';
-      body = `${profile.display_name}, новый день — новые XP! Начни с первого действия.`;
-      shouldSend = true;
-    } else if (hour >= 18 && hour < 20 && percent < 50) {
-      // Evening warning
-      title = '🔴 День ещё не закрыт!';
-      body = `Только ${percent}% плана. Осталось ${target - todayActions} действий. Не теряй серию!`;
-      shouldSend = true;
-    } else if (hour >= 21 && hour < 22 && percent < 100) {
-      // Critical warning
-      title = '💀 ПОСЛЕДНИЙ ШАНС';
-      body = `${todayActions}/${target} действий. Ещё можно успеть. Не допусти штраф!`;
-      shouldSend = true;
-    }
-
-    if (!shouldSend) {
-      skipped++;
-      continue;
-    }
-
-    const pushPayload = JSON.stringify({
-      title,
-      body,
-      icon: '/icons/icon-192.png',
-      url: '/dashboard',
-    });
-
-    try {
-      await webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.auth_key },
-        },
-        pushPayload,
-      );
-      sent++;
-    } catch (err) {
-      const statusCode = (err as { statusCode?: number }).statusCode;
-      // 410 Gone = subscription expired, clean up
-      if (statusCode === 410 || statusCode === 404) {
-        await supabase
-          .from('push_subscriptions')
-          .delete()
-          .eq('id', sub.id);
+    if (cronSecret && secret !== cronSecret) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader !== `Bearer ${cronSecret}`) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
-      failed.push(sub.endpoint.slice(0, 50));
     }
-  }
 
-  return NextResponse.json({ sent, skipped, failed: failed.length });
+    const vapid = getVapidKeys();
+    const supabase = getSupabaseAdmin();
+
+    webpush.setVapidDetails(
+      `mailto:${vapid.email}`,
+      vapid.publicKey,
+      vapid.privateKey
+    );
+
+    // Get all subscriptions
+    const { data: subscriptions, error: subError } = await supabase
+      .from("push_subscriptions")
+      .select("id, user_id, endpoint, p256dh, auth");
+
+    if (subError) {
+      console.error("Failed to fetch subscriptions:", subError);
+      return NextResponse.json(
+        { error: "Failed to fetch subscriptions" },
+        { status: 500 }
+      );
+    }
+
+    if (!subscriptions || subscriptions.length === 0) {
+      return NextResponse.json({ sent: 0, message: "No subscriptions" });
+    }
+
+    const typedSubs = subscriptions as PushSubscriptionRecord[];
+
+    let sent = 0;
+    let failed = 0;
+    const staleIds: string[] = [];
+
+    for (const sub of typedSubs) {
+      try {
+        // Get user stats for personalized message
+        const { data: stats } = await supabase
+          .from("profiles")
+          .select("streak, level, display_name")
+          .eq("id", sub.user_id)
+          .single();
+
+        const payload = buildNotificationPayload(
+          stats as UserStats | null
+        );
+
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+          },
+          payload
+        );
+
+        sent++;
+      } catch (err: unknown) {
+        failed++;
+        const pushError = err as { statusCode?: number };
+        if (pushError.statusCode === 410 || pushError.statusCode === 404) {
+          staleIds.push(sub.id);
+        }
+        console.error(
+          `Push failed for ${sub.user_id}:`,
+          pushError.statusCode
+        );
+      }
+    }
+
+    // Clean up stale subscriptions
+    if (staleIds.length > 0) {
+      await supabase
+        .from("push_subscriptions")
+        .delete()
+        .in("id", staleIds);
+    }
+
+    return NextResponse.json({
+      sent,
+      failed,
+      cleaned: staleIds.length,
+      total: typedSubs.length,
+    });
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Unknown error";
+    console.error("Push send error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
