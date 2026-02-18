@@ -1,5 +1,3 @@
-// src/lib/export-pdf.ts
-
 interface PdfExportData {
   displayName: string;
   level: number;
@@ -47,6 +45,10 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.getWidth();
 
+  function getLastY(): number {
+    return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  }
+
   // ===== HEADER =====
   doc.setFillColor(124, 58, 237);
   doc.rect(0, 0, pageW, 35, 'F');
@@ -71,7 +73,12 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   doc.text('Level ' + String(data.level), 22, 63);
 
   doc.setTextColor(34, 197, 94);
-  doc.text('Streak: ' + String(data.streakCurrent) + ' days (best: ' + String(data.streakBest) + ')', pageW - 22, 54, { align: 'right' });
+  doc.text(
+    'Streak: ' + String(data.streakCurrent) + ' days (best: ' + String(data.streakBest) + ')',
+    pageW - 22,
+    54,
+    { align: 'right' },
+  );
 
   // ===== STATS TABLE =====
   doc.setTextColor(255, 255, 255);
@@ -112,7 +119,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   });
 
   // ===== QUESTS TABLE =====
-  const afterStats = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
+  const afterStats = getLastY() + 14;
 
   if (data.quests.length > 0) {
     doc.setTextColor(255, 255, 255);
@@ -152,96 +159,52 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   }
 
   // ===== RECENT EVENTS =====
-  const afterQuests = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14;
+  const afterQuests = getLastY() + 14;
 
   if (data.recentEvents.length > 0) {
-    // Check if we need a new page
-    if (afterQuests > 240) {
-      doc.addPage();
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(14);
-      doc.text('Recent Activity (last 30)', 14, 20);
+    const startY = afterQuests > 240 ? (() => { doc.addPage(); return 20; })() : afterQuests;
 
-      autoTable(doc, {
-        startY: 24,
-        head: [['Date', 'Type', 'XP', 'Details']],
-        body: data.recentEvents.map((e) => [
-          e.date,
-          eventTypeLabel(e.type),
-          (e.xp >= 0 ? '+' : '') + String(e.xp),
-          e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
-        ]),
-        theme: 'grid',
-        headStyles: {
-          fillColor: [59, 130, 246],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 10,
-        },
-        bodyStyles: {
-          fillColor: [22, 22, 31],
-          textColor: [226, 232, 240],
-          fontSize: 9,
-        },
-        alternateRowStyles: {
-          fillColor: [18, 18, 26],
-        },
-        styles: {
-          cellPadding: 4,
-          lineColor: [30, 30, 46],
-          lineWidth: 0.5,
-        },
-        columnStyles: {
-          0: { cellWidth: 28 },
-          1: { cellWidth: 22 },
-          2: { cellWidth: 16, halign: 'center' },
-          3: { cellWidth: 'auto' },
-        },
-        margin: { left: 14, right: 14 },
-      });
-    } else {
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(14);
-      doc.text('Recent Activity (last 30)', 14, afterQuests);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.text('Recent Activity (last 30)', 14, startY);
 
-      autoTable(doc, {
-        startY: afterQuests + 4,
-        head: [['Date', 'Type', 'XP', 'Details']],
-        body: data.recentEvents.map((e) => [
-          e.date,
-          eventTypeLabel(e.type),
-          (e.xp >= 0 ? '+' : '') + String(e.xp),
-          e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
-        ]),
-        theme: 'grid',
-        headStyles: {
-          fillColor: [59, 130, 246],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 10,
-        },
-        bodyStyles: {
-          fillColor: [22, 22, 31],
-          textColor: [226, 232, 240],
-          fontSize: 9,
-        },
-        alternateRowStyles: {
-          fillColor: [18, 18, 26],
-        },
-        styles: {
-          cellPadding: 4,
-          lineColor: [30, 30, 46],
-          lineWidth: 0.5,
-        },
-        columnStyles: {
-          0: { cellWidth: 28 },
-          1: { cellWidth: 22 },
-          2: { cellWidth: 16, halign: 'center' },
-          3: { cellWidth: 'auto' },
-        },
-        margin: { left: 14, right: 14 },
-      });
-    }
+    autoTable(doc, {
+      startY: startY + 4,
+      head: [['Date', 'Type', 'XP', 'Details']],
+      body: data.recentEvents.map((e) => [
+        e.date,
+        eventTypeLabel(e.type),
+        (e.xp >= 0 ? '+' : '') + String(e.xp),
+        e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
+      ]),
+      theme: 'grid',
+      headStyles: {
+        fillColor: [59, 130, 246],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 10,
+      },
+      bodyStyles: {
+        fillColor: [22, 22, 31],
+        textColor: [226, 232, 240],
+        fontSize: 9,
+      },
+      alternateRowStyles: {
+        fillColor: [18, 18, 26],
+      },
+      styles: {
+        cellPadding: 4,
+        lineColor: [30, 30, 46],
+        lineWidth: 0.5,
+      },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 16, halign: 'center' },
+        3: { cellWidth: 'auto' },
+      },
+      margin: { left: 14, right: 14 },
+    });
   }
 
   // ===== FOOTER ON ALL PAGES =====
