@@ -35,6 +35,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // API routes — just pass through (auth handled in route handlers)
+  if (pathname.startsWith('/api/')) {
+    return supabaseResponse;
+  }
+
   const protectedPaths = [
     '/dashboard',
     '/quests',
@@ -75,6 +80,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons/|manifest.json|sw.js|offline.html|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons/|manifest.json|sw.js|offline.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
