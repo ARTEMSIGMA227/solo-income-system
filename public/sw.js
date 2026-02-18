@@ -1,62 +1,20 @@
-self.addEventListener("push", function (event) {
-  let data = {
-    title: "Solo Income System",
-    body: "У тебя есть незавершённые квесты!",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    data: { url: "/dashboard" },
-  };
+self.addEventListener('push', function (event) {
+  if (!event.data) return;
 
-  try {
-    if (event.data) {
-      data = Object.assign(data, event.data.json());
-    }
-  } catch (e) {
-    console.error("Push data parse error:", e);
-  }
+  const data = event.data.json();
 
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon,
-      badge: data.badge,
-      data: data.data,
-      vibrate: [200, 100, 200],
-      actions: [
-        { action: "open", title: "Открыть" },
-        { action: "dismiss", title: "Закрыть" },
-      ],
+    self.registration.showNotification(data.title || 'Solo Income', {
+      body: data.body || '',
+      icon: data.icon || '/icon-192x192.png',
+      badge: data.badge || '/badge-72x72.png',
+      data: { url: data.url || '/' },
     })
   );
 });
 
-self.addEventListener("notificationclick", function (event) {
+self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-
-  if (event.action === "dismiss") return;
-
-  const urlToOpen = event.notification.data?.url || "/dashboard";
-
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then(function (clientList) {
-        for (const client of clientList) {
-          if (client.url.includes(urlToOpen) && "focus" in client) {
-            return client.focus();
-          }
-        }
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(urlToOpen);
-        }
-      })
-  );
-});
-
-self.addEventListener("install", function () {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", function (event) {
-  event.waitUntil(self.clients.claim());
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(clients.openWindow(url));
 });

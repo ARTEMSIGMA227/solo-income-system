@@ -1,8 +1,14 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import webpush from "web-push";
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import webpush from 'web-push';
 
-interface PushSubscriptionRecord {
+webpush.setVapidDetails(
+  'mailto:' + (process.env.VAPID_EMAIL ?? 'admin@solo-income.app'),
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
+);
+
+interface PushSubscriptionRow {
   id: string;
   user_id: string;
   endpoint: string;
@@ -10,102 +16,82 @@ interface PushSubscriptionRecord {
   auth_key: string;
 }
 
-export async function GET(request: Request) {
+interface SendBody {
+  title: string;
+  body: string;
+  userId?: string;
+}
+
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const secret = searchParams.get("secret");
-    const cronSecret = process.env.CRON_SECRET;
+    const { title, body: messageBody, userId } = (await request.json()) as SendBody;
 
-    if (cronSecret && secret !== cronSecret) {
-      const authHeader = request.headers.get("authorization");
-      if (authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    if (!title || !messageBody) {
+      return NextResponse.json({ error: 'title and body required' }, { status: 400 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
-    const vapidEmail = process.env.VAPID_EMAIL;
+    const supabase = await createClient();
 
-    if (!supabaseUrl || !serviceKey || !vapidPublic || !vapidPrivate || !vapidEmail) {
-      return NextResponse.json({ error: "Missing env vars" }, { status: 500 });
+    let query = supabase.from('push_subscriptions').select('*');
+    if (userId) {
+      query = query.eq('user_id', userId);
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey);
+    const { data: subscriptions, error: dbError } = await query;
 
-    webpush.setVapidDetails(
-      vapidEmail.startsWith("mailto:") ? vapidEmail : `mailto:${vapidEmail}`,
-      vapidPublic,
-      vapidPrivate
-    );
-
-    const { data: subscriptions, error: subError } = await supabase
-      .from("push_subscriptions")
-      .select("id, user_id, endpoint, p256dh, auth_key");
-
-    if (subError) {
-      console.error("Failed to fetch subscriptions:", subError);
-      return NextResponse.json({ error: subError.message }, { status: 500 });
+    if (dbError) {
+      return NextResponse.json({ error: dbError.message }, { status: 500 });
     }
 
     if (!subscriptions || subscriptions.length === 0) {
-      return NextResponse.json({ sent: 0, message: "No subscriptions" });
+      return NextResponse.json({ sent: 0, message: 'No subscriptions' });
     }
 
-    const typedSubs = subscriptions as PushSubscriptionRecord[];
+    const payload = JSON.stringify({
+      title,
+      body: messageBody,
+      icon: '/icon-192x192.png',
+      badge: '/badge-72x72.png',
+    });
 
     let sent = 0;
-    let failed = 0;
     const staleIds: string[] = [];
 
-    for (const sub of typedSubs) {
-      try {
-        const payload = JSON.stringify({
-          title: "Solo Income System",
-          body: "⚔️ Охотник, твои квесты ждут! Не дай рангу упасть.",
-          icon: "/icon-192.png",
-          data: { url: "/dashboard" },
-        });
-
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth_key,
+    await Promise.all(
+      (subscriptions as PushSubscriptionRow[]).map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth_key,
+              },
             },
-          },
-          payload
-        );
-
-        sent++;
-      } catch (err: unknown) {
-        failed++;
-        const pushError = err as { statusCode?: number };
-        if (pushError.statusCode === 410 || pushError.statusCode === 404) {
-          staleIds.push(sub.id);
+            payload
+          );
+          sent++;
+        } catch (pushError: unknown) {
+          const statusCode = (pushError as { statusCode?: number }).statusCode;
+          if (statusCode === 410 || statusCode === 404) {
+            staleIds.push(sub.id);
+          }
+          console.error(`Push failed for ${sub.endpoint}:`, pushError);
         }
-      }
-    }
+      })
+    );
 
+    // Удаляем протухшие подписки
     if (staleIds.length > 0) {
       await supabase
-        .from("push_subscriptions")
+        .from('push_subscriptions')
         .delete()
-        .in("id", staleIds);
+        .in('id', staleIds);
     }
 
-    return NextResponse.json({
-      sent,
-      failed,
-      cleaned: staleIds.length,
-      total: typedSubs.length,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Push send error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ sent, total: subscriptions.length, cleaned: staleIds.length });
+  } catch (err) {
+    console.error('Send error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
