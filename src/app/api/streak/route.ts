@@ -1,73 +1,90 @@
+// src/app/api/streak/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { calculateStreak } from "@/lib/streak";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-// GET — получить текущую серию
 export async function GET() {
-  const supabase = await createClient();
+  const supabase = await createServerSupabaseClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("daily_checkins")
-    .select("check_date")
-    .eq("user_id", user.id)
-    .order("check_date", { ascending: false })
-    .limit(400);
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("streak_current, streak_best, consecutive_misses")
+    .eq("id", user.id)
+    .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !profile) {
+    return NextResponse.json(
+      { error: "Profile not found", details: error },
+      { status: 404 },
+    );
   }
 
-  const dates = (data ?? []).map(
-    (r: { check_date: string }) => r.check_date,
-  );
-  const result = calculateStreak(dates);
-
-  return NextResponse.json(result);
+  return NextResponse.json(profile);
 }
 
-// POST — отметить сегодняшний день
 export async function POST() {
-  const supabase = await createClient();
+  const supabase = await createServerSupabaseClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Check if already checked in today
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
-  const { error } = await supabase
-    .from("daily_checkins")
-    .upsert(
-      { user_id: user.id, check_date: today },
-      { onConflict: "user_id,check_date" },
-    );
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // вернуть обновлённую серию
-  const { data } = await supabase
-    .from("daily_checkins")
-    .select("check_date")
+  const { data: existing } = await supabase
+    .from("xp_events")
+    .select("id")
     .eq("user_id", user.id)
-    .order("check_date", { ascending: false })
-    .limit(400);
+    .eq("event_type", "streak_checkin")
+    .gte("created_at", todayStart.toISOString())
+    .limit(1);
 
-  const dates = (data ?? []).map(
-    (r: { check_date: string }) => r.check_date,
-  );
-  const result = calculateStreak(dates);
+  if (existing && existing.length > 0) {
+    return NextResponse.json({ message: "Already checked in today" });
+  }
 
-  return NextResponse.json(result);
+  // Get current profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("streak_current, streak_best")
+    .eq("id", user.id)
+    .single();
+
+  const currentStreak = (profile?.streak_current ?? 0) + 1;
+  const bestStreak = Math.max(currentStreak, profile?.streak_best ?? 0);
+
+  // Update profile
+  await supabase
+    .from("profiles")
+    .update({
+      streak_current: currentStreak,
+      streak_best: bestStreak,
+      consecutive_misses: 0,
+    })
+    .eq("id", user.id);
+
+  // Mark checkin
+  await supabase.from("xp_events").insert({
+    user_id: user.id,
+    event_type: "streak_checkin",
+    xp_amount: 0,
+  });
+
+  return NextResponse.json({
+    streak_current: currentStreak,
+    streak_best: bestStreak,
+  });
 }
