@@ -37,7 +37,11 @@ export default function SettingsPage() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth'); return; }
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
       if (p) {
         setProfile(p);
         setDisplayName(p.display_name);
@@ -53,11 +57,28 @@ export default function SettingsPage() {
     load();
   }, [router]);
 
+  // Check push support + auto-subscribe this device
   useEffect(() => {
     const supported = isPushSupported();
     setPushSupported(supported);
     if (!supported) return;
-    getCurrentSubscription().then((sub) => setPushEnabled(!!sub));
+
+    async function checkAndSubscribe() {
+      const existing = await getCurrentSubscription();
+      if (existing) {
+        setPushEnabled(true);
+        return;
+      }
+
+      // Auto-subscribe if permission already granted
+      const permission = getPermissionState();
+      if (permission === 'granted') {
+        const ok = await subscribeToPush();
+        setPushEnabled(ok);
+      }
+    }
+
+    checkAndSubscribe();
   }, []);
 
   const handlePushToggle = useCallback(async () => {
@@ -65,19 +86,19 @@ export default function SettingsPage() {
     try {
       if (pushEnabled) {
         const ok = await unsubscribeFromPush();
-        if (ok) { setPushEnabled(false); toast.success('Уведомления отключены'); }
-        else { toast.error('Не удалось отключить'); }
+        if (ok) { setPushEnabled(false); toast.success('Uvedomleniya otklyucheny'); }
+        else { toast.error('Ne udalos otklyuchit'); }
       } else {
         if (getPermissionState() === 'denied') {
-          toast.error('Уведомления заблокированы в браузере');
+          toast.error('Uvedomleniya zablokirovany v brauzere');
           setPushLoading(false);
           return;
         }
         const ok = await subscribeToPush();
-        if (ok) { setPushEnabled(true); toast.success('Уведомления включены!'); }
-        else { toast.error('Не удалось подписаться'); }
+        if (ok) { setPushEnabled(true); toast.success('Uvedomleniya vklyucheny!'); }
+        else { toast.error('Ne udalos podpisatsya'); }
       }
-    } catch { toast.error('Ошибка'); }
+    } catch { toast.error('Oshibka'); }
     setPushLoading(false);
   }, [pushEnabled]);
 
@@ -85,22 +106,28 @@ export default function SettingsPage() {
     setTestLoading(true);
     setTestStatus(null);
     try {
+      // Make sure this device is subscribed before testing
+      if (!pushEnabled) {
+        const ok = await subscribeToPush();
+        if (ok) setPushEnabled(true);
+      }
+
       const res = await fetch('/api/notifications/test', { method: 'POST' });
       const body: Record<string, unknown> = await res.json();
       if (!res.ok) {
-        setTestStatus(`❌ ${(body.message as string) ?? res.statusText}`);
+        setTestStatus('\u274C ' + ((body.error as string) ?? res.statusText));
       } else {
-        setTestStatus(`✅ Отправлено: ${body.sent}, очищено: ${body.cleaned}`);
+        setTestStatus('\u2705 Otpravleno: ' + String(body.sent));
       }
     } catch {
-      setTestStatus('❌ Ошибка сети');
+      setTestStatus('\u274C Oshibka seti');
     }
     setTestLoading(false);
   }
 
   async function handleSave() {
     if (!profile) return;
-    if (!displayName.trim()) { toast.error('Введи имя'); return; }
+    if (!displayName.trim()) { toast.error('Vvedi imya'); return; }
     setSaving(true);
     const supabase = createClient();
     const { error } = await supabase.from('profiles').update({
@@ -114,14 +141,14 @@ export default function SettingsPage() {
       updated_at: new Date().toISOString(),
     }).eq('id', profile.id);
     setSaving(false);
-    if (error) { toast.error('Ошибка сохранения'); return; }
-    toast.success('Настройки сохранены! ⚔️');
+    if (error) { toast.error('Oshibka sohraneniya'); return; }
+    toast.success('Nastroyki sohraneny! \u2694\uFE0F');
   }
 
   async function handleResetStats() {
     if (!profile) return;
-    if (!confirm('⚠️ Сбросить ВСЮ статистику?')) return;
-    if (!confirm('Точно уверен?')) return;
+    if (!confirm('\u26A0\uFE0F Sbrosit VSU statistiku?')) return;
+    if (!confirm('Tochno uveren?')) return;
     const supabase = createClient();
     await supabase.from('stats').update({
       level: 1, current_xp: 0, total_xp_earned: 0,
@@ -133,7 +160,7 @@ export default function SettingsPage() {
     await supabase.from('completions').delete().eq('user_id', profile.id);
     await supabase.from('income_events').delete().eq('user_id', profile.id);
     await supabase.from('daily_summary').delete().eq('user_id', profile.id);
-    toast.success('Статистика сброшена.');
+    toast.success('Statistika sbroshena.');
     router.push('/dashboard');
   }
 
@@ -145,7 +172,7 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
-    if (!confirm('⚠️ УДАЛИТЬ АККАУНТ?')) return;
+    if (!confirm('\u26A0\uFE0F UDALIT AKKAUNT?')) return;
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -158,7 +185,7 @@ export default function SettingsPage() {
     }
     await supabase.from('profiles').delete().eq('id', user.id);
     await supabase.auth.signOut();
-    toast.success('Аккаунт удалён');
+    toast.success('Akkaunt udalen');
     router.push('/auth');
   }
 
@@ -168,7 +195,7 @@ export default function SettingsPage() {
         minHeight: '100vh', display: 'flex', alignItems: 'center',
         justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa',
       }}>
-        ⏳ Загрузка...
+        \u23F3 Zagruzka...
       </div>
     );
   }
@@ -209,86 +236,108 @@ export default function SettingsPage() {
       minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
       padding: '16px', maxWidth: '600px', margin: '0 auto',
     }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>⚙️ Настройки</h1>
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>
+        {'\u2699\uFE0F'} Nastroyki
+      </h1>
 
-      {/* Профиль */}
+      {/* Profile */}
       <div style={cardStyle}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>👤 Профиль</div>
-        <SettingInput label="Имя охотника" value={displayName} onChange={setDisplayName} />
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+          {'\uD83D\uDC64'} Profil
+        </div>
+        <SettingInput label="Imya ohotnika" value={displayName} onChange={setDisplayName} />
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Часовой пояс</label>
+          <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
+            Chasovoy poyas
+          </label>
           <select value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{
             width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
-            border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0', fontSize: '14px', outline: 'none',
+            border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
+            fontSize: '14px', outline: 'none',
           }}>
-            <option value="Europe/Berlin">🇩🇪 Берлин (CET)</option>
-            <option value="Europe/Moscow">🇷🇺 Москва (MSK)</option>
-            <option value="Europe/Kiev">🇺🇦 Киев (EET)</option>
-            <option value="Asia/Dubai">🇦🇪 Дубай (GST)</option>
-            <option value="Asia/Bangkok">🇹🇭 Бангкок (ICT)</option>
-            <option value="America/New_York">🇺🇸 Нью-Йорк (EST)</option>
-            <option value="Asia/Tokyo">🇯🇵 Токио (JST)</option>
+            <option value="Europe/Berlin">{'\uD83C\uDDE9\uD83C\uDDEA'} Berlin (CET)</option>
+            <option value="Europe/Moscow">{'\uD83C\uDDF7\uD83C\uDDFA'} Moskva (MSK)</option>
+            <option value="Europe/Kiev">{'\uD83C\uDDFA\uD83C\uDDE6'} Kiev (EET)</option>
+            <option value="Asia/Dubai">{'\uD83C\uDDE6\uD83C\uDDEA'} Dubai (GST)</option>
+            <option value="Asia/Bangkok">{'\uD83C\uDDF9\uD83C\uDDED'} Bangkok (ICT)</option>
+            <option value="America/New_York">{'\uD83C\uDDFA\uD83C\uDDF8'} New York (EST)</option>
+            <option value="Asia/Tokyo">{'\uD83C\uDDEF\uD83C\uDDF5'} Tokyo (JST)</option>
           </select>
         </div>
       </div>
 
-      {/* Цели */}
+      {/* Goals */}
       <div style={cardStyle}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🎯 Цели</div>
-        <SettingInput label="Целевой доход в месяц" value={monthlyIncomeTarget} onChange={setMonthlyIncomeTarget} type="number" suffix="₽/мес" />
-        <SettingInput label="Целевой доход в день" value={dailyIncomeTarget} onChange={setDailyIncomeTarget} type="number" suffix="₽/день" />
-        <SettingInput label="Целевых действий в день" value={dailyActionsTarget} onChange={setDailyActionsTarget} type="number" suffix="действий" />
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+          {'\uD83C\uDFAF'} Tseli
+        </div>
+        <SettingInput label="Tselevoy dokhod v mesyats" value={monthlyIncomeTarget} onChange={setMonthlyIncomeTarget} type="number" suffix="/mes" />
+        <SettingInput label="Tselevoy dokhod v den" value={dailyIncomeTarget} onChange={setDailyIncomeTarget} type="number" suffix="/den" />
+        <SettingInput label="Tselevykh deystviy v den" value={dailyActionsTarget} onChange={setDailyActionsTarget} type="number" suffix="deystviy" />
       </div>
 
-      {/* Система */}
+      {/* System */}
       <div style={cardStyle}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>⚡ Система</div>
-        <SettingInput label="Штраф за пропуск дня" value={penaltyXp} onChange={setPenaltyXp} type="number" suffix="XP" />
-        <SettingInput label="Фокус-режим" value={focusDuration} onChange={setFocusDuration} type="number" suffix="минут" />
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+          {'\u26A1'} Sistema
+        </div>
+        <SettingInput label="Shtraf za propusk dnya" value={penaltyXp} onChange={setPenaltyXp} type="number" suffix="XP" />
+        <SettingInput label="Fokus-rezhim" value={focusDuration} onChange={setFocusDuration} type="number" suffix="minut" />
       </div>
 
-      {/* Сохранить */}
+      {/* Save */}
       <button onClick={handleSave} disabled={saving} style={{
         width: '100%', padding: '14px', marginBottom: '16px',
         backgroundColor: saving ? '#4c1d95' : '#7c3aed',
         color: '#fff', border: 'none', borderRadius: '10px',
         fontSize: '16px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
       }}>
-        {saving ? '⏳ Сохраняю...' : '✅ Сохранить настройки'}
+        {saving ? '\u23F3 Sohranyayu...' : '\u2705 Sohranit nastroyki'}
       </button>
 
-      {/* Ссылки */}
+      {/* Links */}
       <div style={cardStyle}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>📱 Быстрые ссылки</div>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\uD83D\uDCF1'} Bystrye ssylki
+        </div>
         {[
-          { href: '/analytics', label: '📈 Аналитика и графики' },
-          { href: '/stats', label: '📊 Статы и перки' },
+          { href: '/analytics', label: '\uD83D\uDCC8 Analitika i grafiki' },
+          { href: '/stats', label: '\uD83D\uDCCA Staty i perki' },
         ].map((link) => (
           <button key={link.href} onClick={() => router.push(link.href)} style={{
             width: '100%', padding: '12px', marginBottom: '8px',
             backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-            borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+            borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer',
+            fontSize: '14px', textAlign: 'left',
           }}>{link.label}</button>
         ))}
       </div>
 
-      {/* ═══════════════ PUSH-УВЕДОМЛЕНИЯ ═══════════════ */}
+      {/* Push */}
       <div style={cardStyle}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🔔 Push-уведомления</div>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+          {'\uD83D\uDD14'} Push-uvedomleniya
+        </div>
 
         {!pushSupported && (
-          <div style={{ fontSize: '12px', color: '#f59e0b', padding: '8px 12px', backgroundColor: '#16161f', borderRadius: '8px' }}>
-            Браузер не поддерживает push-уведомления. Попробуй Chrome или Edge.
+          <div style={{
+            fontSize: '12px', color: '#f59e0b', padding: '8px 12px',
+            backgroundColor: '#16161f', borderRadius: '8px',
+          }}>
+            Brauzer ne podderzhivaet push. Poprobuy Chrome ili Edge.
           </div>
         )}
 
         {pushSupported && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: '12px',
+            }}>
               <div>
-                <div style={{ fontSize: '14px' }}>Напоминания о плане</div>
+                <div style={{ fontSize: '14px' }}>Napominaniya o plane</div>
                 <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                  Утром, вечером и перед дедлайном
+                  Utrom, vecherom i pered dedlaynom
                 </div>
               </div>
               <button onClick={handlePushToggle} disabled={pushLoading} style={{
@@ -298,7 +347,7 @@ export default function SettingsPage() {
                 cursor: pushLoading ? 'not-allowed' : 'pointer',
                 fontSize: '13px', fontWeight: 600, transition: 'all 0.2s ease',
               }}>
-                {pushLoading ? '...' : pushEnabled ? '✓ Вкл' : 'Выкл'}
+                {pushLoading ? '...' : pushEnabled ? '\u2714 Vkl' : 'Vykl'}
               </button>
             </div>
 
@@ -307,9 +356,9 @@ export default function SettingsPage() {
                 fontSize: '11px', color: '#475569', padding: '8px 12px',
                 backgroundColor: '#16161f', borderRadius: '8px', marginBottom: '12px',
               }}>
-                📌 10:00 — утренняя мотивация<br />
-                📌 18:00 — предупреждение если &lt;50%<br />
-                📌 21:00 — последний шанс закрыть день
+                {'\uD83D\uDD53'} 10:00 — utrennyaya motivatsiya<br />
+                {'\uD83D\uDD53'} 18:00 — preduprezhdenie<br />
+                {'\uD83D\uDD53'} 21:00 — posledniy shans zakryt den
               </div>
             )}
 
@@ -318,13 +367,13 @@ export default function SettingsPage() {
                 fontSize: '11px', color: '#ef4444', padding: '8px 12px',
                 backgroundColor: '#1a0f0f', borderRadius: '8px', marginBottom: '12px',
               }}>
-                Уведомления заблокированы в браузере. Разблокируй в настройках сайта.
+                Uvedomleniya zablokirovany v brauzere. Razblokiruy v nastroyakh sayta.
               </div>
             )}
           </>
         )}
 
-        {/* ★ КНОПКА ТЕСТОВОГО PUSH — ВСЕГДА ВИДНА ★ */}
+        {/* Test push button — always visible */}
         <button
           onClick={handleTestPush}
           disabled={testLoading}
@@ -335,7 +384,7 @@ export default function SettingsPage() {
             opacity: testLoading ? 0.6 : 1, transition: 'all 0.2s ease',
           }}
         >
-          {testLoading ? '⏳ Отправляю...' : '🔔 Отправить тестовое уведомление'}
+          {testLoading ? '\u23F3 Otpravlyayu...' : '\uD83D\uDD14 Otpravit testovoe uvedomlenie'}
         </button>
         {testStatus && (
           <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
@@ -344,27 +393,30 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Опасная зона */}
+      {/* Danger zone */}
       <div style={{
         backgroundColor: '#12121a', border: '1px solid #ef444430',
         borderRadius: '12px', padding: '20px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px', color: '#ef4444' }}>⚠️ Опасная зона</div>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px', color: '#ef4444' }}>
+          {'\u26A0\uFE0F'} Opasnaya zona
+        </div>
         {[
-          { fn: handleLogout, label: '🚪 Выйти из аккаунта', color: '#f59e0b', border: '#1e1e2e', bg: '#16161f' },
-          { fn: handleResetStats, label: '🔄 Сбросить статистику', color: '#ef4444', border: '#ef444420', bg: '#16161f' },
-          { fn: handleDeleteAccount, label: '💀 Удалить аккаунт', color: '#ef4444', border: '#ef444430', bg: '#1a0f0f' },
+          { fn: handleLogout, label: '\uD83D\uDEAA Vyyti iz akkaunta', color: '#f59e0b', border: '#1e1e2e', bg: '#16161f' },
+          { fn: handleResetStats, label: '\uD83D\uDD04 Sbrosit statistiku', color: '#ef4444', border: '#ef444420', bg: '#16161f' },
+          { fn: handleDeleteAccount, label: '\uD83D\uDC80 Udalit akkaunt', color: '#ef4444', border: '#ef444430', bg: '#1a0f0f' },
         ].map((btn) => (
           <button key={btn.label} onClick={btn.fn} style={{
             width: '100%', padding: '12px', marginBottom: '8px',
             backgroundColor: btn.bg, border: `1px solid ${btn.border}`,
-            borderRadius: '8px', color: btn.color, cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+            borderRadius: '8px', color: btn.color, cursor: 'pointer',
+            fontSize: '14px', textAlign: 'left',
           }}>{btn.label}</button>
         ))}
       </div>
 
       <div style={{ textAlign: 'center', color: '#475569', fontSize: '12px', marginBottom: '32px' }}>
-        Solo Income System v1.0 ⚔️
+        Solo Income System v1.0 {'\u2694\uFE0F'}
       </div>
       <div style={{ height: '32px' }} />
     </div>
