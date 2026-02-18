@@ -54,48 +54,43 @@ export default function SettingsPage() {
   }, [router]);
 
   useEffect(() => {
-    setPushSupported(isPushSupported());
-    async function checkPush() {
-      if (!isPushSupported()) return;
-      const sub = await getCurrentSubscription();
-      setPushEnabled(!!sub);
-    }
-    checkPush();
+    const supported = isPushSupported();
+    setPushSupported(supported);
+    if (!supported) return;
+    getCurrentSubscription().then((sub) => setPushEnabled(!!sub));
   }, []);
 
   const handlePushToggle = useCallback(async () => {
     setPushLoading(true);
     try {
       if (pushEnabled) {
-        const success = await unsubscribeFromPush();
-        if (success) { setPushEnabled(false); toast.success('Уведомления отключены'); }
-        else { toast.error('Не удалось отключить уведомления'); }
+        const ok = await unsubscribeFromPush();
+        if (ok) { setPushEnabled(false); toast.success('Уведомления отключены'); }
+        else { toast.error('Не удалось отключить'); }
       } else {
-        const perm = getPermissionState();
-        if (perm === 'denied') {
-          toast.error('Уведомления заблокированы в настройках браузера');
+        if (getPermissionState() === 'denied') {
+          toast.error('Уведомления заблокированы в браузере');
           setPushLoading(false);
           return;
         }
-        const success = await subscribeToPush();
-        if (success) { setPushEnabled(true); toast.success('Уведомления включены!'); }
-        else { toast.error('Не удалось подписаться на уведомления'); }
+        const ok = await subscribeToPush();
+        if (ok) { setPushEnabled(true); toast.success('Уведомления включены!'); }
+        else { toast.error('Не удалось подписаться'); }
       }
-    } catch { toast.error('Ошибка при настройке уведомлений'); }
+    } catch { toast.error('Ошибка'); }
     setPushLoading(false);
   }, [pushEnabled]);
 
-  /* ─── ТЕСТОВЫЙ PUSH ─── */
   async function handleTestPush() {
     setTestLoading(true);
     setTestStatus(null);
     try {
       const res = await fetch('/api/notifications/test', { method: 'POST' });
-      const data: Record<string, unknown> = await res.json();
+      const body: Record<string, unknown> = await res.json();
       if (!res.ok) {
-        setTestStatus(`❌ ${(data.message as string) ?? res.statusText}`);
+        setTestStatus(`❌ ${(body.message as string) ?? res.statusText}`);
       } else {
-        setTestStatus(`✅ Отправлено: ${data.sent}, очищено: ${data.cleaned}`);
+        setTestStatus(`✅ Отправлено: ${body.sent}, очищено: ${body.cleaned}`);
       }
     } catch {
       setTestStatus('❌ Ошибка сети');
@@ -125,10 +120,8 @@ export default function SettingsPage() {
 
   async function handleResetStats() {
     if (!profile) return;
-    const confirmed = confirm('⚠️ Сбросить ВСЮ статистику?');
-    if (!confirmed) return;
-    const doubleConfirm = confirm('Ты точно уверен?');
-    if (!doubleConfirm) return;
+    if (!confirm('⚠️ Сбросить ВСЮ статистику?')) return;
+    if (!confirm('Точно уверен?')) return;
     const supabase = createClient();
     await supabase.from('stats').update({
       level: 1, current_xp: 0, total_xp_earned: 0,
@@ -152,21 +145,17 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
-    const confirmed = confirm('⚠️ УДАЛИТЬ АККАУНТ?');
-    if (!confirmed) return;
+    if (!confirm('⚠️ УДАЛИТЬ АККАУНТ?')) return;
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await supabase.from('character_config').delete().eq('user_id', user.id);
-    await supabase.from('perk_unlocks').delete().eq('user_id', user.id);
-    await supabase.from('xp_events').delete().eq('user_id', user.id);
-    await supabase.from('completions').delete().eq('user_id', user.id);
-    await supabase.from('income_events').delete().eq('user_id', user.id);
-    await supabase.from('daily_summary').delete().eq('user_id', user.id);
-    await supabase.from('bosses').delete().eq('user_id', user.id);
-    await supabase.from('quests').delete().eq('user_id', user.id);
-    await supabase.from('habits').delete().eq('user_id', user.id);
-    await supabase.from('stats').delete().eq('user_id', user.id);
+    const tables = [
+      'character_config', 'perk_unlocks', 'xp_events', 'completions',
+      'income_events', 'daily_summary', 'bosses', 'quests', 'habits', 'stats',
+    ];
+    for (const t of tables) {
+      await supabase.from(t).delete().eq('user_id', user.id);
+    }
     await supabase.from('profiles').delete().eq('id', user.id);
     await supabase.auth.signOut();
     toast.success('Аккаунт удалён');
@@ -204,38 +193,33 @@ export default function SettingsPage() {
               fontSize: '14px', outline: 'none', boxSizing: 'border-box',
             }}
           />
-          {suffix && (
-            <span style={{ fontSize: '13px', color: '#475569', whiteSpace: 'nowrap' }}>{suffix}</span>
-          )}
+          {suffix && <span style={{ fontSize: '13px', color: '#475569', whiteSpace: 'nowrap' }}>{suffix}</span>}
         </div>
       </div>
     );
   }
+
+  const cardStyle = {
+    backgroundColor: '#12121a', border: '1px solid #1e1e2e',
+    borderRadius: '12px', padding: '20px', marginBottom: '16px',
+  };
 
   return (
     <div style={{
       minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
       padding: '16px', maxWidth: '600px', margin: '0 auto',
     }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>
-        ⚙️ Настройки
-      </h1>
+      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '20px' }}>⚙️ Настройки</h1>
 
       {/* Профиль */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '12px', padding: '20px', marginBottom: '16px',
-      }}>
+      <div style={cardStyle}>
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>👤 Профиль</div>
         <SettingInput label="Имя охотника" value={displayName} onChange={setDisplayName} />
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-            Часовой пояс
-          </label>
+          <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Часовой пояс</label>
           <select value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{
             width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
-            border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
-            fontSize: '14px', outline: 'none',
+            border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0', fontSize: '14px', outline: 'none',
           }}>
             <option value="Europe/Berlin">🇩🇪 Берлин (CET)</option>
             <option value="Europe/Moscow">🇷🇺 Москва (MSK)</option>
@@ -249,10 +233,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Цели */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '12px', padding: '20px', marginBottom: '16px',
-      }}>
+      <div style={cardStyle}>
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🎯 Цели</div>
         <SettingInput label="Целевой доход в месяц" value={monthlyIncomeTarget} onChange={setMonthlyIncomeTarget} type="number" suffix="₽/мес" />
         <SettingInput label="Целевой доход в день" value={dailyIncomeTarget} onChange={setDailyIncomeTarget} type="number" suffix="₽/день" />
@@ -260,10 +241,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Система */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '12px', padding: '20px', marginBottom: '16px',
-      }}>
+      <div style={cardStyle}>
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>⚡ Система</div>
         <SettingInput label="Штраф за пропуск дня" value={penaltyXp} onChange={setPenaltyXp} type="number" suffix="XP" />
         <SettingInput label="Фокус-режим" value={focusDuration} onChange={setFocusDuration} type="number" suffix="минут" />
@@ -279,54 +257,52 @@ export default function SettingsPage() {
         {saving ? '⏳ Сохраняю...' : '✅ Сохранить настройки'}
       </button>
 
-      {/* Быстрые ссылки */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-        borderRadius: '12px', padding: '16px', marginBottom: '16px',
-      }}>
+      {/* Ссылки */}
+      <div style={cardStyle}>
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>📱 Быстрые ссылки</div>
-        <button onClick={() => router.push('/analytics')} style={{
-          width: '100%', padding: '12px', marginBottom: '8px',
-          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-          borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
-        }}>📈 Аналитика и графики</button>
-        <button onClick={() => router.push('/stats')} style={{
-          width: '100%', padding: '12px',
-          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-          borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
-        }}>📊 Статы и перки</button>
+        {[
+          { href: '/analytics', label: '📈 Аналитика и графики' },
+          { href: '/stats', label: '📊 Статы и перки' },
+        ].map((link) => (
+          <button key={link.href} onClick={() => router.push(link.href)} style={{
+            width: '100%', padding: '12px', marginBottom: '8px',
+            backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+            borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+          }}>{link.label}</button>
+        ))}
       </div>
 
       {/* ═══════════════ PUSH-УВЕДОМЛЕНИЯ ═══════════════ */}
-      {pushSupported && (
-        <div style={{
-          backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-          borderRadius: '12px', padding: '20px', marginBottom: '16px',
-        }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-            🔔 Push-уведомления
-          </div>
+      <div style={cardStyle}>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🔔 Push-уведомления</div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <div>
-              <div style={{ fontSize: '14px' }}>Напоминания о плане</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
-                Утром, вечером и перед дедлайном
+        {!pushSupported && (
+          <div style={{ fontSize: '12px', color: '#f59e0b', padding: '8px 12px', backgroundColor: '#16161f', borderRadius: '8px' }}>
+            Браузер не поддерживает push-уведомления. Попробуй Chrome или Edge.
+          </div>
+        )}
+
+        {pushSupported && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '14px' }}>Напоминания о плане</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                  Утром, вечером и перед дедлайном
+                </div>
               </div>
+              <button onClick={handlePushToggle} disabled={pushLoading} style={{
+                padding: '8px 20px', borderRadius: '20px', border: 'none',
+                backgroundColor: pushEnabled ? '#22c55e' : '#16161f',
+                color: pushEnabled ? '#fff' : '#94a3b8',
+                cursor: pushLoading ? 'not-allowed' : 'pointer',
+                fontSize: '13px', fontWeight: 600, transition: 'all 0.2s ease',
+              }}>
+                {pushLoading ? '...' : pushEnabled ? '✓ Вкл' : 'Выкл'}
+              </button>
             </div>
-            <button onClick={handlePushToggle} disabled={pushLoading} style={{
-              padding: '8px 20px', borderRadius: '20px', border: 'none',
-              backgroundColor: pushEnabled ? '#22c55e' : '#16161f',
-              color: pushEnabled ? '#fff' : '#94a3b8',
-              cursor: pushLoading ? 'not-allowed' : 'pointer',
-              fontSize: '13px', fontWeight: 600, transition: 'all 0.2s ease',
-            }}>
-              {pushLoading ? '...' : pushEnabled ? '✓ Вкл' : 'Выкл'}
-            </button>
-          </div>
 
-          {pushEnabled && (
-            <>
+            {pushEnabled && (
               <div style={{
                 fontSize: '11px', color: '#475569', padding: '8px 12px',
                 backgroundColor: '#16161f', borderRadius: '8px', marginBottom: '12px',
@@ -335,62 +311,56 @@ export default function SettingsPage() {
                 📌 18:00 — предупреждение если &lt;50%<br />
                 📌 21:00 — последний шанс закрыть день
               </div>
+            )}
 
-              {/* ★ КНОПКА ТЕСТОВОГО PUSH ★ */}
-              <button
-                onClick={handleTestPush}
-                disabled={testLoading}
-                style={{
-                  width: '100%', padding: '10px', borderRadius: '8px', border: 'none',
-                  backgroundColor: '#3b82f6', color: '#fff', fontSize: '13px',
-                  fontWeight: 600, cursor: testLoading ? 'not-allowed' : 'pointer',
-                  opacity: testLoading ? 0.6 : 1, transition: 'all 0.2s ease',
-                }}
-              >
-                {testLoading ? '⏳ Отправляю...' : '🔔 Отправить тестовое уведомление'}
-              </button>
-              {testStatus && (
-                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
-                  {testStatus}
-                </div>
-              )}
-            </>
-          )}
+            {!pushEnabled && getPermissionState() === 'denied' && (
+              <div style={{
+                fontSize: '11px', color: '#ef4444', padding: '8px 12px',
+                backgroundColor: '#1a0f0f', borderRadius: '8px', marginBottom: '12px',
+              }}>
+                Уведомления заблокированы в браузере. Разблокируй в настройках сайта.
+              </div>
+            )}
+          </>
+        )}
 
-          {!pushEnabled && getPermissionState() === 'denied' && (
-            <div style={{
-              fontSize: '11px', color: '#ef4444', padding: '8px 12px',
-              backgroundColor: '#1a0f0f', borderRadius: '8px',
-            }}>
-              Уведомления заблокированы в браузере. Разблокируй в настройках сайта.
-            </div>
-          )}
-        </div>
-      )}
+        {/* ★ КНОПКА ТЕСТОВОГО PUSH — ВСЕГДА ВИДНА ★ */}
+        <button
+          onClick={handleTestPush}
+          disabled={testLoading}
+          style={{
+            width: '100%', padding: '10px', borderRadius: '8px', border: 'none',
+            backgroundColor: '#3b82f6', color: '#fff', fontSize: '13px',
+            fontWeight: 600, cursor: testLoading ? 'not-allowed' : 'pointer',
+            opacity: testLoading ? 0.6 : 1, transition: 'all 0.2s ease',
+          }}
+        >
+          {testLoading ? '⏳ Отправляю...' : '🔔 Отправить тестовое уведомление'}
+        </button>
+        {testStatus && (
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
+            {testStatus}
+          </div>
+        )}
+      </div>
 
       {/* Опасная зона */}
       <div style={{
         backgroundColor: '#12121a', border: '1px solid #ef444430',
         borderRadius: '12px', padding: '20px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px', color: '#ef4444' }}>
-          ⚠️ Опасная зона
-        </div>
-        <button onClick={handleLogout} style={{
-          width: '100%', padding: '12px', marginBottom: '8px',
-          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-          borderRadius: '8px', color: '#f59e0b', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
-        }}>🚪 Выйти из аккаунта</button>
-        <button onClick={handleResetStats} style={{
-          width: '100%', padding: '12px', marginBottom: '8px',
-          backgroundColor: '#16161f', border: '1px solid #ef444420',
-          borderRadius: '8px', color: '#ef4444', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
-        }}>🔄 Сбросить статистику</button>
-        <button onClick={handleDeleteAccount} style={{
-          width: '100%', padding: '12px',
-          backgroundColor: '#1a0f0f', border: '1px solid #ef444430',
-          borderRadius: '8px', color: '#ef4444', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
-        }}>💀 Удалить аккаунт</button>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px', color: '#ef4444' }}>⚠️ Опасная зона</div>
+        {[
+          { fn: handleLogout, label: '🚪 Выйти из аккаунта', color: '#f59e0b', border: '#1e1e2e', bg: '#16161f' },
+          { fn: handleResetStats, label: '🔄 Сбросить статистику', color: '#ef4444', border: '#ef444420', bg: '#16161f' },
+          { fn: handleDeleteAccount, label: '💀 Удалить аккаунт', color: '#ef4444', border: '#ef444430', bg: '#1a0f0f' },
+        ].map((btn) => (
+          <button key={btn.label} onClick={btn.fn} style={{
+            width: '100%', padding: '12px', marginBottom: '8px',
+            backgroundColor: btn.bg, border: `1px solid ${btn.border}`,
+            borderRadius: '8px', color: btn.color, cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+          }}>{btn.label}</button>
+        ))}
       </div>
 
       <div style={{ textAlign: 'center', color: '#475569', fontSize: '12px', marginBottom: '32px' }}>
