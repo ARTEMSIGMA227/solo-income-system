@@ -32,25 +32,21 @@ export function usePushNotifications(): UsePushReturn {
     setError(null);
 
     try {
-      // 1. Регистрация SW
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
 
-      // 2. Разрешение на уведомления
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         throw new Error('Notification permission denied');
       }
 
-      // 3. Подписка на push
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
       });
 
       const subJson = subscription.toJSON();
 
-      // 4. Отправка на сервер
       const response = await fetch('/api/notifications/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
