@@ -3,10 +3,45 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import { exportAnalyticsPdf } from '@/lib/export-pdf';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, AreaChart, Area, CartesianGrid, PieChart, Pie, Cell,
 } from 'recharts';
+
+const L = {
+  title: '\u0410\u043d\u0430\u043b\u0438\u0442\u0438\u043a\u0430',
+  loading: '\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0430\u043d\u0430\u043b\u0438\u0442\u0438\u043a\u0438...',
+  thisMonth: '\u042d\u0442\u043e\u0442 \u043c\u0435\u0441\u044f\u0446',
+  income: '\u0414\u043e\u0445\u043e\u0434',
+  actions: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044f',
+  avgActions: '\u0421\u0440. \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439/\u0434\u0435\u043d\u044c',
+  avgIncome: '\u0421\u0440. \u0434\u043e\u0445\u043e\u0434/\u0434\u0435\u043d\u044c',
+  weekActions: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0437\u0430 \u043d\u0435\u0434\u0435\u043b\u044e',
+  weekXP: 'XP \u0437\u0430 \u043d\u0435\u0434\u0435\u043b\u044e',
+  weekIncome: '\u0414\u043e\u0445\u043e\u0434 \u0437\u0430 \u043d\u0435\u0434\u0435\u043b\u044e',
+  bySource: '\u0414\u043e\u0445\u043e\u0434 \u043f\u043e \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0430\u043c',
+  analysis: '\u0410\u043d\u0430\u043b\u0438\u0437 \u0438 \u0440\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0430\u0446\u0438\u0438',
+  exportPdf: '\u0421\u043a\u0430\u0447\u0430\u0442\u044c PDF-\u043e\u0442\u0447\u0451\u0442',
+  exporting: '\u0413\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u044f...',
+  sale: '\u041f\u0440\u043e\u0434\u0430\u0436\u0438',
+  contract: '\u041a\u043e\u043d\u0442\u0440\u0430\u043a\u0442\u044b',
+  freelance: '\u0424\u0440\u0438\u043b\u0430\u043d\u0441',
+  bonus: '\u0411\u043e\u043d\u0443\u0441\u044b',
+  other: '\u0414\u0440\u0443\u0433\u043e\u0435',
+  lowActions: '\u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0447\u0438\u0441\u043b\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u043d\u0438\u0436\u0435 30/\u0434\u0435\u043d\u044c. \u0423\u0432\u0435\u043b\u0438\u0447\u044c \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u044c.',
+  goodPace: '\u0425\u043e\u0440\u043e\u0448\u0438\u0439 \u0442\u0435\u043c\u043f \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439! \u0414\u0435\u0440\u0436\u0438 \u043f\u043b\u0430\u043d\u043a\u0443.',
+  lowIncome: '\u0414\u043e\u0445\u043e\u0434 \u043d\u0438\u0436\u0435 50% \u043e\u0442 \u0446\u0435\u043b\u0438. \u041d\u0443\u0436\u0435\u043d \u0440\u044b\u0432\u043e\u043a!',
+  goalReached: '\u0426\u0435\u043b\u044c \u043c\u0435\u0441\u044f\u0446\u0430 \u0434\u043e\u0441\u0442\u0438\u0433\u043d\u0443\u0442\u0430!',
+  zeroDays: '\u0434\u043d\u0435\u0439 \u0431\u0435\u0437 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u0437\u0430 \u043d\u0435\u0434\u0435\u043b\u044e.',
+  noConversion: '\u041c\u043d\u043e\u0433\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439, \u043d\u043e \u043d\u0435\u0442 \u0434\u043e\u0445\u043e\u0434\u0430. \u041f\u0440\u043e\u0432\u0435\u0440\u044c \u043a\u043e\u043d\u0432\u0435\u0440\u0441\u0438\u044e.',
+  upTrend: '\u0412\u043e\u0441\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u0442\u0440\u0435\u043d\u0434! \u041d\u0430\u0431\u0438\u0440\u0430\u0435\u0448\u044c \u043e\u0431\u043e\u0440\u043e\u0442\u044b.',
+  downTrend: '\u041d\u0438\u0441\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u0442\u0440\u0435\u043d\u0434. \u041d\u0435 \u0441\u0431\u0430\u0432\u043b\u044f\u0439 \u0442\u0435\u043c\u043f.',
+  forecast: '\u041f\u0440\u043e\u0433\u043d\u043e\u0437',
+  onTrack: '\u041a \u043a\u043e\u043d\u0446\u0443 \u043c\u0435\u0441\u044f\u0446\u0430. \u041d\u0430 \u043f\u0443\u0442\u0438 \u043a \u0446\u0435\u043b\u0438!',
+  needSpeed: '\u041d\u0443\u0436\u043d\u043e \u0443\u0441\u043a\u043e\u0440\u0438\u0442\u044c\u0441\u044f \u0434\u043e',
+  perDay: '/\u0434\u0435\u043d\u044c.',
+};
 
 interface DayData {
   date: string;
@@ -25,6 +60,7 @@ export default function AnalyticsPage() {
   const [avgDailyIncome, setAvgDailyIncome] = useState(0);
   const [tips, setTips] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [incomeBySource, setIncomeBySource] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
@@ -34,7 +70,6 @@ export default function AnalyticsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Последние 7 дней
       const days: DayData[] = [];
       const now = new Date();
 
@@ -49,7 +84,6 @@ export default function AnalyticsPage() {
       const weekStart = days[0].date;
       const weekEnd = days[6].date;
 
-      // Completions за неделю
       const { data: completions } = await supabase
         .from('completions')
         .select('completion_date, count_done')
@@ -64,7 +98,6 @@ export default function AnalyticsPage() {
         }
       }
 
-      // XP за неделю
       const { data: xpEvents } = await supabase
         .from('xp_events')
         .select('event_date, xp_amount')
@@ -79,7 +112,6 @@ export default function AnalyticsPage() {
         }
       }
 
-      // Income за неделю
       const { data: incomeEvents } = await supabase
         .from('income_events')
         .select('event_date, amount, source')
@@ -96,7 +128,6 @@ export default function AnalyticsPage() {
 
       setWeekData(days);
 
-      // Месячные данные
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
       const { data: monthCompletions } = await supabase
@@ -114,7 +145,6 @@ export default function AnalyticsPage() {
       const mIncome = monthIncomeEvents?.reduce((s, i) => s + Number(i.amount), 0) || 0;
       setMonthIncome(mIncome);
 
-      // Доход по источникам
       const sourceMap: Record<string, number> = {};
       if (monthIncomeEvents) {
         for (const ie of monthIncomeEvents) {
@@ -123,8 +153,8 @@ export default function AnalyticsPage() {
         }
       }
       const sourceLabels: Record<string, string> = {
-        sale: 'Продажи', contract: 'Контракты', freelance: 'Фриланс',
-        bonus: 'Бонусы', other: 'Другое',
+        sale: L.sale, contract: L.contract, freelance: L.freelance,
+        bonus: L.bonus, other: L.other,
       };
       setIncomeBySource(
         Object.entries(sourceMap).map(([key, val]) => ({
@@ -133,54 +163,51 @@ export default function AnalyticsPage() {
         }))
       );
 
-      // Средние
       const daysInMonth = now.getDate();
       setAvgDailyActions(Math.round(mActions / daysInMonth));
       setAvgDailyIncome(Math.round(mIncome / daysInMonth));
 
-      // Rule-based анализ
       const newTips: string[] = [];
       const totalWeekActions = days.reduce((s, d) => s + d.actions, 0);
       const avgWeekActions = Math.round(totalWeekActions / 7);
 
       if (avgWeekActions < 30) {
-        newTips.push('⚠️ Среднее число действий ниже 30/день. Увеличь активность.');
+        newTips.push('\u26a0\ufe0f ' + L.lowActions);
       } else {
-        newTips.push('✅ Хороший темп действий! Держи планку.');
+        newTips.push('\u2705 ' + L.goodPace);
       }
 
       if (mIncome < 75000 && daysInMonth > 15) {
-        newTips.push('🔴 Доход ниже 50% от цели. Нужен рывок!');
+        newTips.push('\ud83d\udd34 ' + L.lowIncome);
       } else if (mIncome >= 150000) {
-        newTips.push('🏆 Цель месяца достигнута!');
+        newTips.push('\ud83c\udfc6 ' + L.goalReached);
       }
 
       const zeroDays = days.filter(d => d.actions === 0).length;
       if (zeroDays >= 2) {
-        newTips.push(`💀 ${zeroDays} дней без действий за неделю.`);
+        newTips.push('\ud83d\udc80 ' + zeroDays + ' ' + L.zeroDays);
       }
 
       const weekIncome = days.reduce((s, d) => s + d.income, 0);
       if (weekIncome === 0 && totalWeekActions > 50) {
-        newTips.push('🤔 Много действий, но нет дохода. Проверь конверсию.');
+        newTips.push('\ud83e\udd14 ' + L.noConversion);
       }
 
       const trend = days[6].actions - days[0].actions;
       if (trend > 10) {
-        newTips.push('📈 Восходящий тренд! Набираешь обороты.');
+        newTips.push('\ud83d\udcc8 ' + L.upTrend);
       } else if (trend < -10) {
-        newTips.push('📉 Нисходящий тренд. Не сбавляй темп.');
+        newTips.push('\ud83d\udcc9 ' + L.downTrend);
       }
 
-      // Прогноз дохода
       if (mIncome > 0 && daysInMonth > 3) {
         const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - daysInMonth;
         const dailyRate = mIncome / daysInMonth;
         const forecast = mIncome + dailyRate * daysLeft;
         if (forecast >= 150000) {
-          newTips.push(`📊 Прогноз: ${formatCurrency(Math.round(forecast))} к концу месяца. На пути к цели!`);
+          newTips.push('\ud83d\udcca ' + L.forecast + ': ' + formatCurrency(Math.round(forecast)) + ' ' + L.onTrack);
         } else {
-          newTips.push(`📊 Прогноз: ${formatCurrency(Math.round(forecast))}. Нужно ускориться до ${formatCurrency(Math.round((150000 - mIncome) / Math.max(daysLeft, 1)))}/день.`);
+          newTips.push('\ud83d\udcca ' + L.forecast + ': ' + formatCurrency(Math.round(forecast)) + '. ' + L.needSpeed + ' ' + formatCurrency(Math.round((150000 - mIncome) / Math.max(daysLeft, 1))) + L.perDay);
         }
       }
 
@@ -190,10 +217,81 @@ export default function AnalyticsPage() {
     load();
   }, []);
 
+  async function handleExportPdf() {
+    setPdfLoading(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, streak_current, streak_best')
+        .eq('id', user.id)
+        .single();
+
+      const { data: stats } = await supabase
+        .from('stats')
+        .select('level, total_xp_earned, total_income, total_actions, total_sales, total_clients')
+        .eq('user_id', user.id)
+        .single();
+
+      const { data: quests } = await supabase
+        .from('quests')
+        .select('title, xp_reward')
+        .eq('user_id', user.id);
+
+      const { data: questCompletions } = await supabase
+        .from('completions')
+        .select('quest_id, count_done')
+        .eq('user_id', user.id);
+
+      const completionMap = new Map<string, number>();
+      if (questCompletions) {
+        for (const c of questCompletions) {
+          completionMap.set(c.quest_id, (completionMap.get(c.quest_id) || 0) + c.count_done);
+        }
+      }
+
+      const { data: recentXp } = await supabase
+        .from('xp_events')
+        .select('event_date, event_type, xp_amount, description')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      exportAnalyticsPdf({
+        displayName: profile?.display_name || 'Hunter',
+        level: stats?.level || 1,
+        totalXp: stats?.total_xp_earned || 0,
+        totalIncome: stats?.total_income || 0,
+        totalActions: stats?.total_actions || 0,
+        totalSales: stats?.total_sales || 0,
+        totalClients: stats?.total_clients || 0,
+        streakCurrent: profile?.streak_current || 0,
+        streakBest: profile?.streak_best || 0,
+        quests: (quests || []).map((q) => ({
+          title: q.title,
+          xp: q.xp_reward,
+          completions: completionMap.get(q.title) || 0,
+        })),
+        recentEvents: (recentXp || []).map((e) => ({
+          date: e.event_date,
+          type: e.event_type,
+          xp: e.xp_amount,
+          description: e.description || '',
+        })),
+      });
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    }
+    setPdfLoading(false);
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa' }}>
-        ⏳ Загрузка аналитики...
+        {'\u23f3'} {L.loading}
       </div>
     );
   }
@@ -208,21 +306,47 @@ export default function AnalyticsPage() {
     fontSize: '12px',
   };
 
+  const cardStyle = {
+    backgroundColor: '#12121a',
+    border: '1px solid #1e1e2e',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '16px',
+  };
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
 
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>📈 Аналитика</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>
+          {'\ud83d\udcc8'} {L.title}
+        </h1>
+        <button
+          onClick={handleExportPdf}
+          disabled={pdfLoading}
+          style={{
+            padding: '8px 16px', borderRadius: '8px', border: 'none',
+            backgroundColor: '#7c3aed', color: '#fff', fontSize: '12px',
+            fontWeight: 600, cursor: pdfLoading ? 'not-allowed' : 'pointer',
+            opacity: pdfLoading ? 0.6 : 1,
+          }}
+        >
+          {pdfLoading ? '\u23f3 ' + L.exporting : '\ud83d\udcc4 ' + L.exportPdf}
+        </button>
+      </div>
 
-      {/* Месячная сводка */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>📅 Этот месяц</div>
+      {/* Monthly summary */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\ud83d\udcc5'} {L.thisMonth}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Доход</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{L.income}</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(monthIncome)}</div>
           </div>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Действия</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{L.actions}</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#3b82f6' }}>{formatNumber(monthActions)}</div>
           </div>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
@@ -232,33 +356,37 @@ export default function AnalyticsPage() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Ср. действий/день</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{L.avgActions}</div>
             <div style={{ fontSize: '16px', fontWeight: 700 }}>{avgDailyActions}</div>
           </div>
           <div style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Ср. доход/день</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{L.avgIncome}</div>
             <div style={{ fontSize: '16px', fontWeight: 700 }}>{formatCurrency(avgDailyIncome)}</div>
           </div>
         </div>
       </div>
 
-      {/* График действий — столбцы */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>📊 Действия за неделю</div>
+      {/* Actions chart */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\ud83d\udcca'} {L.weekActions}
+        </div>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={weekData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
             <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <Tooltip contentStyle={tooltipStyle} />
-            <Bar dataKey="actions" name="Действия" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="actions" name={L.actions} fill="#7c3aed" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* График XP — линия */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>⚡ XP за неделю</div>
+      {/* XP chart */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\u26a1'} {L.weekXP}
+        </div>
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={weekData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -276,24 +404,28 @@ export default function AnalyticsPage() {
         </ResponsiveContainer>
       </div>
 
-      {/* График дохода — линия с точками */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>💰 Доход за неделю</div>
+      {/* Income chart */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\ud83d\udcb0'} {L.weekIncome}
+        </div>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={weekData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
             <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: '#1e1e2e' }} />
             <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(Number(value ?? 0))} />
-            <Line type="monotone" dataKey="income" name="Доход" stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 5 }} activeDot={{ r: 7 }} />
+            <Line type="monotone" dataKey="income" name={L.income} stroke="#22c55e" strokeWidth={3} dot={{ fill: '#22c55e', r: 5 }} activeDot={{ r: 7 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Доход по источникам — круговая */}
+      {/* Pie chart */}
       {incomeBySource.length > 0 && (
-        <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>🎯 Доход по источникам</div>
+        <div style={cardStyle}>
+          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+            {'\ud83c\udfaf'} {L.bySource}
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
@@ -316,9 +448,11 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Анализ и рекомендации */}
-      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>🧠 Анализ и рекомендации</div>
+      {/* Tips */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          {'\ud83e\udde0'} {L.analysis}
+        </div>
         {tips.map((tip, i) => (
           <div key={i} style={{
             padding: '10px 12px', backgroundColor: '#16161f', borderRadius: '8px',
