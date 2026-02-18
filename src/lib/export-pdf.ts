@@ -1,3 +1,6 @@
+// src/lib/export-pdf.ts
+import { ROBOTO_BASE64 } from './roboto-font';
+
 interface PdfExportData {
   displayName: string;
   level: number;
@@ -13,7 +16,7 @@ interface PdfExportData {
 }
 
 function formatDate(): string {
-  return new Date().toLocaleDateString('en-US', {
+  return new Date().toLocaleDateString('ru-RU', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -21,19 +24,19 @@ function formatDate(): string {
 }
 
 function formatMoney(n: number): string {
-  return n.toLocaleString('en-US') + ' RUB';
+  return n.toLocaleString('ru-RU') + ' \u20BD';
 }
 
 function eventTypeLabel(type: string): string {
   const map: Record<string, string> = {
-    task: 'Quest',
-    action: 'Action',
-    sale: 'Sale',
-    streak_checkin: 'Streak',
-    perk_bonus: 'Perk',
-    boss_damage: 'Boss',
-    shop_purchase: 'Shop',
-    penalty: 'Penalty',
+    task: '\u041A\u0432\u0435\u0441\u0442',
+    action: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435',
+    sale: '\u041F\u0440\u043E\u0434\u0430\u0436\u0430',
+    streak_checkin: '\u0421\u0435\u0440\u0438\u044F',
+    perk_bonus: '\u041F\u0435\u0440\u043A',
+    boss_damage: '\u0411\u043E\u0441\u0441',
+    shop_purchase: '\u041C\u0430\u0433\u0430\u0437\u0438\u043D',
+    penalty: '\u0428\u0442\u0440\u0430\u0444',
   };
   return map[type] || type;
 }
@@ -43,6 +46,12 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   const { default: autoTable } = await import('jspdf-autotable');
 
   const doc = new jsPDF();
+
+  // Register Roboto font
+  doc.addFileToVFS('Roboto.ttf', ROBOTO_BASE64);
+  doc.addFont('Roboto.ttf', 'Roboto', 'normal');
+  doc.setFont('Roboto');
+
   const pageW = doc.internal.pageSize.getWidth();
 
   function getLastY(): number {
@@ -53,12 +62,13 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   doc.setFillColor(124, 58, 237);
   doc.rect(0, 0, pageW, 35, 'F');
 
+  doc.setFont('Roboto');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.text('SOLO INCOME SYSTEM', 14, 18);
 
   doc.setFontSize(10);
-  doc.text('Analytics Report | ' + formatDate(), 14, 27);
+  doc.text('\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043E\u0442\u0447\u0451\u0442 | ' + formatDate(), 14, 27);
 
   // ===== PLAYER CARD =====
   doc.setFillColor(18, 18, 26);
@@ -70,11 +80,11 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
 
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(10);
-  doc.text('Level ' + String(data.level), 22, 63);
+  doc.text('\u0423\u0440\u043E\u0432\u0435\u043D\u044C ' + String(data.level), 22, 63);
 
   doc.setTextColor(34, 197, 94);
   doc.text(
-    'Streak: ' + String(data.streakCurrent) + ' days (best: ' + String(data.streakBest) + ')',
+    '\u0421\u0435\u0440\u0438\u044F: ' + String(data.streakCurrent) + ' \u0434\u043D. (\u043B\u0443\u0447\u0448\u0430\u044F: ' + String(data.streakBest) + ')',
     pageW - 22,
     54,
     { align: 'right' },
@@ -83,17 +93,17 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   // ===== STATS TABLE =====
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
-  doc.text('Key Metrics', 14, 82);
+  doc.text('\u041A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438', 14, 82);
 
   autoTable(doc, {
     startY: 86,
-    head: [['Metric', 'Value']],
+    head: [['\u041C\u0435\u0442\u0440\u0438\u043A\u0430', '\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435']],
     body: [
-      ['Total XP', String(data.totalXp)],
-      ['Total Income', formatMoney(data.totalIncome)],
-      ['Total Actions', String(data.totalActions)],
-      ['Total Sales', String(data.totalSales)],
-      ['Total Clients', String(data.totalClients)],
+      ['\u041E\u0431\u0449\u0438\u0439 XP', String(data.totalXp)],
+      ['\u041E\u0431\u0449\u0438\u0439 \u0434\u043E\u0445\u043E\u0434', formatMoney(data.totalIncome)],
+      ['\u0412\u0441\u0435\u0433\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439', String(data.totalActions)],
+      ['\u0412\u0441\u0435\u0433\u043E \u043F\u0440\u043E\u0434\u0430\u0436', String(data.totalSales)],
+      ['\u0412\u0441\u0435\u0433\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432', String(data.totalClients)],
     ],
     theme: 'grid',
     headStyles: {
@@ -101,11 +111,13 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 11,
+      font: 'Roboto',
     },
     bodyStyles: {
       fillColor: [22, 22, 31],
       textColor: [226, 232, 240],
       fontSize: 10,
+      font: 'Roboto',
     },
     alternateRowStyles: {
       fillColor: [18, 18, 26],
@@ -114,6 +126,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
       cellPadding: 6,
       lineColor: [30, 30, 46],
       lineWidth: 0.5,
+      font: 'Roboto',
     },
     margin: { left: 14, right: 14 },
   });
@@ -122,13 +135,14 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   const afterStats = getLastY() + 14;
 
   if (data.quests.length > 0) {
+    doc.setFont('Roboto');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.text('Quests', 14, afterStats);
+    doc.text('\u041A\u0432\u0435\u0441\u0442\u044B', 14, afterStats);
 
     autoTable(doc, {
       startY: afterStats + 4,
-      head: [['Quest', 'XP Reward', 'Completions']],
+      head: [['\u041A\u0432\u0435\u0441\u0442', 'XP', '\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F']],
       body: data.quests.map((q) => [
         q.title.length > 30 ? q.title.substring(0, 30) + '...' : q.title,
         String(q.xp),
@@ -140,11 +154,13 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 11,
+        font: 'Roboto',
       },
       bodyStyles: {
         fillColor: [22, 22, 31],
         textColor: [226, 232, 240],
         fontSize: 10,
+        font: 'Roboto',
       },
       alternateRowStyles: {
         fillColor: [18, 18, 26],
@@ -153,6 +169,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
         cellPadding: 5,
         lineColor: [30, 30, 46],
         lineWidth: 0.5,
+        font: 'Roboto',
       },
       margin: { left: 14, right: 14 },
     });
@@ -164,13 +181,14 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   if (data.recentEvents.length > 0) {
     const startY = afterQuests > 240 ? (() => { doc.addPage(); return 20; })() : afterQuests;
 
+    doc.setFont('Roboto');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.text('Recent Activity (last 30)', 14, startY);
+    doc.text('\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F (30)', 14, startY);
 
     autoTable(doc, {
       startY: startY + 4,
-      head: [['Date', 'Type', 'XP', 'Details']],
+      head: [['\u0414\u0430\u0442\u0430', '\u0422\u0438\u043F', 'XP', '\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435']],
       body: data.recentEvents.map((e) => [
         e.date,
         eventTypeLabel(e.type),
@@ -183,11 +201,13 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
         textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 10,
+        font: 'Roboto',
       },
       bodyStyles: {
         fillColor: [22, 22, 31],
         textColor: [226, 232, 240],
         fontSize: 9,
+        font: 'Roboto',
       },
       alternateRowStyles: {
         fillColor: [18, 18, 26],
@@ -196,10 +216,11 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
         cellPadding: 4,
         lineColor: [30, 30, 46],
         lineWidth: 0.5,
+        font: 'Roboto',
       },
       columnStyles: {
         0: { cellWidth: 28 },
-        1: { cellWidth: 22 },
+        1: { cellWidth: 24 },
         2: { cellWidth: 16, halign: 'center' },
         3: { cellWidth: 'auto' },
       },
@@ -207,7 +228,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     });
   }
 
-  // ===== FOOTER ON ALL PAGES =====
+  // ===== FOOTER =====
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
@@ -216,10 +237,11 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     doc.setFillColor(124, 58, 237);
     doc.rect(0, pageH - 15, pageW, 15, 'F');
 
+    doc.setFont('Roboto');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(8);
     doc.text(
-      'Solo Income System | Generated ' + formatDate() + ' | Page ' + String(i) + '/' + String(pageCount),
+      'Solo Income System | ' + formatDate() + ' | ' + String(i) + '/' + String(pageCount),
       pageW / 2,
       pageH - 5,
       { align: 'center' },
