@@ -1,4 +1,3 @@
-// src/app/api/notifications/test/route.ts
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import webpush from "web-push";
@@ -19,6 +18,10 @@ interface PushSubscriptionData {
 
 interface SubscriptionRow {
   subscription: PushSubscriptionData;
+}
+
+export async function GET() {
+  return NextResponse.json({ status: "ok", route: "notifications/test" });
 }
 
 export async function POST() {
@@ -58,8 +61,8 @@ export async function POST() {
           },
         },
         JSON.stringify({
-          title: "🧪 Тест пуша",
-          body: "Push-уведомления работают!",
+          title: "\uD83E\uDDEA Test push",
+          body: "Push notifications are working!",
         }),
       );
       sent++;
