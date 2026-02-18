@@ -1,112 +1,65 @@
-import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
-interface SubscribeBody {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-}
-
-async function createSupabaseServer() {
+async function getSupabase() {
   const cookieStore = await cookies();
-
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
+        getAll() { return cookieStore.getAll(); },
         setAll(cookiesToSet) {
-          try {
-            for (const { name, value, options } of cookiesToSet) {
-              cookieStore.set(name, value, options);
-            }
-          } catch {
-            // Server component
-          }
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch { /* */ }
         },
       },
-    }
+    },
   );
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServer();
+    const supabase = await getSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const body = await request.json();
+    const endpoint = body.endpoint;
+    const p256dh = body.p256dh;
+    const auth_key = body.auth_key;
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!endpoint || !p256dh || !auth_key) {
+      return NextResponse.json({ error: 'Missing fields', received: { endpoint: !!endpoint, p256dh: !!p256dh, auth_key: !!auth_key } }, { status: 400 });
     }
 
-    const body = (await request.json()) as SubscribeBody;
-
-    if (!body.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
-      return NextResponse.json({ error: "Invalid subscription data" }, { status: 400 });
-    }
-
-    const { error } = await supabase.from("push_subscriptions").upsert(
-      {
-        user_id: user.id,
-        endpoint: body.endpoint,
-        p256dh: body.keys.p256dh,
-        auth_key: body.keys.auth,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "user_id,endpoint",
-      }
+    const { error } = await supabase.from('push_subscriptions').upsert(
+      { user_id: user.id, endpoint, p256dh, auth_key },
+      { onConflict: 'user_id,endpoint' },
     );
 
     if (error) {
-      console.error("[subscribe] DB error:", error.message, error.code);
-      return NextResponse.json({ error: "DB error: " + error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[subscribe] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createSupabaseServer();
+    const supabase = await getSupabase();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { endpoint } = await request.json();
+    if (!endpoint) return NextResponse.json({ error: 'Missing endpoint' }, { status: 400 });
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = (await request.json()) as { endpoint: string };
-
-    const { error } = await supabase
-      .from("push_subscriptions")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("endpoint", body.endpoint);
-
-    if (error) {
-      console.error("[unsubscribe] DB error:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    await supabase.from('push_subscriptions').delete().eq('user_id', user.id).eq('endpoint', endpoint);
     return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
