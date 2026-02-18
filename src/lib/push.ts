@@ -1,10 +1,10 @@
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding)
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
 
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
@@ -17,13 +17,13 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export function isPushSupported(): boolean {
-  if (typeof window === "undefined") return false;
-  return "serviceWorker" in navigator && "PushManager" in window;
+  if (typeof window === 'undefined') return false;
+  return 'serviceWorker' in navigator && 'PushManager' in window;
 }
 
-export function getPermissionState(): NotificationPermission | "unsupported" {
-  if (typeof window === "undefined") return "unsupported";
-  if (!("Notification" in window)) return "unsupported";
+export function getPermissionState(): NotificationPermission | 'unsupported' {
+  if (typeof window === 'undefined') return 'unsupported';
+  if (!('Notification' in window)) return 'unsupported';
   return Notification.permission;
 }
 
@@ -51,10 +51,10 @@ export function serializeSubscription(
 ): SerializedSubscription {
   const json = sub.toJSON();
   return {
-    endpoint: json.endpoint ?? "",
+    endpoint: json.endpoint ?? '',
     keys: {
-      p256dh: json.keys?.p256dh ?? "",
-      auth: json.keys?.auth ?? "",
+      p256dh: json.keys?.p256dh ?? '',
+      auth: json.keys?.auth ?? '',
     },
   };
 }
@@ -62,21 +62,21 @@ export function serializeSubscription(
 export async function subscribeToPush(): Promise<boolean> {
   try {
     if (!isPushSupported()) {
-      console.warn("Push notifications not supported");
+      console.warn('Push notifications not supported');
       return false;
     }
 
     if (!VAPID_PUBLIC_KEY) {
-      console.error("VAPID public key not configured");
+      console.error('VAPID public key not configured');
       return false;
     }
 
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
+    if (permission !== 'granted') {
       return false;
     }
 
-    const registration = await navigator.serviceWorker.register("/sw.js");
+    const registration = await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
 
     let subscription = await registration.pushManager.getSubscription();
@@ -92,20 +92,22 @@ export async function subscribeToPush(): Promise<boolean> {
 
     const serialized = serializeSubscription(subscription);
 
-    const response = await fetch("/api/notifications/subscribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(serialized),
+    // Обёртка {subscription: ...} — API ждёт именно этот формат
+    const response = await fetch('/api/notifications/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: serialized }),
     });
 
     if (!response.ok) {
-      console.error("Failed to save subscription on server");
+      const err = await response.json().catch(() => ({}));
+      console.error('Failed to save subscription on server:', err);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error("Push subscription failed:", error);
+    console.error('Push subscription failed:', error);
     return false;
   }
 }
@@ -118,19 +120,13 @@ export async function unsubscribeFromPush(): Promise<boolean> {
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription) return true;
 
-    const endpoint = subscription.endpoint;
-
+    // Просто отписываемся локально — без DELETE на сервер
+    // Серверная подписка протухнет и будет удалена при следующем send (410)
     await subscription.unsubscribe();
-
-    await fetch("/api/notifications/subscribe", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint }),
-    });
 
     return true;
   } catch (error) {
-    console.error("Push unsubscribe failed:", error);
+    console.error('Push unsubscribe failed:', error);
     return false;
   }
 }
