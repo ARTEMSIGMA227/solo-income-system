@@ -51,6 +51,7 @@ export async function middleware(request: NextRequest) {
     '/stats',
     '/settings',
     '/advisor',
+    '/leaderboard',
   ];
 
   const isProtected = protectedPaths.some(

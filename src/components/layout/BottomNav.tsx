@@ -4,20 +4,21 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 const MAIN_NAV = [
-  { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
-  { path: '/quests', label: 'Квесты', icon: '📋' },
-  { path: '/shop', label: 'Магазин', icon: '🏪' },
-  { path: '/more', label: 'Ещё', icon: '⋯' },
+  { path: '/dashboard', label: '\u041e\u0445\u043e\u0442\u043d\u0438\u043a', icon: '\u2694\ufe0f' },
+  { path: '/quests', label: '\u041a\u0432\u0435\u0441\u0442\u044b', icon: '\ud83d\udccb' },
+  { path: '/shop', label: '\u041c\u0430\u0433\u0430\u0437\u0438\u043d', icon: '\ud83c\udfea' },
+  { path: '/leaderboard', label: '\u0422\u043e\u043f', icon: '\ud83c\udfc6' },
+  { path: '/more', label: '\u0415\u0449\u0451', icon: '\u22ef' },
 ];
 
 const MORE_ITEMS = [
-  { path: '/advisor', label: 'Советник', icon: '🤖' },
-  { path: '/focus', label: 'Фокус', icon: '🎯' },
-  { path: '/achievements', label: 'Ачивки', icon: '🏆' },
-  { path: '/bosses', label: 'Боссы', icon: '💀' },
-  { path: '/analytics', label: 'Аналитика', icon: '📈' },
-  { path: '/stats', label: 'Статы', icon: '📊' },
-  { path: '/settings', label: 'Настройки', icon: '⚙️' },
+  { path: '/advisor', label: '\u0421\u043e\u0432\u0435\u0442\u043d\u0438\u043a', icon: '\ud83e\udd16' },
+  { path: '/focus', label: '\u0424\u043e\u043a\u0443\u0441', icon: '\ud83c\udfaf' },
+  { path: '/achievements', label: '\u0410\u0447\u0438\u0432\u043a\u0438', icon: '\ud83c\udfc6' },
+  { path: '/bosses', label: '\u0411\u043e\u0441\u0441\u044b', icon: '\ud83d\udc80' },
+  { path: '/analytics', label: '\u0410\u043d\u0430\u043b\u0438\u0442\u0438\u043a\u0430', icon: '\ud83d\udcc8' },
+  { path: '/stats', label: '\u0421\u0442\u0430\u0442\u044b', icon: '\ud83d\udcca' },
+  { path: '/settings', label: '\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438', icon: '\u2699\ufe0f' },
 ];
 
 export default function BottomNav() {
@@ -118,14 +119,14 @@ export default function BottomNav() {
                 flexDirection: 'column' as const,
                 alignItems: 'center',
                 gap: '2px',
-                padding: '4px 16px',
+                padding: '4px 12px',
                 backgroundColor: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
               }}
             >
               <span style={{
-                fontSize: '22px',
+                fontSize: '20px',
                 filter: isActive ? 'none' : 'grayscale(0.5)',
                 opacity: isActive ? 1 : 0.5,
               }}>
