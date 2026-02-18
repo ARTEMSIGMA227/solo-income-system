@@ -14,20 +14,12 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!,
 );
 
-interface PushKeys {
-  p256dh: string;
-  auth: string;
-}
-
-interface PushSubscriptionData {
-  endpoint: string;
-  keys: PushKeys;
-}
-
 interface SubscriptionRow {
   id: string;
   user_id: string;
-  subscription: PushSubscriptionData;
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
 }
 
 interface ProfileRow {
@@ -65,20 +57,20 @@ function getMessageForHour(
 ): { title: string; body: string } | null {
   if (hour === 10) {
     return {
-      title: "🌅 Утренний квест",
-      body: `${name}, начни день с квеста! Серия: ${streak} 🔥`,
+      title: "\uD83C\uDF05 Morning quest",
+      body: `${name}, start your day with a quest! Streak: ${streak} \uD83D\uDD25`,
     };
   }
   if (hour === 18) {
     return {
-      title: "⚡ Вечерний буст",
-      body: `${name}, не забудь закрыть квесты до конца дня!`,
+      title: "\u26A1 Evening boost",
+      body: `${name}, don't forget to close your quests!`,
     };
   }
   if (hour === 21) {
     return {
-      title: "🌙 Последний шанс",
-      body: `${name}, осталось мало времени — не потеряй серию ${streak}!`,
+      title: "\uD83C\uDF19 Last chance",
+      body: `${name}, time is running out \u2014 don't lose streak ${streak}!`,
     };
   }
   return null;
@@ -92,7 +84,7 @@ export async function GET(request: NextRequest) {
 
   const { data: subscriptions, error: subError } = await supabaseAdmin
     .from("push_subscriptions")
-    .select("id, user_id, subscription");
+    .select("id, user_id, endpoint, p256dh, auth_key");
 
   if (subError || !subscriptions) {
     return NextResponse.json(
@@ -125,7 +117,7 @@ export async function GET(request: NextRequest) {
     const profile = profileMap.get(row.user_id);
     const tz = profile?.timezone ?? "Europe/Berlin";
     const currentHour = getHourInTimezone(tz);
-    const name = profile?.display_name ?? "Охотник";
+    const name = profile?.display_name ?? "Hunter";
     const streak = profile?.streak_current ?? 0;
 
     const message = getMessageForHour(currentHour, name, streak);
@@ -135,15 +127,16 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const pushPayload = {
-        endpoint: row.subscription.endpoint,
-        keys: {
-          p256dh: row.subscription.keys.p256dh,
-          auth: row.subscription.keys.auth,
+      await webpush.sendNotification(
+        {
+          endpoint: row.endpoint,
+          keys: {
+            p256dh: row.p256dh,
+            auth: row.auth_key,
+          },
         },
-      };
-
-      await webpush.sendNotification(pushPayload, JSON.stringify(message));
+        JSON.stringify(message),
+      );
       sent++;
     } catch (err: unknown) {
       failed++;

@@ -1,3 +1,4 @@
+// src/app/api/notifications/test/route.ts
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import webpush from "web-push";
@@ -8,16 +9,10 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!,
 );
 
-interface PushSubscriptionData {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-}
-
 interface SubscriptionRow {
-  subscription: PushSubscriptionData;
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
 }
 
 export async function GET() {
@@ -37,7 +32,7 @@ export async function POST() {
 
   const { data: subs, error } = await supabase
     .from("push_subscriptions")
-    .select("subscription")
+    .select("endpoint, p256dh, auth_key")
     .eq("user_id", user.id);
 
   if (error || !subs || subs.length === 0) {
@@ -54,10 +49,10 @@ export async function POST() {
     try {
       await webpush.sendNotification(
         {
-          endpoint: row.subscription.endpoint,
+          endpoint: row.endpoint,
           keys: {
-            p256dh: row.subscription.keys.p256dh,
-            auth: row.subscription.keys.auth,
+            p256dh: row.p256dh,
+            auth: row.auth_key,
           },
         },
         JSON.stringify({
