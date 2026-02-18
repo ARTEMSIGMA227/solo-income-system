@@ -58,7 +58,8 @@ export default function DashboardPage() {
 
       const today = getToday();
       const { data: ct } = await supabase.from('completions').select('count_done').eq('user_id', authUser.id).eq('completion_date', today);
-      setTodayActions(ct?.reduce((sum, c) => sum + c.count_done, 0) || 0);
+      const loadedActions = ct?.reduce((sum, c) => sum + c.count_done, 0) || 0;
+      setTodayActions(loadedActions);
 
       const { data: it } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).eq('event_date', today);
       setTodayIncome(it?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
@@ -66,27 +67,21 @@ export default function DashboardPage() {
       const { data: im } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
-      // Проверка вчерашнего дня
+      // ── Проверка вчерашнего дня (штраф) ──
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
       const { data: yesterdayCompletions } = await supabase
-        .from('completions')
-        .select('count_done')
-        .eq('user_id', authUser.id)
-        .eq('completion_date', yesterdayStr);
+        .from('completions').select('count_done')
+        .eq('user_id', authUser.id).eq('completion_date', yesterdayStr);
 
       const yesterdayActions = yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
       const target = p?.daily_actions_target || 30;
 
-      // Проверяем был ли уже штраф за вчера
       const { data: penaltyCheck } = await supabase
-        .from('xp_events')
-        .select('id')
-        .eq('user_id', authUser.id)
-        .eq('event_type', 'penalty_miss')
-        .eq('event_date', yesterdayStr);
+        .from('xp_events').select('id')
+        .eq('user_id', authUser.id).eq('event_type', 'penalty_miss').eq('event_date', yesterdayStr);
 
       const alreadyPenalized = (penaltyCheck && penaltyCheck.length > 0);
 
@@ -94,21 +89,18 @@ export default function DashboardPage() {
         const penaltyXP = p?.penalty_xp || 100;
         const newMisses = (p?.consecutive_misses || 0) + 1;
 
-        // Записать штраф
         await supabase.from('xp_events').insert({
           user_id: authUser.id, event_type: 'penalty_miss',
           xp_amount: -penaltyXP, description: `Пропуск дня: ${yesterdayStr}`,
           event_date: yesterdayStr,
         });
 
-        // Обновить профиль
         await supabase.from('profiles').update({
           consecutive_misses: newMisses,
           streak_current: 0,
           updated_at: new Date().toISOString(),
         }).eq('id', authUser.id);
 
-        // Обновить статы
         const newTotalLost = (s?.total_xp_lost || 0) + penaltyXP;
         const updateData: {
           total_xp_lost: number;
@@ -118,13 +110,10 @@ export default function DashboardPage() {
         } = { total_xp_lost: newTotalLost, updated_at: new Date().toISOString() };
 
         if (newMisses >= 3) {
-          // Потеря уровня
           const newLevel = Math.max((s?.level || 1) - 1, 1);
           updateData.level = newLevel;
           updateData.current_xp = 0;
           setDeathType('level_down');
-
-          // Сбросить счётчик
           await supabase.from('profiles').update({ consecutive_misses: 0 }).eq('id', authUser.id);
         } else {
           setDeathType('miss');
@@ -136,18 +125,101 @@ export default function DashboardPage() {
         setDeathMisses(newMisses);
         setShowDeath(true);
 
-        // Перезагрузить статы
         const { data: freshStats } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
         if (freshStats) setStats(freshStats);
-
         const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
         if (freshProfile) setProfile(freshProfile);
-      }      
+      }
+
+      // ── Авто-обновление серии при наличии действий сегодня ──
+      if (loadedActions > 0 && p) {
+        const { data: streakCheck } = await supabase
+          .from('xp_events').select('id')
+          .eq('user_id', authUser.id)
+          .eq('event_type', 'streak_checkin')
+          .eq('event_date', today);
+
+        const alreadyCheckedIn = streakCheck && streakCheck.length > 0;
+
+        if (!alreadyCheckedIn) {
+          const hadYesterday = yesterdayActions > 0;
+          const currentStreak = p.streak_current || 0;
+          const newStreak = hadYesterday ? currentStreak + 1 : 1;
+          const newBest = Math.max(newStreak, p.streak_best || 0);
+
+          await supabase.from('profiles').update({
+            streak_current: newStreak,
+            streak_best: newBest,
+            consecutive_misses: 0,
+            updated_at: new Date().toISOString(),
+          }).eq('id', authUser.id);
+
+          await supabase.from('xp_events').insert({
+            user_id: authUser.id, event_type: 'streak_checkin',
+            xp_amount: 0, description: `Серия: день ${newStreak}`,
+            event_date: today,
+          });
+
+          setProfile(prev => prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev);
+        }
+      }
+
       setLoading(false);
     }
     loadData();
   }, [router]);
 
+  /* ═══════════════ ОБНОВЛЕНИЕ СЕРИИ ═══════════════ */
+  async function updateStreakOnFirstAction() {
+    if (!user || !profile) return;
+    const supabase = createClient();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+
+    // Проверяем — может уже отметили сегодня
+    const { data: check } = await supabase
+      .from('xp_events').select('id')
+      .eq('user_id', user.id)
+      .eq('event_type', 'streak_checkin')
+      .eq('event_date', today);
+
+    if (check && check.length > 0) return;
+
+    // Проверяем вчерашнюю активность
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+
+    const { data: yd } = await supabase
+      .from('completions').select('count_done')
+      .eq('user_id', user.id).eq('completion_date', yesterdayStr);
+
+    const hadYesterday = (yd?.reduce((s, c) => s + c.count_done, 0) || 0) > 0;
+    const currentStreak = profile.streak_current || 0;
+    const newStreak = hadYesterday ? currentStreak + 1 : 1;
+    const newBest = Math.max(newStreak, profile.streak_best || 0);
+
+    await supabase.from('profiles').update({
+      streak_current: newStreak,
+      streak_best: newBest,
+      consecutive_misses: 0,
+      updated_at: new Date().toISOString(),
+    }).eq('id', profile.id);
+
+    // Маркер чтобы не считать повторно
+    await supabase.from('xp_events').insert({
+      user_id: user.id, event_type: 'streak_checkin',
+      xp_amount: 0, description: `Серия: день ${newStreak}`,
+      event_date: today,
+    });
+
+    setProfile(prev => prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev);
+
+    if (newStreak > 1) {
+      toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
+    }
+  }
+
+  /* ═══════════════ БЫСТРОЕ ДЕЙСТВИЕ ═══════════════ */
   async function quickAction(type: string, label: string) {
     if (!user || !stats) return;
     const supabase = createClient();
@@ -193,19 +265,22 @@ export default function DashboardPage() {
       total_gold_earned: newTotalGold,
     });
 
+    // ★ СЕРИЯ: первое действие дня → обновить streak ★
+    if (todayActions === 0) {
+      await updateStreakOnFirstAction();
+    }
+
     setTodayActions(prev => prev + 1);
     toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
   }
 
+  /* ═══════════════ ДОХОД ═══════════════ */
   async function addIncome() {
     if (!user || !stats) return;
     const amountStr = prompt('Сумма дохода (₽):');
     if (!amountStr) return;
     const amount = Number(amountStr);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error('Некорректная сумма');
-      return;
-    }
+    if (isNaN(amount) || amount <= 0) { toast.error('Некорректная сумма'); return; }
 
     const source = prompt('Источник (sale/contract/freelance/bonus/other):', 'sale') || 'sale';
     const supabase = createClient();
@@ -292,7 +367,6 @@ export default function DashboardPage() {
       padding: '16px', maxWidth: '600px', margin: '0 auto',
     }}>
 
-      {/* Экран смерти */}
       {showDeath && (
         <DeathScreen
           type={deathType}
@@ -301,8 +375,7 @@ export default function DashboardPage() {
           onAccept={() => setShowDeath(false)}
         />
       )}
-      
-      {/* Редактор персонажа */}
+
       {showEditor && user && (
         <CharacterEditor
           userId={user.id}
@@ -335,7 +408,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ПЕРСОНАЖ */}
       <HunterAvatar
         level={levelInfo.level}
         title={levelInfo.title}
@@ -377,14 +449,8 @@ export default function DashboardPage() {
       {profile && stats && (() => {
         const now = new Date();
         const { greeting, advice } = generateAdvice({
-          stats,
-          profile,
-          todayActions,
-          todayIncome,
-          monthIncome,
-          hour: currentHour,
-          dayOfWeek: now.getDay(),
-          dayOfMonth: now.getDate(),
+          stats, profile, todayActions, todayIncome, monthIncome,
+          hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(),
           daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
         });
         if (advice.length === 0) return null;
@@ -447,9 +513,7 @@ export default function DashboardPage() {
               border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`,
               borderRadius: '10px',
               color: i === 5 ? '#22c55e' : '#e2e8f0',
-              cursor: 'pointer',
-              fontSize: '13px',
-              textAlign: 'center',
+              cursor: 'pointer', fontSize: '13px', textAlign: 'center',
             }}>
               <div>{btn.icon}</div>
               <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>

@@ -20,9 +20,10 @@ export default function SettingsPage() {
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
   const router = useRouter();
 
-  // Форма
   const [displayName, setDisplayName] = useState('');
   const [dailyActionsTarget, setDailyActionsTarget] = useState(30);
   const [dailyIncomeTarget, setDailyIncomeTarget] = useState(5000);
@@ -33,17 +34,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const supabase = createClient();
-
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth'); return; }
-
-      const { data: p } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       if (p) {
         setProfile(p);
         setDisplayName(p.display_name);
@@ -54,7 +48,6 @@ export default function SettingsPage() {
         setFocusDuration(p.focus_duration_minutes);
         setTimezone(p.timezone);
       }
-
       setLoading(false);
     }
     load();
@@ -75,12 +68,8 @@ export default function SettingsPage() {
     try {
       if (pushEnabled) {
         const success = await unsubscribeFromPush();
-        if (success) {
-          setPushEnabled(false);
-          toast.success('Уведомления отключены');
-        } else {
-          toast.error('Не удалось отключить уведомления');
-        }
+        if (success) { setPushEnabled(false); toast.success('Уведомления отключены'); }
+        else { toast.error('Не удалось отключить уведомления'); }
       } else {
         const perm = getPermissionState();
         if (perm === 'denied') {
@@ -88,78 +77,70 @@ export default function SettingsPage() {
           setPushLoading(false);
           return;
         }
-
         const success = await subscribeToPush();
-        if (success) {
-          setPushEnabled(true);
-          toast.success('Уведомления включены! Ты будешь получать напоминания.');
-        } else {
-          toast.error('Не удалось подписаться на уведомления');
-        }
+        if (success) { setPushEnabled(true); toast.success('Уведомления включены!'); }
+        else { toast.error('Не удалось подписаться на уведомления'); }
       }
-    } catch {
-      toast.error('Ошибка при настройке уведомлений');
-    }
+    } catch { toast.error('Ошибка при настройке уведомлений'); }
     setPushLoading(false);
   }, [pushEnabled]);
 
+  /* ─── ТЕСТОВЫЙ PUSH ─── */
+  async function handleTestPush() {
+    setTestLoading(true);
+    setTestStatus(null);
+    try {
+      const res = await fetch('/api/notifications/test', { method: 'POST' });
+      const data: Record<string, unknown> = await res.json();
+      if (!res.ok) {
+        setTestStatus(`❌ ${(data.message as string) ?? res.statusText}`);
+      } else {
+        setTestStatus(`✅ Отправлено: ${data.sent}, очищено: ${data.cleaned}`);
+      }
+    } catch {
+      setTestStatus('❌ Ошибка сети');
+    }
+    setTestLoading(false);
+  }
+
   async function handleSave() {
     if (!profile) return;
-    if (!displayName.trim()) {
-      toast.error('Введи имя');
-      return;
-    }
-
+    if (!displayName.trim()) { toast.error('Введи имя'); return; }
     setSaving(true);
     const supabase = createClient();
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        display_name: displayName.trim(),
-        daily_actions_target: dailyActionsTarget,
-        daily_income_target: dailyIncomeTarget,
-        monthly_income_target: monthlyIncomeTarget,
-        penalty_xp: penaltyXp,
-        focus_duration_minutes: focusDuration,
-        timezone,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', profile.id);
-
+    const { error } = await supabase.from('profiles').update({
+      display_name: displayName.trim(),
+      daily_actions_target: dailyActionsTarget,
+      daily_income_target: dailyIncomeTarget,
+      monthly_income_target: monthlyIncomeTarget,
+      penalty_xp: penaltyXp,
+      focus_duration_minutes: focusDuration,
+      timezone,
+      updated_at: new Date().toISOString(),
+    }).eq('id', profile.id);
     setSaving(false);
-
-    if (error) {
-      toast.error('Ошибка сохранения');
-      return;
-    }
-
+    if (error) { toast.error('Ошибка сохранения'); return; }
     toast.success('Настройки сохранены! ⚔️');
   }
 
   async function handleResetStats() {
     if (!profile) return;
-    const confirmed = confirm('⚠️ Сбросить ВСЮ статистику? XP, уровень, действия — всё обнулится. Это нельзя отменить!');
+    const confirmed = confirm('⚠️ Сбросить ВСЮ статистику?');
     if (!confirmed) return;
-
-    const doubleConfirm = confirm('Ты точно уверен? Напиши в голове "ДА" и нажми ОК.');
+    const doubleConfirm = confirm('Ты точно уверен?');
     if (!doubleConfirm) return;
-
     const supabase = createClient();
-
     await supabase.from('stats').update({
       level: 1, current_xp: 0, total_xp_earned: 0,
       total_xp_lost: 0, total_sales: 0, total_clients: 0,
       total_income: 0, total_actions: 0,
       updated_at: new Date().toISOString(),
     }).eq('user_id', profile.id);
-
     await supabase.from('xp_events').delete().eq('user_id', profile.id);
     await supabase.from('completions').delete().eq('user_id', profile.id);
     await supabase.from('income_events').delete().eq('user_id', profile.id);
     await supabase.from('daily_summary').delete().eq('user_id', profile.id);
-
-    toast.success('Статистика сброшена. Начинай заново, Охотник!');
+    toast.success('Статистика сброшена.');
     router.push('/dashboard');
   }
 
@@ -171,13 +152,11 @@ export default function SettingsPage() {
   }
 
   async function handleDeleteAccount() {
-    const confirmed = confirm('⚠️ УДАЛИТЬ АККАУНТ? Все данные будут потеряны навсегда!');
+    const confirmed = confirm('⚠️ УДАЛИТЬ АККАУНТ?');
     if (!confirmed) return;
-
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-
     await supabase.from('character_config').delete().eq('user_id', user.id);
     await supabase.from('perk_unlocks').delete().eq('user_id', user.id);
     await supabase.from('xp_events').delete().eq('user_id', user.id);
@@ -189,7 +168,6 @@ export default function SettingsPage() {
     await supabase.from('habits').delete().eq('user_id', user.id);
     await supabase.from('stats').delete().eq('user_id', user.id);
     await supabase.from('profiles').delete().eq('id', user.id);
-
     await supabase.auth.signOut();
     toast.success('Аккаунт удалён');
     router.push('/auth');
@@ -248,29 +226,17 @@ export default function SettingsPage() {
         backgroundColor: '#12121a', border: '1px solid #1e1e2e',
         borderRadius: '12px', padding: '20px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-          👤 Профиль
-        </div>
-
-        <SettingInput
-          label="Имя охотника"
-          value={displayName}
-          onChange={setDisplayName}
-        />
-
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>👤 Профиль</div>
+        <SettingInput label="Имя охотника" value={displayName} onChange={setDisplayName} />
         <div style={{ marginBottom: '16px' }}>
           <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
             Часовой пояс
           </label>
-          <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            style={{
-              width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
-              border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
-              fontSize: '14px', outline: 'none',
-            }}
-          >
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{
+            width: '100%', padding: '12px 16px', backgroundColor: '#16161f',
+            border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
+            fontSize: '14px', outline: 'none',
+          }}>
             <option value="Europe/Berlin">🇩🇪 Берлин (CET)</option>
             <option value="Europe/Moscow">🇷🇺 Москва (MSK)</option>
             <option value="Europe/Kiev">🇺🇦 Киев (EET)</option>
@@ -287,33 +253,10 @@ export default function SettingsPage() {
         backgroundColor: '#12121a', border: '1px solid #1e1e2e',
         borderRadius: '12px', padding: '20px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-          🎯 Цели
-        </div>
-
-        <SettingInput
-          label="Целевой доход в месяц"
-          value={monthlyIncomeTarget}
-          onChange={setMonthlyIncomeTarget}
-          type="number"
-          suffix="₽/мес"
-        />
-
-        <SettingInput
-          label="Целевой доход в день"
-          value={dailyIncomeTarget}
-          onChange={setDailyIncomeTarget}
-          type="number"
-          suffix="₽/день"
-        />
-
-        <SettingInput
-          label="Целевых действий в день"
-          value={dailyActionsTarget}
-          onChange={setDailyActionsTarget}
-          type="number"
-          suffix="действий"
-        />
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🎯 Цели</div>
+        <SettingInput label="Целевой доход в месяц" value={monthlyIncomeTarget} onChange={setMonthlyIncomeTarget} type="number" suffix="₽/мес" />
+        <SettingInput label="Целевой доход в день" value={dailyIncomeTarget} onChange={setDailyIncomeTarget} type="number" suffix="₽/день" />
+        <SettingInput label="Целевых действий в день" value={dailyActionsTarget} onChange={setDailyActionsTarget} type="number" suffix="действий" />
       </div>
 
       {/* Система */}
@@ -321,39 +264,18 @@ export default function SettingsPage() {
         backgroundColor: '#12121a', border: '1px solid #1e1e2e',
         borderRadius: '12px', padding: '20px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-          ⚡ Система
-        </div>
-
-        <SettingInput
-          label="Штраф за пропуск дня"
-          value={penaltyXp}
-          onChange={setPenaltyXp}
-          type="number"
-          suffix="XP"
-        />
-
-        <SettingInput
-          label="Фокус-режим"
-          value={focusDuration}
-          onChange={setFocusDuration}
-          type="number"
-          suffix="минут"
-        />
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>⚡ Система</div>
+        <SettingInput label="Штраф за пропуск дня" value={penaltyXp} onChange={setPenaltyXp} type="number" suffix="XP" />
+        <SettingInput label="Фокус-режим" value={focusDuration} onChange={setFocusDuration} type="number" suffix="минут" />
       </div>
 
-      {/* Кнопка сохранить */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        style={{
-          width: '100%', padding: '14px', marginBottom: '16px',
-          backgroundColor: saving ? '#4c1d95' : '#7c3aed',
-          color: '#fff', border: 'none', borderRadius: '10px',
-          fontSize: '16px', fontWeight: 600,
-          cursor: saving ? 'not-allowed' : 'pointer',
-        }}
-      >
+      {/* Сохранить */}
+      <button onClick={handleSave} disabled={saving} style={{
+        width: '100%', padding: '14px', marginBottom: '16px',
+        backgroundColor: saving ? '#4c1d95' : '#7c3aed',
+        color: '#fff', border: 'none', borderRadius: '10px',
+        fontSize: '16px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+      }}>
         {saving ? '⏳ Сохраняю...' : '✅ Сохранить настройки'}
       </button>
 
@@ -362,36 +284,20 @@ export default function SettingsPage() {
         backgroundColor: '#12121a', border: '1px solid #1e1e2e',
         borderRadius: '12px', padding: '16px', marginBottom: '16px',
       }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-          📱 Быстрые ссылки
-        </div>
-
-        <button
-          onClick={() => router.push('/analytics')}
-          style={{
-            width: '100%', padding: '12px', marginBottom: '8px',
-            backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-            borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer',
-            fontSize: '14px', textAlign: 'left',
-          }}
-        >
-          📈 Аналитика и графики
-        </button>
-
-        <button
-          onClick={() => router.push('/stats')}
-          style={{
-            width: '100%', padding: '12px',
-            backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-            borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer',
-            fontSize: '14px', textAlign: 'left',
-          }}
-        >
-          📊 Статы и перки
-        </button>
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>📱 Быстрые ссылки</div>
+        <button onClick={() => router.push('/analytics')} style={{
+          width: '100%', padding: '12px', marginBottom: '8px',
+          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+          borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+        }}>📈 Аналитика и графики</button>
+        <button onClick={() => router.push('/stats')} style={{
+          width: '100%', padding: '12px',
+          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+          borderRadius: '8px', color: '#e2e8f0', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+        }}>📊 Статы и перки</button>
       </div>
 
-      {/* Push-уведомления */}
+      {/* ═══════════════ PUSH-УВЕДОМЛЕНИЯ ═══════════════ */}
       {pushSupported && (
         <div style={{
           backgroundColor: '#12121a', border: '1px solid #1e1e2e',
@@ -408,34 +314,47 @@ export default function SettingsPage() {
                 Утром, вечером и перед дедлайном
               </div>
             </div>
-            <button
-              onClick={handlePushToggle}
-              disabled={pushLoading}
-              style={{
-                padding: '8px 20px',
-                borderRadius: '20px',
-                border: 'none',
-                backgroundColor: pushEnabled ? '#22c55e' : '#16161f',
-                color: pushEnabled ? '#fff' : '#94a3b8',
-                cursor: pushLoading ? 'not-allowed' : 'pointer',
-                fontSize: '13px',
-                fontWeight: 600,
-                transition: 'all 0.2s ease',
-              }}
-            >
+            <button onClick={handlePushToggle} disabled={pushLoading} style={{
+              padding: '8px 20px', borderRadius: '20px', border: 'none',
+              backgroundColor: pushEnabled ? '#22c55e' : '#16161f',
+              color: pushEnabled ? '#fff' : '#94a3b8',
+              cursor: pushLoading ? 'not-allowed' : 'pointer',
+              fontSize: '13px', fontWeight: 600, transition: 'all 0.2s ease',
+            }}>
               {pushLoading ? '...' : pushEnabled ? '✓ Вкл' : 'Выкл'}
             </button>
           </div>
 
           {pushEnabled && (
-            <div style={{
-              fontSize: '11px', color: '#475569', padding: '8px 12px',
-              backgroundColor: '#16161f', borderRadius: '8px',
-            }}>
-              📌 10:00 — утренняя мотивация<br />
-              📌 18:00 — предупреждение если &lt;50%<br />
-              📌 21:00 — последний шанс закрыть день
-            </div>
+            <>
+              <div style={{
+                fontSize: '11px', color: '#475569', padding: '8px 12px',
+                backgroundColor: '#16161f', borderRadius: '8px', marginBottom: '12px',
+              }}>
+                📌 10:00 — утренняя мотивация<br />
+                📌 18:00 — предупреждение если &lt;50%<br />
+                📌 21:00 — последний шанс закрыть день
+              </div>
+
+              {/* ★ КНОПКА ТЕСТОВОГО PUSH ★ */}
+              <button
+                onClick={handleTestPush}
+                disabled={testLoading}
+                style={{
+                  width: '100%', padding: '10px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#3b82f6', color: '#fff', fontSize: '13px',
+                  fontWeight: 600, cursor: testLoading ? 'not-allowed' : 'pointer',
+                  opacity: testLoading ? 0.6 : 1, transition: 'all 0.2s ease',
+                }}
+              >
+                {testLoading ? '⏳ Отправляю...' : '🔔 Отправить тестовое уведомление'}
+              </button>
+              {testStatus && (
+                <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
+                  {testStatus}
+                </div>
+              )}
+            </>
           )}
 
           {!pushEnabled && getPermissionState() === 'denied' && (
@@ -457,49 +376,26 @@ export default function SettingsPage() {
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px', color: '#ef4444' }}>
           ⚠️ Опасная зона
         </div>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            width: '100%', padding: '12px', marginBottom: '8px',
-            backgroundColor: '#16161f', border: '1px solid #1e1e2e',
-            borderRadius: '8px', color: '#f59e0b', cursor: 'pointer',
-            fontSize: '14px', textAlign: 'left',
-          }}
-        >
-          🚪 Выйти из аккаунта
-        </button>
-
-        <button
-          onClick={handleResetStats}
-          style={{
-            width: '100%', padding: '12px', marginBottom: '8px',
-            backgroundColor: '#16161f', border: '1px solid #ef444420',
-            borderRadius: '8px', color: '#ef4444', cursor: 'pointer',
-            fontSize: '14px', textAlign: 'left',
-          }}
-        >
-          🔄 Сбросить статистику
-        </button>
-
-        <button
-          onClick={handleDeleteAccount}
-          style={{
-            width: '100%', padding: '12px',
-            backgroundColor: '#1a0f0f', border: '1px solid #ef444430',
-            borderRadius: '8px', color: '#ef4444', cursor: 'pointer',
-            fontSize: '14px', textAlign: 'left',
-          }}
-        >
-          💀 Удалить аккаунт
-        </button>
+        <button onClick={handleLogout} style={{
+          width: '100%', padding: '12px', marginBottom: '8px',
+          backgroundColor: '#16161f', border: '1px solid #1e1e2e',
+          borderRadius: '8px', color: '#f59e0b', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+        }}>🚪 Выйти из аккаунта</button>
+        <button onClick={handleResetStats} style={{
+          width: '100%', padding: '12px', marginBottom: '8px',
+          backgroundColor: '#16161f', border: '1px solid #ef444420',
+          borderRadius: '8px', color: '#ef4444', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+        }}>🔄 Сбросить статистику</button>
+        <button onClick={handleDeleteAccount} style={{
+          width: '100%', padding: '12px',
+          backgroundColor: '#1a0f0f', border: '1px solid #ef444430',
+          borderRadius: '8px', color: '#ef4444', cursor: 'pointer', fontSize: '14px', textAlign: 'left',
+        }}>💀 Удалить аккаунт</button>
       </div>
 
-      {/* Версия */}
       <div style={{ textAlign: 'center', color: '#475569', fontSize: '12px', marginBottom: '32px' }}>
         Solo Income System v1.0 ⚔️
       </div>
-
       <div style={{ height: '32px' }} />
     </div>
   );
