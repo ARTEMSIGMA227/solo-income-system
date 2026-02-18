@@ -30,6 +30,7 @@ function formatMoney(n: number): string {
 function eventTypeLabel(type: string): string {
   const map: Record<string, string> = {
     task: '\u041A\u0432\u0435\u0441\u0442',
+    hard_task: '\u0421\u043B\u043E\u0436\u043D\u044B\u0439',
     action: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435',
     sale: '\u041F\u0440\u043E\u0434\u0430\u0436\u0430',
     streak_checkin: '\u0421\u0435\u0440\u0438\u044F',
@@ -47,10 +48,9 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
 
   const doc = new jsPDF();
 
-  // Register Roboto font
   doc.addFileToVFS('Roboto.ttf', ROBOTO_BASE64);
   doc.addFont('Roboto.ttf', 'Roboto', 'normal');
-  doc.setFont('Roboto');
+  doc.setFont('Roboto', 'normal');
 
   const pageW = doc.internal.pageSize.getWidth();
 
@@ -58,11 +58,15 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
   }
 
+  const tableFont = {
+    font: 'Roboto',
+    fontStyle: 'normal' as const,
+  };
+
   // ===== HEADER =====
   doc.setFillColor(124, 58, 237);
   doc.rect(0, 0, pageW, 35, 'F');
 
-  doc.setFont('Roboto');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
   doc.text('SOLO INCOME SYSTEM', 14, 18);
@@ -85,9 +89,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   doc.setTextColor(34, 197, 94);
   doc.text(
     '\u0421\u0435\u0440\u0438\u044F: ' + String(data.streakCurrent) + ' \u0434\u043D. (\u043B\u0443\u0447\u0448\u0430\u044F: ' + String(data.streakBest) + ')',
-    pageW - 22,
-    54,
-    { align: 'right' },
+    pageW - 22, 54, { align: 'right' },
   );
 
   // ===== STATS TABLE =====
@@ -109,24 +111,21 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     headStyles: {
       fillColor: [124, 58, 237],
       textColor: [255, 255, 255],
-      fontStyle: 'bold',
       fontSize: 11,
-      font: 'Roboto',
+      ...tableFont,
     },
     bodyStyles: {
       fillColor: [22, 22, 31],
       textColor: [226, 232, 240],
       fontSize: 10,
-      font: 'Roboto',
+      ...tableFont,
     },
-    alternateRowStyles: {
-      fillColor: [18, 18, 26],
-    },
+    alternateRowStyles: { fillColor: [18, 18, 26] },
     styles: {
       cellPadding: 6,
       lineColor: [30, 30, 46],
       lineWidth: 0.5,
-      font: 'Roboto',
+      ...tableFont,
     },
     margin: { left: 14, right: 14 },
   });
@@ -135,7 +134,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   const afterStats = getLastY() + 14;
 
   if (data.quests.length > 0) {
-    doc.setFont('Roboto');
+    doc.setFont('Roboto', 'normal');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.text('\u041A\u0432\u0435\u0441\u0442\u044B', 14, afterStats);
@@ -152,24 +151,21 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
       headStyles: {
         fillColor: [34, 197, 94],
         textColor: [255, 255, 255],
-        fontStyle: 'bold',
         fontSize: 11,
-        font: 'Roboto',
+        ...tableFont,
       },
       bodyStyles: {
         fillColor: [22, 22, 31],
         textColor: [226, 232, 240],
         fontSize: 10,
-        font: 'Roboto',
+        ...tableFont,
       },
-      alternateRowStyles: {
-        fillColor: [18, 18, 26],
-      },
+      alternateRowStyles: { fillColor: [18, 18, 26] },
       styles: {
         cellPadding: 5,
         lineColor: [30, 30, 46],
         lineWidth: 0.5,
-        font: 'Roboto',
+        ...tableFont,
       },
       margin: { left: 14, right: 14 },
     });
@@ -181,7 +177,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   if (data.recentEvents.length > 0) {
     const startY = afterQuests > 240 ? (() => { doc.addPage(); return 20; })() : afterQuests;
 
-    doc.setFont('Roboto');
+    doc.setFont('Roboto', 'normal');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.text('\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F (30)', 14, startY);
@@ -199,24 +195,21 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
       headStyles: {
         fillColor: [59, 130, 246],
         textColor: [255, 255, 255],
-        fontStyle: 'bold',
         fontSize: 10,
-        font: 'Roboto',
+        ...tableFont,
       },
       bodyStyles: {
         fillColor: [22, 22, 31],
         textColor: [226, 232, 240],
         fontSize: 9,
-        font: 'Roboto',
+        ...tableFont,
       },
-      alternateRowStyles: {
-        fillColor: [18, 18, 26],
-      },
+      alternateRowStyles: { fillColor: [18, 18, 26] },
       styles: {
         cellPadding: 4,
         lineColor: [30, 30, 46],
         lineWidth: 0.5,
-        font: 'Roboto',
+        ...tableFont,
       },
       columnStyles: {
         0: { cellWidth: 28 },
@@ -237,14 +230,12 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     doc.setFillColor(124, 58, 237);
     doc.rect(0, pageH - 15, pageW, 15, 'F');
 
-    doc.setFont('Roboto');
+    doc.setFont('Roboto', 'normal');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(8);
     doc.text(
       'Solo Income System | ' + formatDate() + ' | ' + String(i) + '/' + String(pageCount),
-      pageW / 2,
-      pageH - 5,
-      { align: 'center' },
+      pageW / 2, pageH - 5, { align: 'center' },
     );
   }
 
