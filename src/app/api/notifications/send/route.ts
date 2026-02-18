@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 import webpush from 'web-push';
 
 webpush.setVapidDetails(
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'title and body required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = await createServerSupabaseClient();
 
     let query = supabase.from('push_subscriptions').select('*');
     if (userId) {
@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Удаляем протухшие подписки
     if (staleIds.length > 0) {
       await supabase
         .from('push_subscriptions')

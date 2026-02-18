@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 interface PushSubscriptionBody {
   subscription: {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = await createServerSupabaseClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Upsert по endpoint — чтобы не дублировать
     const { error: dbError } = await supabase
       .from('push_subscriptions')
       .upsert(
