@@ -29,15 +29,12 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: Do NOT use getSession() here — it reads from storage
-  // and doesn't validate the token. getUser() sends a request to Supabase.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // Protected routes — redirect to /auth if not logged in
   const protectedPaths = [
     '/dashboard',
     '/quests',
@@ -48,6 +45,7 @@ export async function middleware(request: NextRequest) {
     '/achievements',
     '/stats',
     '/settings',
+    '/advisor',
   ];
 
   const isProtected = protectedPaths.some(
@@ -60,14 +58,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If user is logged in and goes to /auth — redirect to dashboard
   if (pathname === '/auth' && user) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
 
-  // Root redirect
   if (pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = user ? '/dashboard' : '/auth';
@@ -79,14 +75,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     * - public folder files
-     * - API routes for sync
-     */
-    '/((?!_next/static|_next/image|favicon.ico|icons/|manifest.json|sw.js|offline.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons/|manifest.json|sw.js|offline.html|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
