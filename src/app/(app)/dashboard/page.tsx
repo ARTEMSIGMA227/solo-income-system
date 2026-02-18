@@ -15,6 +15,7 @@ import StreakBanner from '@/components/streak/StreakBanner';
 import DeathScreen from '@/components/streak/DeathScreen';
 import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { generateAdvice } from '@/lib/advisor';
+import DailyChallenge from './DailyChallenge';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -455,6 +456,7 @@ export default function DashboardPage() {
         });
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
+        <DailyChallenge />
       })()}
 
       {/* Прогресс */}

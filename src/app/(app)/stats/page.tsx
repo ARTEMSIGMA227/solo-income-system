@@ -6,6 +6,7 @@ import { getLevelInfo } from '@/lib/xp';
 import { xpToNextLevel, PERKS, TITLES } from '@/lib/constants';
 import { formatNumber, formatCurrency } from '@/lib/utils';
 import type { Stats, PerkUnlock } from '@/types/database';
+import ActivityCalendar from './ActivityCalendar';
 
 export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -61,6 +62,7 @@ export default function StatsPage() {
       <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>
         📊 Статы охотника
       </h1>
+      <ActivityCalendar />
 
       {/* Уровень */}
       <div style={{
