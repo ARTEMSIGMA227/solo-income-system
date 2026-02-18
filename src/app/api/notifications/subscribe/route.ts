@@ -23,11 +23,11 @@ async function createSupabaseServer() {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            for (const { name, value, options } of cookiesToSet) {
+              cookieStore.set(name, value, options);
+            }
           } catch {
-            // Server component, ignore
+            // Server component
           }
         },
       },
@@ -44,19 +44,13 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await request.json()) as SubscribeBody;
 
     if (!body.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
-      return NextResponse.json(
-        { error: "Invalid subscription data" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid subscription data" }, { status: 400 });
     }
 
     const { error } = await supabase.from("push_subscriptions").upsert(
@@ -64,7 +58,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         endpoint: body.endpoint,
         p256dh: body.keys.p256dh,
-        auth: body.keys.auth,
+        auth_key: body.keys.auth,
         updated_at: new Date().toISOString(),
       },
       {
@@ -73,17 +67,14 @@ export async function POST(request: Request) {
     );
 
     if (error) {
-      console.error("Subscribe error:", error);
-      return NextResponse.json(
-        { error: "Failed to save subscription" },
-        { status: 500 }
-      );
+      console.error("[subscribe] DB error:", error.message, error.code);
+      return NextResponse.json({ error: "DB error: " + error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error";
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[subscribe] Error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -97,10 +88,7 @@ export async function DELETE(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await request.json()) as { endpoint: string };
@@ -112,17 +100,13 @@ export async function DELETE(request: Request) {
       .eq("endpoint", body.endpoint);
 
     if (error) {
-      console.error("Unsubscribe error:", error);
-      return NextResponse.json(
-        { error: "Failed to remove subscription" },
-        { status: 500 }
-      );
+      console.error("[unsubscribe] DB error:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error";
+    const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

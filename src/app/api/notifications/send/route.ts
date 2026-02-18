@@ -7,71 +7,11 @@ interface PushSubscriptionRecord {
   user_id: string;
   endpoint: string;
   p256dh: string;
-  auth: string;
-}
-
-interface UserStats {
-  streak: number;
-  level: number;
-  display_name: string | null;
-}
-
-function getVapidKeys() {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const email = process.env.VAPID_EMAIL;
-
-  if (!publicKey || !privateKey || !email) {
-    throw new Error("VAPID keys not configured");
-  }
-
-  return { publicKey, privateKey, email };
-}
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error("Supabase admin credentials not configured");
-  }
-
-  return createClient(url, serviceKey);
-}
-
-function buildNotificationPayload(stats: UserStats | null): string {
-  const messages = [
-    "⚔️ Охотник, твои квесты ждут! Не дай рангу упасть.",
-    "🔥 Серия активна! Не сломай streak.",
-    "💀 Босс появился в подземелье. Готов сразиться?",
-    "🏆 Проверь магазин — новые награды доступны!",
-    "📊 Зайди в аналитику и оцени свой прогресс.",
-  ];
-
-  let title = "Solo Income System";
-  let body = messages[Math.floor(Math.random() * messages.length)];
-
-  if (stats) {
-    if (stats.streak > 0) {
-      body = `🔥 Streak: ${stats.streak} дней! ${body}`;
-    }
-    title = stats.display_name
-      ? `${stats.display_name}, Level ${stats.level}`
-      : `Охотник Level ${stats.level}`;
-  }
-
-  return JSON.stringify({
-    title,
-    body,
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    data: { url: "/dashboard" },
-  });
+  auth_key: string;
 }
 
 export async function GET(request: Request) {
   try {
-    // Verify cron secret
     const { searchParams } = new URL(request.url);
     const secret = searchParams.get("secret");
     const cronSecret = process.env.CRON_SECRET;
@@ -83,26 +23,31 @@ export async function GET(request: Request) {
       }
     }
 
-    const vapid = getVapidKeys();
-    const supabase = getSupabaseAdmin();
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+    const vapidEmail = process.env.VAPID_EMAIL;
+
+    if (!supabaseUrl || !serviceKey || !vapidPublic || !vapidPrivate || !vapidEmail) {
+      return NextResponse.json({ error: "Missing env vars" }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     webpush.setVapidDetails(
-      `mailto:${vapid.email}`,
-      vapid.publicKey,
-      vapid.privateKey
+      vapidEmail.startsWith("mailto:") ? vapidEmail : `mailto:${vapidEmail}`,
+      vapidPublic,
+      vapidPrivate
     );
 
-    // Get all subscriptions
     const { data: subscriptions, error: subError } = await supabase
       .from("push_subscriptions")
-      .select("id, user_id, endpoint, p256dh, auth");
+      .select("id, user_id, endpoint, p256dh, auth_key");
 
     if (subError) {
       console.error("Failed to fetch subscriptions:", subError);
-      return NextResponse.json(
-        { error: "Failed to fetch subscriptions" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: subError.message }, { status: 500 });
     }
 
     if (!subscriptions || subscriptions.length === 0) {
@@ -117,23 +62,19 @@ export async function GET(request: Request) {
 
     for (const sub of typedSubs) {
       try {
-        // Get user stats for personalized message
-        const { data: stats } = await supabase
-          .from("profiles")
-          .select("streak, level, display_name")
-          .eq("id", sub.user_id)
-          .single();
-
-        const payload = buildNotificationPayload(
-          stats as UserStats | null
-        );
+        const payload = JSON.stringify({
+          title: "Solo Income System",
+          body: "⚔️ Охотник, твои квесты ждут! Не дай рангу упасть.",
+          icon: "/icon-192.png",
+          data: { url: "/dashboard" },
+        });
 
         await webpush.sendNotification(
           {
             endpoint: sub.endpoint,
             keys: {
               p256dh: sub.p256dh,
-              auth: sub.auth,
+              auth: sub.auth_key,
             },
           },
           payload
@@ -146,14 +87,9 @@ export async function GET(request: Request) {
         if (pushError.statusCode === 410 || pushError.statusCode === 404) {
           staleIds.push(sub.id);
         }
-        console.error(
-          `Push failed for ${sub.user_id}:`,
-          pushError.statusCode
-        );
       }
     }
 
-    // Clean up stale subscriptions
     if (staleIds.length > 0) {
       await supabase
         .from("push_subscriptions")
@@ -168,8 +104,7 @@ export async function GET(request: Request) {
       total: typedSubs.length,
     });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Unknown error";
+    const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Push send error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
