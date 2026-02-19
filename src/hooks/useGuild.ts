@@ -7,13 +7,29 @@ import type {
   GuildMember,
   GuildMessage,
   GuildQuest,
-  GuildJoinRequest,
   CreateGuildInput,
   CreateGuildQuestInput,
 } from '@/types/guilds';
 
+interface RequestWithName {
+  id: string;
+  guild_id: string;
+  user_id: string;
+  message: string | null;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+  display_name?: string;
+}
+
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, options);
+  const res = await fetch(url, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      ...options?.headers,
+    },
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? 'Ошибка');
   return data as T;
@@ -106,7 +122,8 @@ export function useManageMember() {
 export function useGuildRequests() {
   return useQuery({
     queryKey: ['guild-requests'],
-    queryFn: () => fetchJSON<GuildJoinRequest[]>('/api/guilds/requests'),
+    queryFn: () => fetchJSON<RequestWithName[]>('/api/guilds/requests'),
+    refetchInterval: 10000,
   });
 }
 
