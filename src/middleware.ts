@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = new Set([
-  '/login',
+  '/auth',           // ← добавлено
   '/register',
   '/auth/callback',
   '/api/telegram/webhook',
@@ -59,12 +59,12 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname)
-    return NextResponse.redirect(loginUrl)
+    // ← ИСПРАВЛЕНО: редирект на /auth вместо /login
+    const authUrl = new URL('/auth', request.url)
+    authUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(authUrl)
   }
 
-  // Если на / — перенаправляем на dashboard
   if (pathname === '/') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
