@@ -15,6 +15,24 @@ const Schema = z.object({
   increment: z.number().int().min(1).max(100000),
 });
 
+interface MissionData {
+  mission_type: string;
+  target_value: number;
+}
+
+interface EntryRow {
+  id: string;
+  progress: number;
+  completed: boolean;
+  mission: MissionData | MissionData[] | null;
+}
+
+function extractMission(raw: MissionData | MissionData[] | null): MissionData | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return raw;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -38,7 +56,6 @@ export async function POST(request: NextRequest) {
     const { mission_type, increment } = parsed.data;
     const today = new Date().toISOString().slice(0, 10);
 
-    // Находим сегодняшние миссии этого типа
     const { data: entries, error: fetchErr } = await supabase
       .from("user_daily_missions")
       .select("id, progress, completed, mission:daily_missions(mission_type, target_value)")
@@ -52,8 +69,8 @@ export async function POST(request: NextRequest) {
 
     let updated = 0;
 
-    for (const entry of entries) {
-      const mission = entry.mission as { mission_type: string; target_value: number } | null;
+    for (const entry of entries as EntryRow[]) {
+      const mission = extractMission(entry.mission);
       if (!mission || mission.mission_type !== mission_type) continue;
 
       const newProgress = Math.min(entry.progress + increment, mission.target_value);
