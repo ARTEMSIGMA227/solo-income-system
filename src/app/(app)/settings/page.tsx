@@ -1,451 +1,335 @@
-'use client'
+// src/app/(app)/settings/page.tsx
+"use client";
 
-import { useState, useEffect, type FormEvent } from 'react'
-import { useProfile, useUpdateProfile, type ProfileUpdate } from '@/hooks/use-profile'
-import { profileUpdateSchema } from '@/lib/validations/profile'
-import { toast } from '@/components/ui/toaster'
-import { createBrowserSupabaseClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
-
-const TIMEZONES = [
-  'UTC',
-  'Europe/Moscow',
-  'Europe/Kiev',
-  'Europe/Minsk',
-  'Europe/London',
-  'Europe/Berlin',
-  'Europe/Paris',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Asia/Kolkata',
-  'Asia/Dubai',
-  'Australia/Sydney',
-  'Pacific/Auckland',
-] as const
-
-const FOCUS_PRESETS = [15, 25, 30, 45, 60, 90, 120] as const
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
+import type { Profile } from "@/types/database";
 
 export default function SettingsPage() {
-  const router = useRouter()
-  const { data: profile, isLoading, error } = useProfile()
-  const updateMutation = useUpdateProfile()
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [displayName, setDisplayName] = useState('')
-  const [timezone, setTimezone] = useState('UTC')
-  const [dailyIncomeTarget, setDailyIncomeTarget] = useState(10000)
-  const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(300000)
-  const [dailyActionsTarget, setDailyActionsTarget] = useState(5)
-  const [penaltyXp, setPenaltyXp] = useState(100)
-  const [focusDuration, setFocusDuration] = useState(25)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-  const [streakShieldActive, setStreakShieldActive] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [displayName, setDisplayName] = useState("");
+  const [dailyTarget, setDailyTarget] = useState(30);
+  const [monthlyTarget, setMonthlyTarget] = useState(150000);
+  const [penaltyXP, setPenaltyXP] = useState(100);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+
+  const router = useRouter();
+  const supabase = createClient();
+
+  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "";
 
   useEffect(() => {
-    if (profile) {
-      setDisplayName(profile.display_name)
-      setTimezone(profile.timezone)
-      setDailyIncomeTarget(profile.daily_income_target)
-      setMonthlyIncomeTarget(profile.monthly_income_target)
-      setDailyActionsTarget(profile.daily_actions_target)
-      setPenaltyXp(profile.penalty_xp)
-      setFocusDuration(profile.focus_duration_minutes)
-      setNotificationsEnabled(profile.notifications_enabled)
-      setStreakShieldActive(profile.streak_shield_active)
-    }
-  }, [profile])
+    async function load() {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) { router.push("/auth"); return; }
+      setUser(u);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setValidationErrors({})
-
-    const updates: ProfileUpdate = {
-      display_name: displayName,
-      timezone,
-      daily_income_target: dailyIncomeTarget,
-      monthly_income_target: monthlyIncomeTarget,
-      daily_actions_target: dailyActionsTarget,
-      penalty_xp: penaltyXp,
-      focus_duration_minutes: focusDuration,
-      notifications_enabled: notificationsEnabled,
-      streak_shield_active: streakShieldActive,
-    }
-
-    const parsed = profileUpdateSchema.safeParse(updates)
-
-    if (!parsed.success) {
-      const errors: Record<string, string> = {}
-      for (const issue of parsed.error.issues) {
-        const path = issue.path.join('.')
-        if (path && !errors[path]) {
-          errors[path] = issue.message
-        }
+      const { data: p } = await supabase.from("profiles").select("*").eq("id", u.id).single();
+      if (p) {
+        setProfile(p);
+        setDisplayName(p.display_name || "");
+        setDailyTarget(p.daily_actions_target || 30);
+        setMonthlyTarget(p.monthly_income_target || 150000);
+        setPenaltyXP(p.penalty_xp || 100);
+        setNotificationsEnabled(p.notifications_enabled ?? true);
       }
-      setValidationErrors(errors)
-      toast('Исправьте ошибки в форме', 'error')
-      return
+      setLoading(false);
     }
+    load();
+  }, [router, supabase]);
 
-    updateMutation.mutate(parsed.data as ProfileUpdate, {
-      onSuccess: () => {
-        toast('Настройки сохранены!', 'success')
-      },
-      onError: (err) => {
-        toast(`Ошибка: ${err.message}`, 'error')
-      },
-    })
+  async function handleSave() {
+    if (!user) return;
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({
+      display_name: displayName.trim() || "Охотник",
+      daily_actions_target: dailyTarget,
+      monthly_income_target: monthlyTarget,
+      penalty_xp: penaltyXP,
+      notifications_enabled: notificationsEnabled,
+      updated_at: new Date().toISOString(),
+    }).eq("id", user.id);
+
+    if (error) {
+      toast.error("Ошибка сохранения");
+    } else {
+      toast.success("Настройки сохранены");
+    }
+    setSaving(false);
   }
 
   async function handleLogout() {
-    const supabase = createBrowserSupabaseClient()
-    await supabase.auth.signOut()
-    router.push('/login')
+    await supabase.auth.signOut();
+    router.push("/auth");
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
-          <p className="text-gray-400">Загрузка настроек...</p>
-        </div>
-      </div>
-    )
+  async function handleResetProgress() {
+    if (!user) return;
+    await supabase.from("stats").update({
+      level: 1,
+      current_xp: 0,
+      total_xp_earned: 0,
+      total_xp_lost: 0,
+      total_actions: 0,
+      total_income: 0,
+      total_sales: 0,
+      gold: 0,
+      total_gold_earned: 0,
+      total_gold_spent: 0,
+      updated_at: new Date().toISOString(),
+    }).eq("user_id", user.id);
+
+    await supabase.from("profiles").update({
+      streak_current: 0,
+      streak_best: 0,
+      consecutive_misses: 0,
+      updated_at: new Date().toISOString(),
+    }).eq("id", user.id);
+
+    toast.success("Прогресс сброшен");
+    setShowResetConfirm(false);
+    router.refresh();
   }
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <div className="rounded-lg bg-red-900/30 p-6 text-center">
-          <p className="text-red-400">Ошибка загрузки профиля</p>
-          <p className="mt-1 text-sm text-red-500">{error.message}</p>
-        </div>
-      </div>
-    )
+  async function handleDeleteAccount() {
+    if (deleteText !== "УДАЛИТЬ") return;
+    if (!user) return;
+
+    // Удаляем данные пользователя
+    await supabase.from("completions").delete().eq("user_id", user.id);
+    await supabase.from("xp_events").delete().eq("user_id", user.id);
+    await supabase.from("gold_events").delete().eq("user_id", user.id);
+    await supabase.from("income_events").delete().eq("user_id", user.id);
+    await supabase.from("stats").delete().eq("user_id", user.id);
+    await supabase.from("profiles").delete().eq("id", user.id);
+    await supabase.auth.signOut();
+
+    toast.success("Аккаунт удалён");
+    router.push("/auth");
   }
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#0a0a0f", color: "#a78bfa", fontSize: "24px" }}>
+        ⚙️ Загрузка...
+      </div>
+    );
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "10px 14px", backgroundColor: "#16161f",
+    border: "1px solid #1e1e2e", borderRadius: "8px", color: "#e2e8f0",
+    fontSize: "14px", outline: "none",
+  };
+
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: "#12121a", border: "1px solid #1e1e2e",
+    borderRadius: "12px", padding: "16px", marginBottom: "12px",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: "12px", color: "#94a3b8", marginBottom: "6px", display: "block",
+  };
 
   return (
-    <div className="min-h-screen bg-gray-950 px-4 py-8">
-      <div className="mx-auto max-w-2xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">⚙️ Настройки</h1>
-          <p className="mt-1 text-gray-400">
-            Настройте систему под себя, Охотник
-          </p>
+    <div style={{ minHeight: "100vh", backgroundColor: "#0a0a0f", color: "#e2e8f0", padding: "16px", maxWidth: "600px", margin: "0 auto" }}>
+      <h1 style={{ fontSize: "20px", fontWeight: 800, marginBottom: "16px" }}>⚙️ Настройки</h1>
+
+      {/* Профиль */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>👤 Профиль</div>
+
+        <label style={labelStyle}>Имя охотника</label>
+        <input style={inputStyle} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Имя" />
+
+        <div style={{ marginTop: "12px" }}>
+          <label style={labelStyle}>Email</label>
+          <div style={{ ...inputStyle, color: "#64748b", backgroundColor: "#0f0f17" }}>
+            {user?.email || "—"}
+          </div>
+        </div>
+      </div>
+
+      {/* Цели */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>🎯 Цели</div>
+
+        <label style={labelStyle}>Действий в день</label>
+        <input style={inputStyle} type="number" value={dailyTarget} onChange={(e) => setDailyTarget(Number(e.target.value))} min={1} max={500} />
+
+        <div style={{ marginTop: "12px" }}>
+          <label style={labelStyle}>Цель дохода в месяц (₽)</label>
+          <input style={inputStyle} type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} min={1000} />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Профиль */}
-          <Section title="👤 Профиль">
-            <Field
-              label="Имя охотника"
-              error={validationErrors['display_name']}
-            >
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                maxLength={50}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white placeholder-gray-500 outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                placeholder="Ваше имя"
-              />
-            </Field>
+        <div style={{ marginTop: "12px" }}>
+          <label style={labelStyle}>Штраф XP за пропуск</label>
+          <input style={inputStyle} type="number" value={penaltyXP} onChange={(e) => setPenaltyXP(Number(e.target.value))} min={0} max={1000} />
+        </div>
+      </div>
 
-            <Field label="Таймзона" error={validationErrors['timezone']}>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-              >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </Section>
+      {/* Уведомления */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>🔔 Уведомления</div>
 
-          {/* Цели */}
-          <Section title="🎯 Цели">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field
-                label="Дневной доход (₽)"
-                error={validationErrors['daily_income_target']}
-              >
-                <input
-                  type="number"
-                  value={dailyIncomeTarget}
-                  onChange={(e) =>
-                    setDailyIncomeTarget(Number(e.target.value))
-                  }
-                  min={0}
-                  max={10_000_000}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                />
-              </Field>
+        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={notificationsEnabled}
+            onChange={(e) => setNotificationsEnabled(e.target.checked)}
+            style={{ accentColor: "#7c3aed", width: "18px", height: "18px" }}
+          />
+          <span style={{ fontSize: "14px" }}>Push-уведомления</span>
+        </label>
+      </div>
 
-              <Field
-                label="Месячный доход (₽)"
-                error={validationErrors['monthly_income_target']}
-              >
-                <input
-                  type="number"
-                  value={monthlyIncomeTarget}
-                  onChange={(e) =>
-                    setMonthlyIncomeTarget(Number(e.target.value))
-                  }
-                  min={0}
-                  max={100_000_000}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                />
-              </Field>
+      {/* Telegram */}
+      {botUsername && (
+        <div style={cardStyle}>
+          <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>🤖 Telegram бот</div>
+          <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "12px" }}>
+            Подключи бота для уведомлений и быстрых действий через Telegram
+          </p>
+          <a
+            href={`https://t.me/${botUsername}?start=${user?.id || ""}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "8px",
+              padding: "10px 20px", backgroundColor: "#2563eb", color: "#fff",
+              borderRadius: "10px", fontSize: "14px", fontWeight: 600,
+              textDecoration: "none", border: "none", cursor: "pointer",
+            }}
+          >
+            🤖 Подключить Telegram бота
+          </a>
+        </div>
+      )}
 
-              <Field
-                label="Действий в день"
-                error={validationErrors['daily_actions_target']}
-              >
-                <input
-                  type="number"
-                  value={dailyActionsTarget}
-                  onChange={(e) =>
-                    setDailyActionsTarget(Number(e.target.value))
-                  }
-                  min={1}
-                  max={100}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                />
-              </Field>
+      {/* Сохранить */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        style={{
+          width: "100%", padding: "14px", backgroundColor: "#7c3aed", color: "#fff",
+          border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: 700,
+          cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+          marginBottom: "12px",
+        }}
+      >
+        {saving ? "Сохраняю..." : "💾 Сохранить настройки"}
+      </button>
 
-              <Field
-                label="Штраф XP за пропуск"
-                error={validationErrors['penalty_xp']}
+      {/* Выход */}
+      <button
+        onClick={handleLogout}
+        style={{
+          width: "100%", padding: "12px", backgroundColor: "transparent",
+          color: "#94a3b8", border: "1px solid #1e1e2e", borderRadius: "12px",
+          fontSize: "14px", cursor: "pointer", marginBottom: "24px",
+        }}
+      >
+        🚪 Выйти из аккаунта
+      </button>
+
+      {/* Опасная зона */}
+      <div style={{ ...cardStyle, borderColor: "#ef444430" }}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px", color: "#ef4444" }}>
+          ⚠️ Опасная зона
+        </div>
+
+        {/* Сброс прогресса */}
+        {!showResetConfirm ? (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            style={{
+              width: "100%", padding: "10px", backgroundColor: "#f59e0b15",
+              color: "#f59e0b", border: "1px solid #f59e0b30", borderRadius: "10px",
+              fontSize: "13px", fontWeight: 600, cursor: "pointer", marginBottom: "10px",
+            }}
+          >
+            🔄 Сбросить весь прогресс
+          </button>
+        ) : (
+          <div style={{ marginBottom: "10px", padding: "12px", backgroundColor: "#f59e0b10", borderRadius: "10px", border: "1px solid #f59e0b30" }}>
+            <p style={{ fontSize: "12px", color: "#f59e0b", marginBottom: "10px" }}>
+              Уровень, XP, золото, серия — всё обнулится. Ты уверен?
+            </p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={handleResetProgress}
+                style={{ flex: 1, padding: "8px", backgroundColor: "#f59e0b", color: "#000", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}
               >
-                <input
-                  type="number"
-                  value={penaltyXp}
-                  onChange={(e) => setPenaltyXp(Number(e.target.value))}
-                  min={0}
-                  max={10_000}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                />
-              </Field>
+                Да, сбросить
+              </button>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                style={{ flex: 1, padding: "8px", backgroundColor: "#1e1e2e", color: "#94a3b8", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}
+              >
+                Отмена
+              </button>
             </div>
-          </Section>
-
-          {/* Фокус */}
-          <Section title="🎯 Фокус-таймер">
-            <Field
-              label="Длительность сессии (мин)"
-              error={validationErrors['focus_duration_minutes']}
-            >
-              <div className="flex flex-wrap gap-2">
-                {FOCUS_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setFocusDuration(preset)}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      focusDuration === preset
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
-                    }`}
-                  >
-                    {preset} мин
-                  </button>
-                ))}
-              </div>
-              <input
-                type="number"
-                value={focusDuration}
-                onChange={(e) => setFocusDuration(Number(e.target.value))}
-                min={1}
-                max={240}
-                className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-white outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-              />
-            </Field>
-          </Section>
-
-          {/* Переключатели */}
-          <Section title="🔔 Уведомления и защита">
-            <Toggle
-              label="Push-уведомления"
-              description="Получать напоминания о квестах и стриках"
-              checked={notificationsEnabled}
-              onChange={setNotificationsEnabled}
-            />
-            <Toggle
-              label="Щит стрика"
-              description="Защитить стрик от одного пропуска"
-              checked={streakShieldActive}
-              onChange={setStreakShieldActive}
-            />
-          </Section>
-
-          {/* Статистика стрика (read-only) */}
-          {profile && (
-            <Section title="🔥 Стрик">
-              <div className="grid grid-cols-3 gap-4">
-                <StatCard
-                  label="Текущий"
-                  value={profile.streak_current}
-                  icon="🔥"
-                />
-                <StatCard
-                  label="Лучший"
-                  value={profile.streak_best}
-                  icon="🏆"
-                />
-                <StatCard
-                  label="Пропуски подряд"
-                  value={profile.consecutive_misses}
-                  icon="💀"
-                />
-              </div>
-            </Section>
-          )}
-
-          {/* Кнопки */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <button
-              type="submit"
-              disabled={updateMutation.isPending}
-              className="rounded-lg bg-purple-600 px-6 py-3 font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {updateMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Сохранение...
-                </span>
-              ) : (
-                '💾 Сохранить настройки'
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-red-800 px-6 py-3 font-semibold text-red-400 transition hover:bg-red-900/30"
-            >
-              🚪 Выйти
-            </button>
           </div>
-        </form>
+        )}
 
-        {/* Мета-инфо */}
-        {profile && (
-          <div className="mt-8 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
-            <p className="text-xs text-gray-500">
-              ID: {profile.id}
+        {/* Удалить аккаунт */}
+        {!showDeleteConfirm ? (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            style={{
+              width: "100%", padding: "10px", backgroundColor: "#ef444415",
+              color: "#ef4444", border: "1px solid #ef444430", borderRadius: "10px",
+              fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            🗑️ Удалить аккаунт
+          </button>
+        ) : (
+          <div style={{ padding: "12px", backgroundColor: "#ef444410", borderRadius: "10px", border: "1px solid #ef444430" }}>
+            <p style={{ fontSize: "12px", color: "#ef4444", marginBottom: "8px" }}>
+              Введи <strong>УДАЛИТЬ</strong> для подтверждения. Все данные будут уничтожены.
             </p>
-            <p className="text-xs text-gray-500">
-              Создан: {new Date(profile.created_at).toLocaleDateString('ru-RU')}
-            </p>
-            <p className="text-xs text-gray-500">
-              Обновлён:{' '}
-              {new Date(profile.updated_at).toLocaleString('ru-RU')}
-            </p>
+            <input
+              style={{ ...inputStyle, borderColor: "#ef444450", marginBottom: "10px" }}
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder='Введи "УДАЛИТЬ"'
+            />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteText !== "УДАЛИТЬ"}
+                style={{
+                  flex: 1, padding: "8px", backgroundColor: deleteText === "УДАЛИТЬ" ? "#ef4444" : "#1e1e2e",
+                  color: deleteText === "УДАЛИТЬ" ? "#fff" : "#64748b", border: "none", borderRadius: "8px",
+                  fontSize: "13px", fontWeight: 700, cursor: deleteText === "УДАЛИТЬ" ? "pointer" : "not-allowed",
+                }}
+              >
+                Удалить навсегда
+              </button>
+              <button
+                onClick={() => { setShowDeleteConfirm(false); setDeleteText(""); }}
+                style={{ flex: 1, padding: "8px", backgroundColor: "#1e1e2e", color: "#94a3b8", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}
+              >
+                Отмена
+              </button>
+            </div>
           </div>
         )}
       </div>
-    </div>
-  )
-}
 
-/* ========== Sub-components ========== */
-
-function Section({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-6">
-      <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
-      <div className="space-y-4">{children}</div>
+      <div style={{ height: "32px" }} />
     </div>
-  )
-}
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string
-  error?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-gray-300">
-        {label}
-      </label>
-      {children}
-      {error && (
-        <p className="mt-1 text-xs text-red-400">{error}</p>
-      )}
-    </div>
-  )
-}
-
-function Toggle({
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  label: string
-  description: string
-  checked: boolean
-  onChange: (v: boolean) => void
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-gray-800/50 p-4">
-      <div>
-        <p className="font-medium text-white">{label}</p>
-        <p className="text-sm text-gray-400">{description}</p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative h-7 w-12 rounded-full transition-colors ${
-          checked ? 'bg-purple-600' : 'bg-gray-600'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-}: {
-  label: string
-  value: number
-  icon: string
-}) {
-  return (
-    <div className="rounded-lg bg-gray-800/50 p-4 text-center">
-      <p className="text-2xl">{icon}</p>
-      <p className="mt-1 text-2xl font-bold text-white">{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  )
+  );
 }

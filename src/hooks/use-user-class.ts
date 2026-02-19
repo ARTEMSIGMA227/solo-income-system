@@ -16,24 +16,38 @@ export function useUserClass() {
   return useQuery<UserClass | null>({
     queryKey: ["user-class"],
     queryFn: async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return null;
 
-      const { data, error } = await supabase
-        .from("user_classes")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+        const { data, error } = await supabase
+          .from("user_classes")
+          .select("*")
+          .eq("id", user.id)
+          .single();
 
-      if (error) {
-        if (error.code === "PGRST116") return null;
-        throw error;
+        if (error) {
+          // Таблица не существует или запись не найдена — не крашим
+          if (
+            error.code === "PGRST116" ||
+            error.code === "42P01" ||
+            error.message?.includes("406") ||
+            error.message?.includes("Not Acceptable")
+          ) {
+            return null;
+          }
+          console.warn("useUserClass error:", error.message);
+          return null;
+        }
+        return data as UserClass;
+      } catch {
+        return null;
       }
-      return data as UserClass;
     },
     staleTime: 60_000,
+    retry: false,
   });
 }

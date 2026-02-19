@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/hooks/use-profile";
@@ -56,14 +56,11 @@ function UserAvatar({ displayName }: { displayName: string | null | undefined })
   );
 }
 
-// ─── Desktop Sidebar ────────────────────────────────────────
-
 function Sidebar({ pathname }: { pathname: string }) {
   const { data: profile } = useProfile();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-white/10 bg-gray-950 lg:flex">
-      {/* Logo */}
       <div className="flex h-16 items-center gap-2 border-b border-white/10 px-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-xs font-black text-white">
           S
@@ -71,7 +68,6 @@ function Sidebar({ pathname }: { pathname: string }) {
         <span className="text-sm font-bold tracking-tight text-white">Solo Income</span>
       </div>
 
-      {/* User + Class + XP */}
       <div className="border-b border-white/10 px-5 py-4">
         <div className="flex items-center gap-3">
           <UserAvatar displayName={profile?.display_name} />
@@ -92,7 +88,6 @@ function Sidebar({ pathname }: { pathname: string }) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-1">
           {NAV_ITEMS.map((item) => {
@@ -124,8 +119,6 @@ function Sidebar({ pathname }: { pathname: string }) {
   );
 }
 
-// ─── Mobile Header ──────────────────────────────────────────
-
 function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const pathname = usePathname();
   const current = NAV_ITEMS.find((item) => isActive(pathname, item.href));
@@ -141,7 +134,7 @@ function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="flex-1 text-sm font-semibold text-white">
+        <span className="flex-1 truncate text-sm font-semibold text-white">
           {current?.label || "Solo Income"}
         </span>
         <ClassBadge compact />
@@ -152,8 +145,6 @@ function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     </header>
   );
 }
-
-// ─── Mobile Sidebar Overlay ─────────────────────────────────
 
 function MobileSidebarOverlay({
   open,
@@ -173,12 +164,10 @@ function MobileSidebarOverlay({
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-        }}
         role="button"
         tabIndex={0}
         aria-label="Закрыть меню"
+        onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
       />
       <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-gray-950 shadow-2xl">
         <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
@@ -242,26 +231,31 @@ function MobileSidebarOverlay({
   );
 }
 
-// ─── Mobile Bottom Bar ──────────────────────────────────────
-
 function BottomBar({ pathname }: { pathname: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Закрываем "Ещё" при смене страницы
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   const moreIsActive = BOTTOM_MORE_ITEMS.some((i) => isActive(pathname, i.href));
 
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setMoreOpen(false)}>
-          <div className="absolute inset-x-0 bottom-16 mx-4 rounded-xl border border-white/10 bg-gray-900 p-2 shadow-2xl">
+        <>
+          {/* Невидимый backdrop для закрытия по тапу */}
+          <div
+            className="fixed inset-0 z-30 lg:hidden"
+            onClick={() => setMoreOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-16 z-40 mx-4 rounded-xl border border-white/10 bg-gray-900 p-2 shadow-2xl lg:hidden">
             <div className="mb-2 flex items-center justify-between px-2">
               <span className="text-xs font-semibold text-gray-400">Ещё</span>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMoreOpen(false);
-                }}
+                onClick={() => setMoreOpen(false)}
                 className="text-gray-500 hover:text-white"
                 aria-label="Закрыть"
               >
@@ -288,7 +282,7 @@ function BottomBar({ pathname }: { pathname: string }) {
               );
             })}
           </div>
-        </div>
+        </>
       )}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 backdrop-blur-sm lg:hidden">
@@ -349,8 +343,6 @@ function BottomBar({ pathname }: { pathname: string }) {
   );
 }
 
-// ─── AppShell ───────────────────────────────────────────────
-
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -364,7 +356,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setMobileSidebarOpen(false)}
         pathname={pathname}
       />
-      <main className="min-h-screen pt-20 pb-20 lg:pt-0 lg:pb-0 lg:pl-60">
+      {/* pt-[72px] = header 56px + xp bar 16px */}
+      <main className="min-h-screen pt-[72px] pb-20 lg:pt-0 lg:pb-0 lg:pl-60">
         <div className="mx-auto max-w-7xl p-4 lg:p-6">{children}</div>
       </main>
       <BottomBar pathname={pathname} />
