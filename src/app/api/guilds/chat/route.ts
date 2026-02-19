@@ -32,31 +32,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([]);
   }
 
-  // Получаем уникальные user_id
   const userIds = [...new Set(messages.map((m) => m.user_id))];
 
-  // Пробуем получить профили
+  // Получаем display_name из profiles
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, display_name, email')
+    .select('id, display_name')
     .in('id', userIds);
 
-  // Также получаем данные из auth через email (fallback)
   const profileMap: Record<string, string> = {};
-
-  if (profiles && profiles.length > 0) {
-    profiles.forEach((p) => {
-      const name = p.display_name || p.email || null;
-      if (name) {
-        profileMap[p.id] = name;
-      }
-    });
-  }
-
-  // Если профиля нет — пробуем достать email текущего пользователя
-  if (user.email && !profileMap[user.id]) {
-    profileMap[user.id] = user.email;
-  }
+  (profiles ?? []).forEach((p) => {
+    if (p.display_name) {
+      profileMap[p.id] = p.display_name;
+    }
+  });
 
   const messagesWithNames = messages.reverse().map((m) => ({
     ...m,
@@ -108,13 +97,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Возвращаем сообщение с именем
-  const displayName = user.user_metadata?.display_name
-    ?? user.email
-    ?? `Охотник #${user.id.slice(0, 4)}`;
+  // Получаем display_name текущего пользователя
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle();
 
   return NextResponse.json({
     ...message,
-    display_name: displayName,
+    display_name: profile?.display_name ?? `Охотник #${user.id.slice(0, 4)}`,
   });
 }

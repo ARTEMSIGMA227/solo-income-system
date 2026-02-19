@@ -36,19 +36,23 @@ export async function GET() {
     .order('xp_contributed', { ascending: false });
 
   const memberUserIds = (members ?? []).map((m) => m.user_id);
+
+  // Получаем display_name из profiles
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, display_name, email')
+    .select('id, display_name')
     .in('id', memberUserIds);
 
-  const profileMap: Record<string, { display_name?: string; email?: string }> = {};
+  const profileMap: Record<string, string> = {};
   (profiles ?? []).forEach((p) => {
-    profileMap[p.id] = { display_name: p.display_name, email: p.email };
+    if (p.display_name) {
+      profileMap[p.id] = p.display_name;
+    }
   });
 
   const membersWithProfiles = (members ?? []).map((m) => ({
     ...m,
-    display_name: profileMap[m.user_id]?.display_name ?? profileMap[m.user_id]?.email ?? 'Охотник',
+    display_name: profileMap[m.user_id] ?? `Охотник #${m.user_id.slice(0, 4)}`,
   }));
 
   return NextResponse.json({

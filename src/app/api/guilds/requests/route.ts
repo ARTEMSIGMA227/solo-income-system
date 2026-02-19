@@ -9,7 +9,6 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Находим гильдию пользователя
   const { data: membership } = await supabase
     .from('guild_members')
     .select('guild_id, role')
@@ -24,7 +23,6 @@ export async function GET() {
     return NextResponse.json({ error: 'Нет прав для просмотра заявок' }, { status: 403 });
   }
 
-  // Получаем заявки
   const { data: requests, error } = await supabase
     .from('guild_join_requests')
     .select('*')
@@ -36,21 +34,23 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Получаем имена заявителей
   const userIds = (requests ?? []).map((r) => r.user_id);
 
   if (userIds.length === 0) {
     return NextResponse.json([]);
   }
 
+  // Получаем display_name из profiles
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, display_name, email')
+    .select('id, display_name')
     .in('id', userIds);
 
   const profileMap: Record<string, string> = {};
   (profiles ?? []).forEach((p) => {
-    profileMap[p.id] = p.display_name ?? p.email ?? `Охотник #${p.id.slice(0, 4)}`;
+    if (p.display_name) {
+      profileMap[p.id] = p.display_name;
+    }
   });
 
   const requestsWithNames = (requests ?? []).map((r) => ({
@@ -88,7 +88,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Нет прав' }, { status: 403 });
   }
 
-  // Находим заявку
   const { data: joinRequest } = await supabase
     .from('guild_join_requests')
     .select('*')
@@ -102,7 +101,6 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (action === 'accept') {
-    // Проверяем макс участников
     const { data: guild } = await supabase
       .from('guilds')
       .select('max_members')
@@ -118,7 +116,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Гильдия заполнена' }, { status: 400 });
     }
 
-    // Проверяем что заявитель не состоит в другой гильдии
     const { data: existingMember } = await supabase
       .from('guild_members')
       .select('id')
@@ -134,7 +131,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Пользователь уже состоит в другой гильдии' }, { status: 400 });
     }
 
-    // Добавляем участника
     const { error: joinError } = await supabase
       .from('guild_members')
       .insert({
@@ -148,7 +144,6 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Обновляем статус заявки
   const { error: updateError } = await supabase
     .from('guild_join_requests')
     .update({
