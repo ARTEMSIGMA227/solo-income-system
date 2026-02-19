@@ -68,7 +68,7 @@ export default function DashboardPage() {
       const { data: im } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
-      // ── Проверка вчерашнего дня (штраф) ──
+      // ── Вычисляем вчерашние данные один раз ──
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -80,6 +80,13 @@ export default function DashboardPage() {
       const yesterdayActions = yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
       const target = p?.daily_actions_target || 30;
 
+      // ── Мутабельная ссылка на актуальный профиль ──
+      let currentProfile = p;
+
+      // ══════════════════════════════════════════════
+      //  ШТРАФ ЗА НЕВЫПОЛНЕНИЕ ЦЕЛИ (XP penalty)
+      //  НЕ трогаем streak если вчера была хоть какая-то активность
+      // ══════════════════════════════════════════════
       const { data: penaltyCheck } = await supabase
         .from('xp_events').select('id')
         .eq('user_id', authUser.id).eq('event_type', 'penalty_miss').eq('event_date', yesterdayStr);
@@ -96,11 +103,16 @@ export default function DashboardPage() {
           event_date: yesterdayStr,
         });
 
-        await supabase.from('profiles').update({
+        // ★ FIX: сбрасываем серию ТОЛЬКО если вчера было 0 действий
+        const profileUpdate: Record<string, unknown> = {
           consecutive_misses: newMisses,
-          streak_current: 0,
           updated_at: new Date().toISOString(),
-        }).eq('id', authUser.id);
+        };
+        if (yesterdayActions === 0) {
+          profileUpdate.streak_current = 0;
+        }
+
+        await supabase.from('profiles').update(profileUpdate).eq('id', authUser.id);
 
         const newTotalLost = (s?.total_xp_lost || 0) + penaltyXP;
         const updateData: {
@@ -129,11 +141,17 @@ export default function DashboardPage() {
         const { data: freshStats } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
         if (freshStats) setStats(freshStats);
         const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
-        if (freshProfile) setProfile(freshProfile);
+        if (freshProfile) {
+          currentProfile = freshProfile;
+          setProfile(freshProfile);
+        }
       }
 
-      // ── Авто-обновление серии при наличии действий сегодня ──
-      if (loadedActions > 0 && p) {
+      // ══════════════════════════════════════════════
+      //  СЕРИЯ: авто-обновление при наличии действий сегодня
+      //  Используем currentProfile (свежий после штрафа)
+      // ══════════════════════════════════════════════
+      if (loadedActions > 0 && currentProfile) {
         const { data: streakCheck } = await supabase
           .from('xp_events').select('id')
           .eq('user_id', authUser.id)
@@ -144,16 +162,16 @@ export default function DashboardPage() {
 
         if (!alreadyCheckedIn) {
           const hadYesterday = yesterdayActions > 0;
-          const currentStreak = p.streak_current || 0;
+          const currentStreak = currentProfile.streak_current || 0;
           const newStreak = hadYesterday ? currentStreak + 1 : 1;
-          const newBest = Math.max(newStreak, p.streak_best || 0);
+          const newBest = Math.max(newStreak, currentProfile.streak_best || 0);
 
           await supabase.from('profiles').update({
             streak_current: newStreak,
             streak_best: newBest,
             consecutive_misses: 0,
             updated_at: new Date().toISOString(),
-          }).eq('id', authUser.id);
+          }).eq('id', currentProfile.id);
 
           await supabase.from('xp_events').insert({
             user_id: authUser.id, event_type: 'streak_checkin',
@@ -170,7 +188,7 @@ export default function DashboardPage() {
     loadData();
   }, [router]);
 
-  /* ═══════════════ ОБНОВЛЕНИЕ СЕРИИ ═══════════════ */
+  /* ═══════════════ ОБНОВЛЕНИЕ СЕРИИ ПРИ ПЕРВОМ ДЕЙСТВИИ ═══════════════ */
   async function updateStreakOnFirstAction() {
     if (!user || !profile) return;
     const supabase = createClient();
@@ -185,7 +203,7 @@ export default function DashboardPage() {
 
     if (check && check.length > 0) return;
 
-    // Проверяем вчерашнюю активность
+    // Проверяем вчерашнюю активность (ЛЮБУЮ, не по таргету)
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -332,8 +350,14 @@ export default function DashboardPage() {
       total_gold_earned: newTotalGold,
     });
 
+    // ★ СЕРИЯ: если первое действие сегодня ★
+    if (todayActions === 0) {
+      await updateStreakOnFirstAction();
+    }
+
     setTodayIncome(prev => prev + amount);
     setMonthIncome(prev => prev + amount);
+    setTodayActions(prev => prev + 1);
     toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
   }
 
@@ -456,8 +480,10 @@ export default function DashboardPage() {
         });
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
-        <DailyChallenge />
       })()}
+
+      {/* Ежедневный челлендж */}
+      <DailyChallenge />
 
       {/* Прогресс */}
       <div style={{

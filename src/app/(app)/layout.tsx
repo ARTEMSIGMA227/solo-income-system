@@ -1,4 +1,5 @@
 import BottomNav from '@/components/layout/BottomNav';
+import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
 
 export default function AppLayout({
   children,
@@ -10,6 +11,7 @@ export default function AppLayout({
       <div style={{ paddingBottom: '80px' }}>
         {children}
       </div>
+      <PWAInstallBanner />
       <BottomNav />
     </div>
   );

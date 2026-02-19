@@ -1,149 +1,241 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useQuery } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase/client'
 
-const L = {
-  title: '\ud83d\udcc5 \u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u044c \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0441\u0442\u0438',
-  less: '\u041c\u0435\u043d\u044c\u0448\u0435',
-  more: '\u0411\u043e\u043b\u044c\u0448\u0435',
-};
+/* ─── настройки ─── */
+const CELL = 13
+const GAP = 3
+const STEP = CELL + GAP
+const DAYS = 91 // 13 полных недель
+const LABEL_W = 28 // ширина колонки "Пн Ср Пт"
 
-interface DayEntry {
-  date: string;
-  count: number;
+const COLORS: Record<number, string> = {
+  0: '#1a1a2e',
+  1: '#0e4429',
+  2: '#006d32',
+  3: '#26a641',
+  4: '#39d353',
 }
 
+const MONTHS = [
+  'Янв','Фев','Мар','Апр','Май','Июн',
+  'Июл','Авг','Сен','Окт','Ноя','Дек',
+]
+
+const DAY_LABELS: [number, string][] = [
+  [0, 'Пн'],
+  [2, 'Ср'],
+  [4, 'Пт'],
+]
+
+/* ─── утилиты ─── */
+function fmtDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
+/** Пн=0 … Вс=6 */
+function mondayIdx(d: Date): number {
+  const dow = d.getDay() // Вс=0
+  return dow === 0 ? 6 : dow - 1
+}
+
+function level(n: number): number {
+  if (n === 0) return 0
+  if (n <= 1) return 1
+  if (n <= 3) return 2
+  if (n <= 6) return 3
+  return 4
+}
+
+/* ─── типы ─── */
+interface Cell {
+  key: string
+  col: number
+  row: number
+  count: number
+  lvl: number
+  tip: string
+}
+
+/* ─── компонент ─── */
 export default function ActivityCalendar() {
-  const [data, setData] = useState<Map<string, number>>(new Map());
-  const [loading, setLoading] = useState(true);
+  const supabase = createClient()
 
-  useEffect(() => {
-    const supabase = createClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['activity-heatmap'],
+    queryFn: async () => {
+      const today = new Date()
+      const start = new Date(today)
+      start.setDate(start.getDate() - DAYS + 1)
 
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      const startISO = fmtDate(start) + 'T00:00:00'
+      const endISO = fmtDate(today) + 'T23:59:59'
 
-      // Last 90 days of completions
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 89);
-      const startStr = startDate.toLocaleDateString('en-CA');
+      const [{ data: comp }, { data: xp }] = await Promise.all([
+        supabase
+          .from('completions')
+          .select('completed_at')
+          .gte('completed_at', startISO)
+          .lte('completed_at', endISO),
+        supabase
+          .from('xp_events')
+          .select('created_at')
+          .gte('created_at', startISO)
+          .lte('created_at', endISO),
+      ])
 
-      const { data: completions } = await supabase
-        .from('completions')
-        .select('completion_date, count_done')
-        .eq('user_id', user.id)
-        .gte('completion_date', startStr);
+      const map = new Map<string, number>()
+      comp?.forEach((r) => {
+        const k = fmtDate(new Date(r.completed_at))
+        map.set(k, (map.get(k) ?? 0) + 1)
+      })
+      xp?.forEach((r) => {
+        const k = fmtDate(new Date(r.created_at))
+        map.set(k, (map.get(k) ?? 0) + 1)
+      })
+      return map
+    },
+    staleTime: 5 * 60_000,
+  })
 
-      const map = new Map<string, number>();
-      if (completions) {
-        for (const c of completions) {
-          const existing = map.get(c.completion_date) || 0;
-          map.set(c.completion_date, existing + c.count_done);
-        }
-      }
+  if (isLoading) {
+    return (
+      <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+        <div className="h-[140px] animate-pulse rounded bg-zinc-800" />
+      </div>
+    )
+  }
 
-      setData(map);
-      setLoading(false);
+  const counts = data ?? new Map<string, number>()
+
+  /* ── строим сетку ── */
+  const today = new Date()
+  const start = new Date(today)
+  start.setDate(start.getDate() - DAYS + 1)
+
+  const cells: Cell[] = []
+  const monthMarks: { label: string; col: number }[] = []
+
+  let col = 0
+  let prevMonth = -1
+  const cursor = new Date(start)
+
+  // Сдвигаем начало на понедельник той же или предыдущей недели
+  const startOffset = mondayIdx(cursor)
+  cursor.setDate(cursor.getDate() - startOffset)
+
+  while (cursor <= today) {
+    const row = mondayIdx(cursor) // 0-6 = Пн-Вс
+    const key = fmtDate(cursor)
+    const c = counts.get(key) ?? 0
+
+    // Первый день недели (понедельник) → новая колонка
+    if (row === 0 && cells.length > 0) col++
+
+    // Метка месяца
+    const m = cursor.getMonth()
+    if (m !== prevMonth) {
+      monthMarks.push({ label: MONTHS[m], col })
+      prevMonth = m
     }
 
-    load();
-  }, []);
+    const tip = cursor.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
 
-  if (loading) return null;
+    cells.push({
+      key,
+      col,
+      row,
+      count: c,
+      lvl: level(c),
+      tip: `${tip}: ${c} действий`,
+    })
 
-  // Generate 90 days grid
-  const days: DayEntry[] = [];
-  const now = new Date();
-  for (let i = 89; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toLocaleDateString('en-CA');
-    days.push({ date: dateStr, count: data.get(dateStr) || 0 });
+    cursor.setDate(cursor.getDate() + 1)
   }
 
-  const maxCount = Math.max(...days.map(d => d.count), 1);
+  const totalCols = col + 1
+  const svgW = LABEL_W + totalCols * STEP
+  const svgH = 20 + 7 * STEP
 
-  function getColor(count: number): string {
-    if (count === 0) return '#16161f';
-    const intensity = Math.min(count / maxCount, 1);
-    if (intensity < 0.25) return '#1a3a1a';
-    if (intensity < 0.5) return '#2d5a2d';
-    if (intensity < 0.75) return '#22c55e80';
-    return '#22c55e';
-  }
-
-  function getTooltip(day: DayEntry): string {
-    const d = new Date(day.date);
-    const label = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
-    return `${label}: ${day.count}`;
-  }
-
-  // 13 columns x 7 rows (weeks)
-  const weeks: DayEntry[][] = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
+  const totalActions = Array.from(counts.values()).reduce((s, v) => s + v, 0)
+  const activeDays = Array.from(counts.values()).filter((v) => v > 0).length
 
   return (
-    <div style={{
-      backgroundColor: '#12121a',
-      border: '1px solid #1e1e2e',
-      borderRadius: '12px',
-      padding: '16px',
-      marginBottom: '16px',
-    }}>
-      <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-        {L.title}
+    <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-bold text-white">📅 Активность за 90 дней</h3>
+        <span className="text-xs text-zinc-500">
+          {activeDays} дн · {totalActions} действий
+        </span>
       </div>
 
-      <div style={{
-        display: 'flex',
-        gap: '3px',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-      }}>
-        {weeks.map((week, wi) => (
-          <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {week.map((day) => (
-              <div
-                key={day.date}
-                title={getTooltip(day)}
-                style={{
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '3px',
-                  backgroundColor: getColor(day.count),
-                  border: '1px solid #1e1e2e',
-                  cursor: 'default',
-                }}
-              />
-            ))}
-          </div>
-        ))}
+      <div className="overflow-x-auto pb-1">
+        <svg width={svgW} height={svgH}>
+          {/* подписи месяцев */}
+          {monthMarks.map((mm, i) => (
+            <text
+              key={`m${i}`}
+              x={LABEL_W + mm.col * STEP}
+              y={12}
+              fill="#71717a"
+              fontSize={10}
+            >
+              {mm.label}
+            </text>
+          ))}
+
+          {/* подписи дней */}
+          {DAY_LABELS.map(([row, label]) => (
+            <text
+              key={`d${row}`}
+              x={0}
+              y={20 + row * STEP + CELL - 2}
+              fill="#52525b"
+              fontSize={10}
+            >
+              {label}
+            </text>
+          ))}
+
+          {/* ячейки */}
+          {cells.map((c) => (
+            <rect
+              key={c.key}
+              x={LABEL_W + c.col * STEP}
+              y={20 + c.row * STEP}
+              width={CELL}
+              height={CELL}
+              rx={2}
+              ry={2}
+              fill={COLORS[c.lvl]}
+              className="hover:brightness-150 transition-all"
+            >
+              <title>{c.tip}</title>
+            </rect>
+          ))}
+        </svg>
       </div>
 
-      {/* Legend */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: '4px', marginTop: '10px', fontSize: '10px', color: '#94a3b8',
-      }}>
-        <span>{L.less}</span>
-        {[0, 0.25, 0.5, 0.75, 1].map((intensity, i) => (
+      {/* легенда */}
+      <div className="flex items-center justify-end gap-1.5 mt-3">
+        <span className="text-[10px] text-zinc-500 mr-1">Меньше</span>
+        {[0, 1, 2, 3, 4].map((l) => (
           <div
-            key={i}
-            style={{
-              width: '12px', height: '12px', borderRadius: '2px',
-              backgroundColor: intensity === 0 ? '#16161f' :
-                intensity < 0.5 ? '#1a3a1a' :
-                intensity < 0.75 ? '#2d5a2d' :
-                intensity < 1 ? '#22c55e80' : '#22c55e',
-            }}
+            key={l}
+            className="rounded-sm"
+            style={{ width: CELL, height: CELL, backgroundColor: COLORS[l] }}
           />
         ))}
-        <span>{L.more}</span>
+        <span className="text-[10px] text-zinc-500 ml-1">Больше</span>
       </div>
     </div>
-  );
+  )
 }

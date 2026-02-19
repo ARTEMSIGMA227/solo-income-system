@@ -59,56 +59,26 @@ export function serializeSubscription(
   };
 }
 
-export async function subscribeToPush(): Promise<boolean> {
+export async function subscribeToPush(): Promise<PushSubscription | null> {
+  if (!isPushSupported() || !VAPID_PUBLIC_KEY) return null;
+
   try {
-    if (!isPushSupported()) {
-      console.warn('Push notifications not supported');
-      return false;
-    }
-
-    if (!VAPID_PUBLIC_KEY) {
-      console.error('VAPID public key not configured');
-      return false;
-    }
-
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      return false;
-    }
+    if (permission !== 'granted') return null;
 
-    const registration = await navigator.serviceWorker.register('/sw.js');
-    await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.ready;
 
-    let subscription = await registration.pushManager.getSubscription();
+    const existing = await registration.pushManager.getSubscription();
+    if (existing) return existing;
 
-    if (!subscription) {
-      const keyArray = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: keyArray.buffer as ArrayBuffer,
-      });
-    }
-
-    const serialized = serializeSubscription(subscription);
-
-    // Обёртка {subscription: ...} — API ждёт именно этот формат
-    const response = await fetch('/api/notifications/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: serialized }),
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.error('Failed to save subscription on server:', err);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Push subscription failed:', error);
-    return false;
+    return subscription;
+  } catch {
+    return null;
   }
 }
 
