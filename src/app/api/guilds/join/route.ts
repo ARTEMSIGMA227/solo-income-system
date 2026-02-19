@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     invite_code?: string;
   };
 
+  // Проверяем, не состоит ли уже в гильдии
   const { data: existingMembership } = await supabase
     .from('guild_members')
     .select('id')
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Находим гильдию
   let guildQuery = supabase.from('guilds').select('*');
 
   if (invite_code) {
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Гильдия не найдена' }, { status: 404 });
   }
 
+  // Проверяем количество участников
   const { count } = await supabase
     .from('guild_members')
     .select('id', { count: 'exact', head: true })
@@ -52,7 +55,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Гильдия заполнена' }, { status: 400 });
   }
 
-  if (guild.is_public || invite_code) {
+  // Публичная гильдия — вступаем сразу
+  if (guild.is_public) {
     const { error: joinError } = await supabase
       .from('guild_members')
       .insert({
@@ -68,17 +72,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, joined: true });
   }
 
+  // Приватная гильдия — ВСЕГДА заявка (даже с инвайт-кодом)
+  // Проверяем нет ли уже заявки
+  const { data: existingRequest } = await supabase
+    .from('guild_join_requests')
+    .select('id, status')
+    .eq('guild_id', guild.id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (existingRequest) {
+    if (existingRequest.status === 'pending') {
+      return NextResponse.json({ error: 'Заявка уже подана и ожидает рассмотрения' }, { status: 400 });
+    }
+    // Если была отклонена — удаляем старую и создаём новую
+    await supabase
+      .from('guild_join_requests')
+      .delete()
+      .eq('id', existingRequest.id);
+  }
+
   const { error: requestError } = await supabase
     .from('guild_join_requests')
     .insert({
       guild_id: guild.id,
       user_id: user.id,
+      message: invite_code ? `Вступает по коду: ${invite_code}` : null,
     });
 
   if (requestError) {
-    if (requestError.code === '23505') {
-      return NextResponse.json({ error: 'Заявка уже подана' }, { status: 400 });
-    }
     return NextResponse.json({ error: requestError.message }, { status: 500 });
   }
 

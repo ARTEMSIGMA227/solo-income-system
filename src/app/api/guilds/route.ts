@@ -13,10 +13,22 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search');
   const showPublic = searchParams.get('public') === 'true';
 
+  // Получаем гильдию текущего пользователя
+  const { data: myMembership } = await supabase
+    .from('guild_members')
+    .select('guild_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
   let query = supabase.from('guilds').select('*');
 
   if (showPublic) {
-    query = query.eq('is_public', true);
+    // Показываем публичные + свою гильдию (даже если приватная)
+    if (myMembership) {
+      query = query.or(`is_public.eq.true,id.eq.${myMembership.guild_id}`);
+    } else {
+      query = query.eq('is_public', true);
+    }
   }
 
   if (search) {
@@ -32,6 +44,11 @@ export async function GET(request: NextRequest) {
   }
 
   const guildIds = (data ?? []).map((g) => g.id);
+
+  if (guildIds.length === 0) {
+    return NextResponse.json([]);
+  }
+
   const { data: memberCounts } = await supabase
     .from('guild_members')
     .select('guild_id')

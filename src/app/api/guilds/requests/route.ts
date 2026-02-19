@@ -9,24 +9,56 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Находим гильдию пользователя
   const { data: membership } = await supabase
     .from('guild_members')
     .select('guild_id, role')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (!membership || !['leader', 'officer'].includes(membership.role)) {
-    return NextResponse.json({ error: 'Нет прав' }, { status: 403 });
+  if (!membership) {
+    return NextResponse.json({ error: 'Вы не в гильдии' }, { status: 403 });
   }
 
-  const { data: requests } = await supabase
+  if (membership.role !== 'leader' && membership.role !== 'officer') {
+    return NextResponse.json({ error: 'Нет прав для просмотра заявок' }, { status: 403 });
+  }
+
+  // Получаем заявки
+  const { data: requests, error } = await supabase
     .from('guild_join_requests')
     .select('*')
     .eq('guild_id', membership.guild_id)
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
 
-  return NextResponse.json(requests ?? []);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Получаем имена заявителей
+  const userIds = (requests ?? []).map((r) => r.user_id);
+
+  if (userIds.length === 0) {
+    return NextResponse.json([]);
+  }
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, email')
+    .in('id', userIds);
+
+  const profileMap: Record<string, string> = {};
+  (profiles ?? []).forEach((p) => {
+    profileMap[p.id] = p.display_name ?? p.email ?? `Охотник #${p.id.slice(0, 4)}`;
+  });
+
+  const requestsWithNames = (requests ?? []).map((r) => ({
+    ...r,
+    display_name: profileMap[r.user_id] ?? `Охотник #${r.user_id.slice(0, 4)}`,
+  }));
+
+  return NextResponse.json(requestsWithNames);
 }
 
 export async function PATCH(request: NextRequest) {
@@ -42,16 +74,21 @@ export async function PATCH(request: NextRequest) {
     action: 'accept' | 'reject';
   };
 
+  if (!request_id || !action) {
+    return NextResponse.json({ error: 'request_id и action обязательны' }, { status: 400 });
+  }
+
   const { data: membership } = await supabase
     .from('guild_members')
     .select('guild_id, role')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (!membership || !['leader', 'officer'].includes(membership.role)) {
+  if (!membership || (membership.role !== 'leader' && membership.role !== 'officer')) {
     return NextResponse.json({ error: 'Нет прав' }, { status: 403 });
   }
 
+  // Находим заявку
   const { data: joinRequest } = await supabase
     .from('guild_join_requests')
     .select('*')
@@ -65,6 +102,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (action === 'accept') {
+    // Проверяем макс участников
     const { data: guild } = await supabase
       .from('guilds')
       .select('max_members')
@@ -80,6 +118,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Гильдия заполнена' }, { status: 400 });
     }
 
+    // Проверяем что заявитель не состоит в другой гильдии
     const { data: existingMember } = await supabase
       .from('guild_members')
       .select('id')
@@ -92,9 +131,10 @@ export async function PATCH(request: NextRequest) {
         .update({ status: 'rejected', resolved_at: new Date().toISOString() })
         .eq('id', request_id);
 
-      return NextResponse.json({ error: 'Пользователь уже состоит в гильдии' }, { status: 400 });
+      return NextResponse.json({ error: 'Пользователь уже состоит в другой гильдии' }, { status: 400 });
     }
 
+    // Добавляем участника
     const { error: joinError } = await supabase
       .from('guild_members')
       .insert({
@@ -108,7 +148,8 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  await supabase
+  // Обновляем статус заявки
+  const { error: updateError } = await supabase
     .from('guild_join_requests')
     .update({
       status: action === 'accept' ? 'accepted' : 'rejected',
@@ -116,5 +157,9 @@ export async function PATCH(request: NextRequest) {
     })
     .eq('id', request_id);
 
-  return NextResponse.json({ success: true });
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, action });
 }
