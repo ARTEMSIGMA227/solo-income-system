@@ -1,18 +1,21 @@
-import BottomNav from '@/components/layout/BottomNav';
-import PWAInstallBanner from '@/components/pwa/PWAInstallBanner';
+// src/app/(app)/layout.tsx
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { AppShell } from "@/components/layout/app-shell";
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div>
-      <div style={{ paddingBottom: '80px' }}>
-        {children}
-      </div>
-      <PWAInstallBanner />
-      <BottomNav />
-    </div>
-  );
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  return <AppShell>{children}</AppShell>;
 }

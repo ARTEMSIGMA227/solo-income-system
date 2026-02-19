@@ -1,10 +1,35 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+const PUBLIC_PATHS = new Set([
+  '/login',
+  '/register',
+  '/auth/callback',
+  '/api/telegram/webhook',
+  '/api/cron',
+])
+
+function isPublicPath(pathname: string): boolean {
+  if (PUBLIC_PATHS.has(pathname)) return true
+  if (pathname.startsWith('/api/telegram/')) return true
+  if (pathname.startsWith('/_next/')) return true
+  if (pathname.startsWith('/favicon')) return true
+  if (pathname === '/manifest.json') return true
+  if (pathname === '/sw.js') return true
+  return false
+}
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  const { pathname } = request.nextUrl
+
+  if (isPublicPath(pathname)) {
+    return NextResponse.next()
+  }
+
+  let response = NextResponse.next({
+    request: { headers: request.headers },
+  })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,75 +37,43 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
-          supabaseResponse = NextResponse.next({
-            request,
-          });
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.next({
+            request: { headers: request.headers },
+          })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
+            response.cookies.set(name, value, options)
+          )
         },
       },
-    },
-  );
+    }
+  )
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl;
-
-  // API routes — just pass through (auth handled in route handlers)
-  if (pathname.startsWith('/api/')) {
-    return supabaseResponse;
+  if (!user) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  const protectedPaths = [
-    '/dashboard',
-    '/quests',
-    '/shop',
-    '/focus',
-    '/bosses',
-    '/analytics',
-    '/achievements',
-    '/stats',
-    '/settings',
-    '/advisor',
-    '/leaderboard',
-  ];
-
-  const isProtected = protectedPaths.some(
-    (p) => pathname === p || pathname.startsWith(p + '/'),
-  );
-
-  if (isProtected && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth';
-    return NextResponse.redirect(url);
-  }
-
-  if (pathname === '/auth' && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
-  }
-
+  // Если на / — перенаправляем на dashboard
   if (pathname === '/') {
-    const url = request.nextUrl.clone();
-    url.pathname = user ? '/dashboard' : '/auth';
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  return supabaseResponse;
+  return response
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icons/|manifest.json|sw.js|offline.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|sw.js).*)',
   ],
-};
+}

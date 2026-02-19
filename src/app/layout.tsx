@@ -1,64 +1,36 @@
-import type { Metadata, Viewport } from 'next';
-import { Toaster } from 'sonner';
-import QueryProvider from '@/components/providers/QueryProvider';
-import './globals.css';
+import type { Metadata, Viewport } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Providers } from './providers'
+import { Toaster } from '@/components/ui/toaster'
+
+const inter = Inter({ subsets: ['latin', 'cyrillic'] })
 
 export const metadata: Metadata = {
   title: 'Solo Income System',
-  description: 'Жёсткая система прокачки дохода в стиле Solo Leveling',
+  description: 'Система прокачки дохода в стиле Solo Leveling',
   manifest: '/manifest.json',
-};
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: '#0a0a0f',
-};
+  themeColor: '#0a0a0a',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <html lang="ru">
-      <head>
-        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-      </head>
-      <body style={{
-        minHeight: '100vh',
-        backgroundColor: '#0a0a0f',
-        color: '#e2e8f0',
-        fontFamily: 'Inter, system-ui, sans-serif',
-      }}>
-        <QueryProvider>
+    <html lang="ru" className="dark">
+      <body className={`${inter.className} bg-gray-950 text-white antialiased`}>
+        <Providers>
           {children}
-          <Toaster
-            position="top-center"
-            theme="dark"
-            toastOptions={{
-              style: {
-                background: '#12121a',
-                border: '1px solid #1e1e2e',
-                color: '#e2e8f0',
-              },
-            }}
-          />
-        </QueryProvider>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js');
-                });
-              }
-            `,
-          }}
-        />
+          <Toaster />
+        </Providers>
       </body>
     </html>
-  );
+  )
 }

@@ -16,6 +16,7 @@ import DeathScreen from '@/components/streak/DeathScreen';
 import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { generateAdvice } from '@/lib/advisor';
 import DailyChallenge from './DailyChallenge';
+import { DailyMissionsCard } from "@/components/dashboard/daily-missions-card";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
