@@ -1,3 +1,4 @@
+// src/app/(app)/settings/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { User } from "@supabase/supabase-js";
 import type { Profile } from "@/types/database";
+import { Copy, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -12,18 +14,25 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Profile Settings
   const [displayName, setDisplayName] = useState("");
   const [dailyTarget, setDailyTarget] = useState(30);
   const [monthlyTarget, setMonthlyTarget] = useState(150000);
   const [penaltyXP, setPenaltyXP] = useState(100);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
+  // Modals
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState("");
 
-  const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME || "";
+  // Telegram Link
+  const [tgLinked, setTgLinked] = useState(false);
+  const [tgUsername, setTgUsername] = useState<string | null>(null);
+  const [tgToken, setTgToken] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState("");
+  const [tgLoading, setTgLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +53,17 @@ export default function SettingsPage() {
         setPenaltyXP(p.penalty_xp || 100);
         setNotificationsEnabled(p.notifications_enabled ?? true);
       }
+
+      // Check TG status
+      try {
+        const res = await fetch("/api/telegram/link");
+        const data = await res.json();
+        setTgLinked(data.linked);
+        setTgUsername(data.username);
+      } catch (err) {
+        console.error("Failed to check TG status", err);
+      }
+
       setLoading(false);
     }
     load();
@@ -109,6 +129,43 @@ export default function SettingsPage() {
     window.location.href = "/auth";
   }
 
+  async function generateTgToken() {
+    setTgLoading(true);
+    try {
+      const res = await fetch("/api/telegram/link", { method: "POST" });
+      const data = await res.json();
+      if (data.token) {
+        setTgToken(data.token);
+        setBotUsername(data.botUsername);
+      } else {
+        toast.error("Ошибка получения кода");
+      }
+    } catch {
+      toast.error("Ошибка соединения");
+    } finally {
+      setTgLoading(false);
+    }
+  }
+
+  async function unlinkTelegram() {
+    if (!confirm("Отвязать Telegram?")) return;
+    try {
+      await fetch("/api/telegram/link", { method: "DELETE" });
+      setTgLinked(false);
+      setTgUsername(null);
+      toast.success("Telegram отвязан");
+    } catch {
+      toast.error("Ошибка отвязки");
+    }
+  }
+
+  const copyToken = () => {
+    if (tgToken) {
+      navigator.clipboard.writeText(`/start ${tgToken}`);
+      toast.success("Команда скопирована!");
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#0a0a0f", color: "#a78bfa" }}>
@@ -171,17 +228,82 @@ export default function SettingsPage() {
         </label>
       </div>
 
-      {/* Telegram */}
-      {botUsername && (
-        <div style={cardStyle}>
-          <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>🤖 Telegram бот</div>
-          <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "12px" }}>Подключи бота для уведомлений</p>
-          <a href={`https://t.me/${botUsername}?start=${user?.id || ""}`} target="_blank" rel="noopener noreferrer" style={{
-            display: "inline-flex", padding: "10px 20px", backgroundColor: "#2563eb", color: "#fff",
-            borderRadius: "10px", fontSize: "14px", fontWeight: 600, textDecoration: "none",
-          }}>🤖 Подключить бота</a>
+      {/* Telegram - ВОССТАНОВЛЕНО С КОДОМ */}
+      <div style={cardStyle}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+          🤖 Telegram бот
+          {tgLinked && <span style={{ fontSize: "10px", backgroundColor: "#22c55e20", color: "#22c55e", padding: "2px 6px", borderRadius: "4px" }}>ПОДКЛЮЧЕН</span>}
         </div>
-      )}
+        
+        {tgLinked ? (
+          <div>
+            <p style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "8px" }}>
+              Аккаунт привязан: <span style={{ color: "#fff" }}>@{tgUsername || "Неизвестно"}</span>
+            </p>
+            <button 
+              onClick={unlinkTelegram}
+              style={{ padding: "8px 12px", backgroundColor: "#ef444420", color: "#ef4444", border: "1px solid #ef444450", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+            >
+              Отвязать
+            </button>
+          </div>
+        ) : (
+          <div>
+            {!tgToken ? (
+              <div>
+                <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "12px" }}>
+                  Получи код и отправь боту, чтобы связать аккаунт.
+                </p>
+                <button 
+                  onClick={generateTgToken}
+                  disabled={tgLoading}
+                  style={{ width: "100%", padding: "10px", backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer", opacity: tgLoading ? 0.7 : 1 }}
+                >
+                  {tgLoading ? "Генерация..." : "🔑 Получить код привязки"}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "8px" }}>
+                  1. Скопируй команду ниже.<br/>
+                  2. Перейди в бота и отправь её.
+                </p>
+                <div 
+                  onClick={copyToken}
+                  style={{ 
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    backgroundColor: "#000", padding: "12px", borderRadius: "8px",
+                    border: "1px dashed #4b5563", cursor: "pointer", marginBottom: "12px"
+                  }}
+                >
+                  <code style={{ fontSize: "16px", color: "#a78bfa", fontWeight: "bold" }}>/start {tgToken}</code>
+                  <Copy size={16} className="text-gray-400" />
+                </div>
+                
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <a 
+                    href={`https://t.me/${botUsername}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ flex: 1, padding: "10px", backgroundColor: "#2563eb", color: "#fff", textAlign: "center", borderRadius: "8px", fontSize: "13px", fontWeight: 600, textDecoration: "none" }}
+                  >
+                    Перейти к боту →
+                  </a>
+                  <button 
+                    onClick={() => setTgToken(null)}
+                    style={{ padding: "10px", backgroundColor: "#1e1e2e", color: "#94a3b8", border: "none", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}
+                  >
+                    Назад
+                  </button>
+                </div>
+                <p style={{ fontSize: "10px", color: "#64748b", marginTop: "8px", textAlign: "center" }}>
+                  Код действителен 10 минут
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Сохранить */}
       <button onClick={handleSave} disabled={saving} style={{
@@ -194,7 +316,7 @@ export default function SettingsPage() {
       <div style={{ ...cardStyle, borderColor: "#ef444430" }}>
         <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "16px", color: "#ef4444" }}>⚠️ Опасная зона</div>
 
-        {/* Выход - желтая */}
+        {/* Выход */}
         {!showLogoutConfirm ? (
           <button onClick={() => setShowLogoutConfirm(true)} style={{
             width: "100%", padding: "12px", backgroundColor: "#f59e0b20",
@@ -211,7 +333,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Сброс - красная */}
+        {/* Сброс */}
         {!showResetConfirm ? (
           <button onClick={() => setShowResetConfirm(true)} style={{
             width: "100%", padding: "12px", backgroundColor: "#ef444420",
@@ -228,7 +350,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Удаление - темно-красная */}
+        {/* Удаление */}
         {!showDeleteConfirm ? (
           <button onClick={() => setShowDeleteConfirm(true)} style={{
             width: "100%", padding: "12px", backgroundColor: "#dc262620",
