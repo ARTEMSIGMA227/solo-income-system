@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       totalXP += ALL_COMPLETE_BONUS_XP;
     }
 
-    // Award gold
+    // Award gold via direct stats update
     if (goldAwarded > 0) {
       const today = new Date().toISOString().slice(0, 10);
 
@@ -98,33 +98,26 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         amount: goldAwarded,
         event_type: "mission_reward",
-        description: `Награда за миссию`,
+        description: "Награда за миссию",
         event_date: today,
       });
 
-      await supabase.rpc("add_gold", {
-        p_user_id: user.id,
-        p_amount: goldAwarded,
-      }).catch(() => {
-        // Fallback: direct update if RPC doesn't exist
-        return supabase
+      const { data: statsData } = await supabase
+        .from("stats")
+        .select("gold, total_gold_earned")
+        .eq("user_id", user.id)
+        .single();
+
+      if (statsData) {
+        await supabase
           .from("stats")
-          .select("gold, total_gold_earned")
-          .eq("user_id", user.id)
-          .single()
-          .then(({ data: statsData }) => {
-            if (statsData) {
-              return supabase
-                .from("stats")
-                .update({
-                  gold: (statsData.gold || 0) + goldAwarded,
-                  total_gold_earned: (statsData.total_gold_earned || 0) + goldAwarded,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("user_id", user.id);
-            }
-          });
-      });
+          .update({
+            gold: (statsData.gold || 0) + goldAwarded,
+            total_gold_earned: (statsData.total_gold_earned || 0) + goldAwarded,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id);
+      }
     }
 
     // Award XP
