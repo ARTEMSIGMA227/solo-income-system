@@ -96,7 +96,6 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Emoji */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-xl">
           {entry.claimed ? (
             <CheckCircle2 className="h-5 w-5 text-emerald-400" />
@@ -105,7 +104,6 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
           )}
         </div>
 
-        {/* Content */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-semibold text-white">{mission.title}</h4>
@@ -118,7 +116,6 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
 
           <p className="mt-0.5 text-xs text-gray-400">{mission.description}</p>
 
-          {/* Progress bar */}
           <div className="mt-2 flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
               <div
@@ -135,14 +132,12 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
             </span>
           </div>
 
-          {/* Rewards */}
           <div className="mt-1.5 flex items-center gap-3 text-[10px] text-gray-500">
             <span>⚡ {mission.xp_reward} XP</span>
             {mission.gold_reward > 0 && <span>🪙 {mission.gold_reward}</span>}
           </div>
         </div>
 
-        {/* Claim button */}
         {entry.completed && !entry.claimed && (
           <button
             type="button"
@@ -160,7 +155,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
         )}
 
         {entry.claimed && (
-          <span className="shrink-0 text-xs font-medium text-emerald-400">✓</span>
+          <span className="shrink-0 text-xs font-medium text-emerald-400">✔</span>
         )}
       </div>
     </div>
@@ -175,6 +170,7 @@ export function DailyMissionsCard() {
   const claimedCount = missions?.filter((m) => m.claimed).length ?? 0;
   const totalCount = missions?.length ?? 0;
   const allClaimed = totalCount > 0 && claimedCount === totalCount;
+  const hasBonusSlots = totalCount > 3;
 
   if (isLoading) {
     return (
@@ -203,7 +199,6 @@ export function DailyMissionsCard() {
 
   return (
     <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-violet-400" />
@@ -211,6 +206,11 @@ export function DailyMissionsCard() {
           <span className="rounded-full bg-violet-600/20 px-2 py-0.5 text-[10px] font-bold text-violet-400">
             {completedCount}/{totalCount}
           </span>
+          {hasBonusSlots && (
+            <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+              🧬 +{totalCount - 3}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 text-xs text-gray-500">
           <Clock className="h-3.5 w-3.5" />
@@ -218,7 +218,6 @@ export function DailyMissionsCard() {
         </div>
       </div>
 
-      {/* All complete banner */}
       {allClaimed && (
         <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-600/10 p-3">
           <span className="text-xl">🏆</span>
@@ -231,7 +230,6 @@ export function DailyMissionsCard() {
         </div>
       )}
 
-      {/* Mission list */}
       <div className="space-y-2">
         {missions.map((entry) => (
           <MissionRow key={entry.id} entry={entry} />
