@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
@@ -35,8 +36,7 @@ function useStatsLevel() {
         const xpToNext = xpToNextLevel(level);
 
         return { level, currentXP, xpToNext };
-      } catch (err) {
-        console.error("useStatsLevel error:", err);
+      } catch {
         return null;
       }
     },
@@ -51,6 +51,18 @@ interface XPBarProps {
 
 export function XPBar({ compact = false }: XPBarProps) {
   const { data: level, isLoading } = useStatsLevel();
+  const [pulse, setPulse] = useState(false);
+  const prevXP = useRef<number | null>(null);
+
+  // Пульсация при изменении XP
+  useEffect(() => {
+    if (level && prevXP.current !== null && level.currentXP !== prevXP.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 800);
+      return () => clearTimeout(t);
+    }
+    if (level) prevXP.current = level.currentXP;
+  }, [level]);
 
   if (isLoading) {
     return (
@@ -68,16 +80,19 @@ export function XPBar({ compact = false }: XPBarProps) {
   if (compact) {
     return (
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-xs font-bold text-violet-400">
+        <span className={`shrink-0 text-xs font-bold text-violet-400 transition-transform duration-300 ${pulse ? 'scale-125' : 'scale-100'}`}>
           Lv.{level.level}
         </span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-gradient-to-r from-violet-600 to-violet-400 transition-all duration-700 ease-out"
-            style={{ width: `${pct}%` }}
+            style={{
+              width: `${pct}%`,
+              boxShadow: pulse ? '0 0 12px #7c3aed80' : 'none',
+            }}
           />
         </div>
-        <span className="shrink-0 text-[10px] tabular-nums text-gray-500">
+        <span className={`shrink-0 text-[10px] tabular-nums transition-colors duration-300 ${pulse ? 'text-violet-400' : 'text-gray-500'}`}>
           {level.currentXP}/{level.xpToNext}
         </span>
       </div>
@@ -87,15 +102,20 @@ export function XPBar({ compact = false }: XPBarProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-violet-400">Lv.{level.level}</span>
-        <span className="text-[10px] tabular-nums text-gray-500">
+        <span className={`text-xs font-bold transition-all duration-300 ${pulse ? 'text-violet-300 scale-110' : 'text-violet-400 scale-100'}`}>
+          Lv.{level.level}
+        </span>
+        <span className={`text-[10px] tabular-nums transition-colors duration-300 ${pulse ? 'text-violet-400' : 'text-gray-500'}`}>
           {level.currentXP} / {level.xpToNext} XP
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/10">
         <div
           className="h-full rounded-full bg-gradient-to-r from-violet-600 via-violet-500 to-violet-400 transition-all duration-700 ease-out"
-          style={{ width: `${pct}%` }}
+          style={{
+            width: `${pct}%`,
+            boxShadow: pulse ? '0 0 16px #7c3aed60' : 'none',
+          }}
         />
       </div>
     </div>

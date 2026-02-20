@@ -57,15 +57,40 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
     );
   }
 
+  const showFire = streak >= 7;
+
   return (
     <div style={{
       backgroundColor: '#12121a', border: `1px solid ${color}30`,
       borderRadius: '12px', padding: '12px 16px', marginBottom: '12px',
       boxShadow: streak >= 7 ? `0 0 20px ${color}15` : 'none',
+      position: 'relative', overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+      {/* Огненные частицы */}
+      {showFire && (
+        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+          {[...Array(6)].map((_, i) => (
+            <div key={i} style={{
+              position: 'absolute',
+              bottom: '-10px',
+              left: `${10 + i * 16}%`,
+              width: '6px', height: '6px',
+              borderRadius: '50%',
+              backgroundColor: color,
+              opacity: 0.4,
+              animation: `fireParticle ${1.5 + i * 0.3}s ease-in-out infinite`,
+              animationDelay: `${i * 0.2}s`,
+            }} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '24px' }}>
+          <span style={{
+            fontSize: '24px',
+            animation: streak >= 7 ? 'streakBounce 2s ease-in-out infinite' : 'none',
+          }}>
             {streak >= 30 ? '👑' : streak >= 14 ? '⚡' : streak >= 7 ? '💎' : streak >= 3 ? '🔥' : '✨'}
           </span>
           <div>
@@ -81,14 +106,14 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
           padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
           backgroundColor: color + '20', color,
           border: `1px solid ${color}40`,
+          animation: streak >= 14 ? 'multiplierGlow 2s ease-in-out infinite' : 'none',
         }}>
           x{multiplier}
         </div>
       </div>
 
-      {/* Прогресс до следующего милестоуна */}
       {streak < 30 && (
-        <div>
+        <div style={{ position: 'relative', zIndex: 2 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#475569', marginBottom: '4px' }}>
             <span>До x{next.multiplier}</span>
             <span>{streak}/{next.target} дней</span>
@@ -96,11 +121,28 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
           <div style={{ width: '100%', height: '4px', backgroundColor: '#16161f', borderRadius: '2px', overflow: 'hidden' }}>
             <div style={{
               width: `${progressToNext}%`, height: '100%', borderRadius: '2px',
-              backgroundColor: color, transition: 'width 0.5s ease',
+              backgroundColor: color, transition: 'width 0.7s ease',
+              boxShadow: streak >= 7 ? `0 0 8px ${color}` : 'none',
             }} />
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes fireParticle {
+          0% { transform: translateY(0) scale(1); opacity: 0.4; }
+          50% { transform: translateY(-40px) scale(0.6); opacity: 0.7; }
+          100% { transform: translateY(-80px) scale(0); opacity: 0; }
+        }
+        @keyframes streakBounce {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.15); }
+        }
+        @keyframes multiplierGlow {
+          0%, 100% { box-shadow: 0 0 0px transparent; }
+          50% { box-shadow: 0 0 15px ${color}40; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,7 +1,6 @@
-// src/app/(app)/dashboard/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
@@ -19,6 +18,8 @@ import { generateAdvice } from '@/lib/advisor';
 import DailyChallenge from './DailyChallenge';
 import { DailyMissionsCard } from "@/components/dashboard/daily-missions-card";
 import { useMissionTracker } from "@/hooks/use-mission-tracker";
+import LevelUpPopup from '@/components/effects/LevelUpPopup';
+import { FloatXPContainer, useFloatXP } from '@/components/effects/FloatXP';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -36,8 +37,12 @@ export default function DashboardPage() {
   const [deathType, setDeathType] = useState<'miss' | 'level_down'>('miss');
   const [deathXP, setDeathXP] = useState(100);
   const [deathMisses, setDeathMisses] = useState(0);
+  
   const router = useRouter();
   const { trackProgress } = useMissionTracker();
+  const { items: floatItems, addFloat } = useFloatXP();
+  const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
+  const prevLevelRef = useRef<number | null>(null);
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
@@ -56,7 +61,10 @@ export default function DashboardPage() {
       setProfile(p);
 
       const { data: s } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
-      setStats(s);
+      if (s) {
+        setStats(s);
+        prevLevelRef.current = s.level;
+      }
 
       const { data: cc } = await supabase.from('character_config').select('*').eq('user_id', authUser.id).single();
       setCharConfig(cc);
@@ -129,7 +137,10 @@ export default function DashboardPage() {
         setShowDeath(true);
 
         const { data: freshStats } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
-        if (freshStats) setStats(freshStats);
+        if (freshStats) {
+          setStats(freshStats);
+          prevLevelRef.current = freshStats.level;
+        }
         const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
         if (freshProfile) { currentProfile = freshProfile; setProfile(freshProfile); }
       }
@@ -218,20 +229,44 @@ export default function DashboardPage() {
     const newTotalGold = (stats.total_gold_earned || 0) + gold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
+    // Check for level up BEFORE updating stats
+    const oldLevel = stats.level;
+    const newLevel = levelInfo.level;
+
     await supabase.from('stats').update({
-      level: levelInfo.level, current_xp: levelInfo.currentXP,
+      level: newLevel, current_xp: levelInfo.currentXP,
       total_xp_earned: newTotalEarned, total_actions: newActions,
       gold: newGold, total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold });
+    setStats({ 
+      ...stats, 
+      level: newLevel, 
+      current_xp: levelInfo.currentXP, 
+      total_xp_earned: newTotalEarned, 
+      total_actions: newActions, 
+      gold: newGold, 
+      total_gold_earned: newTotalGold 
+    });
 
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayActions(prev => prev + 1);
+    
     toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
 
-    // ★ МИССИИ ★
+    // Effects
+    addFloat(`+${xp} XP`, '#a78bfa');
+    addFloat(`+${gold} 🪙`, '#f59e0b');
+
+    // Level Up check
+    if (oldLevel < newLevel) {
+      setLevelUpData({ level: newLevel, title: levelInfo.title });
+    }
+
+    prevLevelRef.current = newLevel;
+
+    // Update missions
     void trackProgress('complete_quests', 1);
   }
 
@@ -260,14 +295,27 @@ export default function DashboardPage() {
     const newTotalGold = (stats.total_gold_earned || 0) + gold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
+    // Check for level up
+    const oldLevel = stats.level;
+    const newLevel = levelInfo.level;
+
     await supabase.from('stats').update({
-      level: levelInfo.level, current_xp: levelInfo.currentXP,
+      level: newLevel, current_xp: levelInfo.currentXP,
       total_xp_earned: newTotalEarned, total_income: newIncome,
       total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_income: newIncome, total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold });
+    setStats({ 
+      ...stats, 
+      level: newLevel, 
+      current_xp: levelInfo.currentXP, 
+      total_xp_earned: newTotalEarned, 
+      total_income: newIncome, 
+      total_sales: stats.total_sales + 1, 
+      gold: newGold, 
+      total_gold_earned: newTotalGold 
+    });
 
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayIncome(prev => prev + amount);
@@ -275,7 +323,18 @@ export default function DashboardPage() {
     setTodayActions(prev => prev + 1);
     toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
 
-    // ★ МИССИИ ★
+    // Effects
+    addFloat(`+${xp} XP`, '#a78bfa');
+    addFloat(`+${gold} 🪙`, '#f59e0b');
+    addFloat(`+${formatCurrency(amount)}`, '#22c55e');
+
+    if (oldLevel < newLevel) {
+      setLevelUpData({ level: newLevel, title: levelInfo.title });
+    }
+
+    prevLevelRef.current = newLevel;
+
+    // Update missions
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
   }
@@ -304,6 +363,16 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
+      {/* Effects */}
+      <FloatXPContainer items={floatItems} />
+      {levelUpData && (
+        <LevelUpPopup
+          level={levelUpData.level}
+          title={levelUpData.title}
+          onClose={() => setLevelUpData(null)}
+        />
+      )}
+
       {showDeath && <DeathScreen type={deathType} xpLost={deathXP} consecutiveMisses={deathMisses} onAccept={() => setShowDeath(false)} />}
       {showEditor && user && <CharacterEditor userId={user.id} config={charConfig} onSave={(c) => { setCharConfig(c); setShowEditor(false); }} onClose={() => setShowEditor(false)} />}
 
@@ -340,7 +409,17 @@ export default function DashboardPage() {
 
       {profile && stats && (() => {
         const now = new Date();
-        const { greeting, advice } = generateAdvice({ stats, profile, todayActions, todayIncome, monthIncome, hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(), daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() });
+        const { greeting, advice } = generateAdvice({ 
+          stats, 
+          profile, 
+          todayActions, 
+          todayIncome, 
+          monthIncome, 
+          hour: currentHour, 
+          dayOfWeek: now.getDay(), 
+          dayOfMonth: now.getDate(), 
+          daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() 
+        });
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
       })()}
@@ -382,14 +461,21 @@ export default function DashboardPage() {
             { fn: addIncome, icon: '💰', label: 'Доход', xp: 100, gold: 50 },
           ].map((btn, i) => (
             <button key={i} onClick={btn.fn} style={{
-              padding: '12px 8px', backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
-              border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`, borderRadius: '10px',
-              color: i === 5 ? '#22c55e' : '#e2e8f0', cursor: 'pointer', fontSize: '13px', textAlign: 'center',
+              padding: '12px 8px',
+              backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
+              border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`,
+              borderRadius: '10px',
+              color: i === 5 ? '#22c55e' : '#e2e8f0',
+              cursor: 'pointer', fontSize: '13px', textAlign: 'center',
             }}>
               <div>{btn.icon}</div>
               <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
-              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>+{btn.xp} XP</div>
-              <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>+{btn.gold} 🪙</div>
+              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>
+                +{btn.xp} XP
+              </div>
+              <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>
+                +{btn.gold} 🪙
+              </div>
             </button>
           ))}
         </div>
