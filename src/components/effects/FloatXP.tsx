@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface FloatItem {
   id: number;
   text: string;
   color: string;
-  x: number;
 }
 
 let nextId = 0;
@@ -14,14 +13,13 @@ let nextId = 0;
 export function useFloatXP() {
   const [items, setItems] = useState<FloatItem[]>([]);
 
-  const addFloat = (text: string, color: string = '#a78bfa') => {
+  const addFloat = useCallback((text: string, color: string = '#a78bfa') => {
     const id = nextId++;
-    const x = 30 + Math.random() * 40;
-    setItems(prev => [...prev, { id, text, color, x }]);
+    setItems(prev => [...prev, { id, text, color }]);
     setTimeout(() => {
       setItems(prev => prev.filter(i => i.id !== id));
-    }, 1500);
-  };
+    }, 1600);
+  }, []);
 
   return { items, addFloat };
 }
@@ -31,33 +29,45 @@ export function FloatXPContainer({ items }: { items: FloatItem[] }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 100,
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      pointerEvents: 'none',
+      zIndex: 100,
+      width: '200px',
+      height: '200px',
     }}>
-      {items.map(item => (
-        <FloatText key={item.id} text={item.text} color={item.color} x={item.x} />
+      {items.map((item, index) => (
+        <FloatText key={item.id} text={item.text} color={item.color} index={index} />
       ))}
     </div>
   );
 }
 
-function FloatText({ text, color, x }: { text: string; color: string; x: number }) {
-  const [visible, setVisible] = useState(false);
+function FloatText({ text, color, index }: { text: string; color: string; index: number }) {
+  const [animate, setAnimate] = useState(false);
 
   useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
+    const raf = requestAnimationFrame(() => setAnimate(true));
+    return () => cancelAnimationFrame(raf);
   }, []);
+
+  // Каждый элемент немного смещён по горизонтали
+  const offsetX = (index % 3 - 1) * 30;
 
   return (
     <div style={{
       position: 'absolute',
-      left: `${x}%`,
-      top: visible ? '35%' : '55%',
-      opacity: visible ? 0 : 1,
-      fontSize: '20px',
+      left: '50%',
+      top: '50%',
+      transform: `translate(calc(-50% + ${offsetX}px), ${animate ? '-80px' : '0px'})`,
+      opacity: animate ? 0 : 1,
+      fontSize: '18px',
       fontWeight: 800,
       color,
-      textShadow: `0 0 20px ${color}80`,
-      transition: 'all 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+      textShadow: `0 0 12px ${color}60`,
+      transition: 'all 1.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
       pointerEvents: 'none',
       whiteSpace: 'nowrap',
     }}>
