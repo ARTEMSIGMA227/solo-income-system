@@ -28,6 +28,7 @@ import {
   getStreakShieldDays,
   loadSkillEffectsFromDB,
 } from '@/lib/skill-effects';
+import { addXPToActiveTerritory } from '@/lib/territory-integration';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -96,7 +97,6 @@ export default function DashboardPage() {
       }
       setUser(authUser);
 
-      // Load skills FIRST so penalty/shield logic can use them
       const effects = await loadSkillEffectsFromDB(authUser.id);
       setSkillEffects(effects);
 
@@ -172,7 +172,6 @@ export default function DashboardPage() {
 
       const alreadyPenalized = penaltyCheck && penaltyCheck.length > 0;
 
-      // Check for streak shield usage already recorded
       const { data: shieldCheck } = await supabase
         .from('xp_events')
         .select('id')
@@ -183,12 +182,10 @@ export default function DashboardPage() {
       const alreadyShielded = shieldCheck && shieldCheck.length > 0;
 
       if (yesterdayActions < target && !alreadyPenalized && !alreadyShielded && yesterdayStr !== today) {
-        // Check streak shield
         const shieldDays = getStreakShieldDays(effects);
         let shieldUsed = false;
 
         if (shieldDays > 0 && yesterdayActions === 0) {
-          // Count shields used this month
           const monthKey = getMonthKey();
           const monthStart = `${monthKey}-01`;
           const { data: shieldUses } = await supabase
@@ -201,7 +198,6 @@ export default function DashboardPage() {
           const usedThisMonth = shieldUses?.length || 0;
 
           if (usedThisMonth < shieldDays) {
-            // Use shield — no penalty, no streak break
             await supabase.from('xp_events').insert({
               user_id: authUser.id,
               event_type: 'streak_shield',
@@ -531,6 +527,25 @@ export default function DashboardPage() {
 
     prevLevelRef.current = newLevel;
     void trackProgress('complete_quests', 1);
+
+    // --- TERRITORY XP INTEGRATION (20% of earned XP) ---
+    try {
+      const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
+      if (territoryResult) {
+        if (territoryResult.captured) {
+          toast.success(
+            `🎉 ${territoryResult.territoryIcon} ${territoryResult.territoryName} ЗАХВАЧЕНА!`,
+            { description: 'Территория покорена! Награды получены.', duration: 5000 }
+          );
+        } else {
+          toast(`🗺️ +${territoryResult.xpAdded} XP → ${territoryResult.territoryIcon}`, {
+            duration: 2000,
+          });
+        }
+      }
+    } catch {
+      // Territory XP is non-critical
+    }
   }
 
   async function addIncome(event?: React.MouseEvent) {
@@ -650,6 +665,25 @@ export default function DashboardPage() {
     prevLevelRef.current = newLevel;
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
+
+    // --- TERRITORY XP INTEGRATION (20% of earned XP) ---
+    try {
+      const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
+      if (territoryResult) {
+        if (territoryResult.captured) {
+          toast.success(
+            `🎉 ${territoryResult.territoryIcon} ${territoryResult.territoryName} ЗАХВАЧЕНА!`,
+            { description: 'Территория покорена! Награды получены.', duration: 5000 }
+          );
+        } else {
+          toast(`🗺️ +${territoryResult.xpAdded} XP → ${territoryResult.territoryIcon}`, {
+            duration: 2000,
+          });
+        }
+      }
+    } catch {
+      // Territory XP is non-critical
+    }
   }
 
   if (loading) {

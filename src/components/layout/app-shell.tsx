@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Trophy,
   GitBranch,
+  Map,
 } from "lucide-react";
 
 interface NavItem {
@@ -34,8 +35,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, mobileBottom: true },
   { href: "/quests", label: "Квесты", icon: Swords, mobileBottom: true },
   { href: "/skills", label: "Навыки", icon: GitBranch, mobileBottom: true },
-  { href: "/shop", label: "Магазин", icon: ShoppingBag, mobileBottom: false },
   { href: "/focus", label: "Фокус", icon: Timer, mobileBottom: true },
+  { href: "/map", label: "Карта", icon: Map, mobileBottom: false },
+  { href: "/shop", label: "Магазин", icon: ShoppingBag, mobileBottom: false },
   { href: "/bosses", label: "Боссы", icon: Skull, mobileBottom: false },
   { href: "/guilds", label: "Гильдии", icon: Users, mobileBottom: false },
   { href: "/achievements", label: "Ачивки", icon: Trophy, mobileBottom: false },
