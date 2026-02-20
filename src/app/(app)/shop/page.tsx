@@ -6,6 +6,8 @@ import { formatNumber } from '@/lib/utils';
 import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
 import type { ShopItem, InventoryItem, Stats } from '@/types/database';
+import { loadSkillEffectsFromDB, applyShopDiscount } from '@/lib/skill-effects';
+import type { SkillEffectType } from '@/lib/skill-tree';
 
 export default function ShopPage() {
   const [items, setItems] = useState<ShopItem[]>([]);
@@ -15,6 +17,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'shop' | 'inventory'>('shop');
   const [filter, setFilter] = useState<'all' | 'potion' | 'artifact' | 'scroll'>('all');
+  const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>({});
 
   useEffect(() => {
     const supabase = createClient();
@@ -22,6 +25,9 @@ export default function ShopPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
+
+      const effects = await loadSkillEffectsFromDB(user.id);
+      setSkillEffects(effects);
 
       const { data: shopData } = await supabase.from('shop_items').select('*').eq('is_available', true).order('category').order('price');
       setItems(shopData || []);
@@ -37,12 +43,19 @@ export default function ShopPage() {
     load();
   }, []);
 
+  function getDiscountedPrice(basePrice: number): number {
+    return applyShopDiscount(basePrice, skillEffects);
+  }
+
+  const discountPercent = skillEffects.shop_discount_percent || 0;
+
   async function buyItem(item: ShopItem) {
     if (!userId || !stats) return;
     const gold = stats.gold || 0;
+    const finalPrice = getDiscountedPrice(item.price);
 
-    if (gold < item.price) {
-      toast.error(`Не хватает монет! Нужно ${item.price} 🪙, у тебя ${gold} 🪙`);
+    if (gold < finalPrice) {
+      toast.error(`Не хватает монет! Нужно ${finalPrice} 🪙, у тебя ${gold} 🪙`);
       return;
     }
 
@@ -55,15 +68,15 @@ export default function ShopPage() {
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    // Списать Gold
-    const newGold = gold - item.price;
-    const newSpent = (stats.total_gold_spent || 0) + item.price;
+    const newGold = gold - finalPrice;
+    const newSpent = (stats.total_gold_spent || 0) + finalPrice;
     await supabase.from('stats').update({ gold: newGold, total_gold_spent: newSpent, updated_at: new Date().toISOString() }).eq('user_id', userId);
 
-    // Лог
-    await supabase.from('gold_events').insert({ user_id: userId, amount: -item.price, event_type: 'shop_purchase', description: `Покупка: ${item.name}`, event_date: today });
+    const desc = finalPrice < item.price
+      ? `Покупка: ${item.name} (скидка ${discountPercent}%: ${item.price}→${finalPrice})`
+      : `Покупка: ${item.name}`;
+    await supabase.from('gold_events').insert({ user_id: userId, amount: -finalPrice, event_type: 'shop_purchase', description: desc, event_date: today });
 
-    // Добавить в инвентарь
     const existing = inventory.find(i => i.item_key === item.item_key);
     if (existing) {
       await supabase.from('inventory').update({ quantity: existing.quantity + 1 }).eq('id', existing.id);
@@ -74,7 +87,9 @@ export default function ShopPage() {
     }
 
     setStats({ ...stats, gold: newGold, total_gold_spent: newSpent });
-    toast.success(`Куплено: ${item.icon} ${item.name}!`);
+
+    const savedText = finalPrice < item.price ? ` (сэкономлено ${item.price - finalPrice} 🪙)` : '';
+    toast.success(`Куплено: ${item.icon} ${item.name}!${savedText}`);
   }
 
   async function useItem(invItem: InventoryItem) {
@@ -85,7 +100,6 @@ export default function ShopPage() {
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    // Обработка эффекта
     if (item.effect_type === 'instant_xp') {
       const xp = item.effect_value;
       const newTotalEarned = stats.total_xp_earned + xp;
@@ -112,15 +126,13 @@ export default function ShopPage() {
       await supabase.from('profiles').update({ consecutive_misses: 0 }).eq('id', userId);
       toast.success('Счётчик пропусков сброшен! 🔄');
     } else if (item.duration_hours) {
-      // Активация с таймером
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + item.duration_hours);
       await supabase.from('inventory').update({ is_active: true, activated_at: new Date().toISOString(), expires_at: expiresAt.toISOString() }).eq('id', invItem.id);
       setInventory(prev => prev.map(i => i.id === invItem.id ? { ...i, is_active: true, activated_at: new Date().toISOString(), expires_at: expiresAt.toISOString() } : i));
       toast.success(`${item.icon} ${item.name} активировано на ${item.duration_hours}ч!`);
-      return; // Не уменьшаем количество для зелий с таймером
+      return;
     } else if (item.category === 'artifact') {
-      // Переключить артефакт
       const newActive = !invItem.is_active;
       await supabase.from('inventory').update({ is_active: newActive }).eq('id', invItem.id);
       setInventory(prev => prev.map(i => i.id === invItem.id ? { ...i, is_active: newActive } : i));
@@ -128,7 +140,6 @@ export default function ShopPage() {
       return;
     }
 
-    // Уменьшить количество
     if (invItem.quantity <= 1) {
       await supabase.from('inventory').delete().eq('id', invItem.id);
       setInventory(prev => prev.filter(i => i.id !== invItem.id));
@@ -156,16 +167,20 @@ export default function ShopPage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
-
-      {/* Шапка */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>🏪 Магазин</h1>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700 }}>🏪 Магазин</h1>
+          {discountPercent > 0 && (
+            <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '2px' }}>
+              🧬 Скидка {discountPercent}% (навык Эффективность)
+            </div>
+          )}
+        </div>
         <div style={{ padding: '8px 16px', borderRadius: '12px', fontSize: '16px', fontWeight: 700, backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30' }}>
           🪙 {formatNumber(gold)}
         </div>
       </div>
 
-      {/* Табы */}
       <div style={{ display: 'flex', marginBottom: '16px', backgroundColor: '#16161f', borderRadius: '8px', padding: '4px' }}>
         <button onClick={() => setTab('shop')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600, backgroundColor: tab === 'shop' ? '#7c3aed' : 'transparent', color: tab === 'shop' ? '#fff' : '#94a3b8' }}>
           🏪 Магазин
@@ -177,14 +192,8 @@ export default function ShopPage() {
 
       {tab === 'shop' ? (
         <>
-          {/* Фильтры */}
           <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
-            {[
-              { value: 'all' as const, label: 'Все' },
-              { value: 'potion' as const, label: '🧪 Зелья' },
-              { value: 'artifact' as const, label: '💍 Артефакты' },
-              { value: 'scroll' as const, label: '📜 Свитки' },
-            ].map(f => (
+            {([{ value: 'all' as const, label: 'Все' }, { value: 'potion' as const, label: '🧪 Зелья' }, { value: 'artifact' as const, label: '💍 Артефакты' }, { value: 'scroll' as const, label: '📜 Свитки' }]).map(f => (
               <button key={f.value} onClick={() => setFilter(f.value)} style={{
                 padding: '6px 14px', borderRadius: '8px',
                 backgroundColor: filter === f.value ? '#7c3aed20' : '#16161f',
@@ -196,26 +205,22 @@ export default function ShopPage() {
             ))}
           </div>
 
-          {/* Товары */}
           {filteredItems.map(item => {
-            const canAfford = gold >= item.price;
+            const finalPrice = getDiscountedPrice(item.price);
+            const hasDiscount = finalPrice < item.price;
+            const canAfford = gold >= finalPrice;
             const levelOk = levelInfo.level >= item.min_level;
             const owned = inventory.find(i => i.item_key === item.item_key);
 
             return (
-              <div key={item.id} style={{
-                backgroundColor: '#12121a', border: `1px solid ${getCategoryColor(item.category)}20`,
-                borderRadius: '12px', padding: '14px', marginBottom: '8px',
-              }}>
+              <div key={item.id} style={{ backgroundColor: '#12121a', border: `1px solid ${getCategoryColor(item.category)}20`, borderRadius: '12px', padding: '14px', marginBottom: '8px' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <div style={{ fontSize: '32px', flexShrink: 0 }}>{item.icon}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                       <span style={{ fontSize: '14px', fontWeight: 600 }}>{item.name}</span>
                       {owned && (
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#7c3aed20', color: '#a78bfa' }}>
-                          x{owned.quantity}
-                        </span>
+                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: '#7c3aed20', color: '#a78bfa' }}>x{owned.quantity}</span>
                       )}
                     </div>
                     <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>{item.description}</div>
@@ -224,9 +229,7 @@ export default function ShopPage() {
                         {item.category === 'potion' ? 'Зелье' : item.category === 'artifact' ? 'Артефакт' : 'Свиток'}
                       </span>
                       {item.min_level > 1 && (
-                        <span style={{ fontSize: '11px', color: levelOk ? '#475569' : '#ef4444' }}>
-                          LV.{item.min_level}
-                        </span>
+                        <span style={{ fontSize: '11px', color: levelOk ? '#475569' : '#ef4444' }}>LV.{item.min_level}</span>
                       )}
                     </div>
                   </div>
@@ -236,8 +239,12 @@ export default function ShopPage() {
                     color: canAfford && levelOk ? '#000' : '#475569',
                     cursor: canAfford && levelOk ? 'pointer' : 'not-allowed',
                     fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
                   }}>
-                    🪙 {item.price}
+                    {hasDiscount && (
+                      <span style={{ fontSize: '10px', textDecoration: 'line-through', opacity: 0.6 }}>🪙 {item.price}</span>
+                    )}
+                    <span>🪙 {finalPrice}</span>
                   </button>
                 </div>
               </div>
@@ -246,7 +253,6 @@ export default function ShopPage() {
         </>
       ) : (
         <>
-          {/* Инвентарь */}
           {inventory.length === 0 ? (
             <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#475569' }}>
               Инвентарь пуст. Купи что-нибудь в магазине!
@@ -255,7 +261,6 @@ export default function ShopPage() {
             inventory.map(invItem => {
               const item = items.find(i => i.item_key === invItem.item_key);
               if (!item) return null;
-
               const isExpired = invItem.expires_at && new Date(invItem.expires_at) < new Date();
 
               return (
@@ -283,9 +288,7 @@ export default function ShopPage() {
                       backgroundColor: item.category === 'artifact' ? (invItem.is_active ? '#ef444420' : '#22c55e') : '#7c3aed',
                       color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                     }}>
-                      {item.category === 'artifact'
-                        ? (invItem.is_active ? 'Снять' : 'Надеть')
-                        : 'Использ.'}
+                      {item.category === 'artifact' ? (invItem.is_active ? 'Снять' : 'Надеть') : 'Использ.'}
                     </button>
                   </div>
                 </div>

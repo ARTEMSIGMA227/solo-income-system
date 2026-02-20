@@ -11,6 +11,7 @@ import HunterAvatar from '@/components/character/HunterAvatar';
 import CharacterEditor from '@/components/character/CharacterEditor';
 import type { User } from '@supabase/supabase-js';
 import type { Stats, Profile, CharacterConfig } from '@/types/database';
+import type { SkillEffectType } from '@/lib/skill-tree';
 import StreakBanner from '@/components/streak/StreakBanner';
 import DeathScreen from '@/components/streak/DeathScreen';
 import { AdvisorCard } from '@/components/advisor/AdvisorCard';
@@ -21,8 +22,12 @@ import { useMissionTracker } from '@/hooks/use-mission-tracker';
 import LevelUpPopup from '@/components/effects/LevelUpPopup';
 import { FloatXPContainer, useFloatXP } from '@/components/effects/FloatXP';
 import XPBar from '@/components/effects/XPBar';
-import { useSkills } from '@/hooks/use-skills';
-import { applySkillEffects, applyPenaltyReduction } from '@/lib/skill-effects';
+import {
+  applySkillEffects,
+  applyPenaltyReduction,
+  getStreakShieldDays,
+  loadSkillEffectsFromDB,
+} from '@/lib/skill-effects';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -37,6 +42,11 @@ function getYesterday(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+}
+
+function getMonthKey(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export default function DashboardPage() {
@@ -56,21 +66,14 @@ export default function DashboardPage() {
   const [deathXP, setDeathXP] = useState(100);
   const [deathMisses, setDeathMisses] = useState(0);
   const [xpPulsing, setXpPulsing] = useState(false);
+  const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>({});
 
   const router = useRouter();
   const { trackProgress } = useMissionTracker();
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
-  const dataLoadedRef = useRef(false);
 
-  // Skills — загружаем после получения user/stats
-  const {
-    effects: skillEffects,
-    loading: skillsLoading,
-  } = useSkills(user?.id, stats?.level ?? 1);
-
-  // ─── LOAD DATA ───
   useEffect(() => {
     setCurrentHour(new Date().getHours());
     setTodayDate(
@@ -92,6 +95,10 @@ export default function DashboardPage() {
         return;
       }
       setUser(authUser);
+
+      // Load skills FIRST so penalty/shield logic can use them
+      const effects = await loadSkillEffectsFromDB(authUser.id);
+      setSkillEffects(effects);
 
       const { data: p } = await supabase
         .from('profiles')
@@ -141,6 +148,7 @@ export default function DashboardPage() {
         .gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
+      // --- PENALTY + STREAK SHIELD ---
       const yesterdayStr = getYesterday();
 
       const { data: yesterdayCompletions } = await supabase
@@ -164,74 +172,123 @@ export default function DashboardPage() {
 
       const alreadyPenalized = penaltyCheck && penaltyCheck.length > 0;
 
-      if (yesterdayActions < target && !alreadyPenalized && yesterdayStr !== today) {
-        const basePenaltyXP = p?.penalty_xp || 100;
-        const newMisses = (p?.consecutive_misses || 0) + 1;
+      // Check for streak shield usage already recorded
+      const { data: shieldCheck } = await supabase
+        .from('xp_events')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .eq('event_type', 'streak_shield')
+        .eq('event_date', yesterdayStr);
 
-        await supabase.from('xp_events').insert({
-          user_id: authUser.id,
-          event_type: 'penalty_miss',
-          xp_amount: -basePenaltyXP,
-          description: `Пропуск дня: ${yesterdayStr}`,
-          event_date: yesterdayStr,
-        });
+      const alreadyShielded = shieldCheck && shieldCheck.length > 0;
 
-        const profileUpdate: Record<string, unknown> = {
-          consecutive_misses: newMisses,
-          updated_at: new Date().toISOString(),
-        };
-        if (yesterdayActions === 0) profileUpdate.streak_current = 0;
+      if (yesterdayActions < target && !alreadyPenalized && !alreadyShielded && yesterdayStr !== today) {
+        // Check streak shield
+        const shieldDays = getStreakShieldDays(effects);
+        let shieldUsed = false;
 
-        await supabase.from('profiles').update(profileUpdate).eq('id', authUser.id);
+        if (shieldDays > 0 && yesterdayActions === 0) {
+          // Count shields used this month
+          const monthKey = getMonthKey();
+          const monthStart = `${monthKey}-01`;
+          const { data: shieldUses } = await supabase
+            .from('xp_events')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .eq('event_type', 'streak_shield')
+            .gte('event_date', monthStart);
 
-        const newTotalLost = (s?.total_xp_lost || 0) + basePenaltyXP;
-        const updateData: {
-          total_xp_lost: number;
-          updated_at: string;
-          level?: number;
-          current_xp?: number;
-        } = {
-          total_xp_lost: newTotalLost,
-          updated_at: new Date().toISOString(),
-        };
+          const usedThisMonth = shieldUses?.length || 0;
 
-        if (newMisses >= 3) {
-          updateData.level = Math.max((s?.level || 1) - 1, 1);
-          updateData.current_xp = 0;
-          setDeathType('level_down');
-          await supabase
+          if (usedThisMonth < shieldDays) {
+            // Use shield — no penalty, no streak break
+            await supabase.from('xp_events').insert({
+              user_id: authUser.id,
+              event_type: 'streak_shield',
+              xp_amount: 0,
+              description: `🛡️ Щит серии использован (${usedThisMonth + 1}/${shieldDays})`,
+              event_date: yesterdayStr,
+            });
+
+            toast.info(
+              `🛡️ Щит серии активирован! Серия защищена (${usedThisMonth + 1}/${shieldDays} в этом месяце)`,
+              { duration: 5000 }
+            );
+            shieldUsed = true;
+          }
+        }
+
+        if (!shieldUsed) {
+          const basePenaltyXP = p?.penalty_xp || 100;
+          const finalPenaltyXP = applyPenaltyReduction(basePenaltyXP, effects);
+          const newMisses = (p?.consecutive_misses || 0) + 1;
+
+          await supabase.from('xp_events').insert({
+            user_id: authUser.id,
+            event_type: 'penalty_miss',
+            xp_amount: -finalPenaltyXP,
+            description: `Пропуск дня: ${yesterdayStr}${finalPenaltyXP < basePenaltyXP ? ` (снижено навыками: ${basePenaltyXP}→${finalPenaltyXP})` : ''}`,
+            event_date: yesterdayStr,
+          });
+
+          const profileUpdate: Record<string, unknown> = {
+            consecutive_misses: newMisses,
+            updated_at: new Date().toISOString(),
+          };
+          if (yesterdayActions === 0) profileUpdate.streak_current = 0;
+
+          await supabase.from('profiles').update(profileUpdate).eq('id', authUser.id);
+
+          const newTotalLost = (s?.total_xp_lost || 0) + finalPenaltyXP;
+          const updateData: {
+            total_xp_lost: number;
+            updated_at: string;
+            level?: number;
+            current_xp?: number;
+          } = {
+            total_xp_lost: newTotalLost,
+            updated_at: new Date().toISOString(),
+          };
+
+          if (newMisses >= 3) {
+            updateData.level = Math.max((s?.level || 1) - 1, 1);
+            updateData.current_xp = 0;
+            setDeathType('level_down');
+            await supabase
+              .from('profiles')
+              .update({ consecutive_misses: 0 })
+              .eq('id', authUser.id);
+          } else {
+            setDeathType('miss');
+          }
+
+          await supabase.from('stats').update(updateData).eq('user_id', authUser.id);
+          setDeathXP(finalPenaltyXP);
+          setDeathMisses(newMisses);
+          setShowDeath(true);
+
+          const { data: freshStats } = await supabase
+            .from('stats')
+            .select('*')
+            .eq('user_id', authUser.id)
+            .single();
+          if (freshStats) {
+            setStats(freshStats);
+            prevLevelRef.current = freshStats.level;
+          }
+          const { data: freshProfile } = await supabase
             .from('profiles')
-            .update({ consecutive_misses: 0 })
-            .eq('id', authUser.id);
-        } else {
-          setDeathType('miss');
-        }
-
-        await supabase.from('stats').update(updateData).eq('user_id', authUser.id);
-        setDeathXP(basePenaltyXP);
-        setDeathMisses(newMisses);
-        setShowDeath(true);
-
-        const { data: freshStats } = await supabase
-          .from('stats')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .single();
-        if (freshStats) {
-          setStats(freshStats);
-          prevLevelRef.current = freshStats.level;
-        }
-        const { data: freshProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .single();
-        if (freshProfile) {
-          currentProfile = freshProfile;
-          setProfile(freshProfile);
+            .select('*')
+            .eq('id', authUser.id)
+            .single();
+          if (freshProfile) {
+            currentProfile = freshProfile;
+            setProfile(freshProfile);
+          }
         }
       }
 
+      // --- STREAK CHECKIN ---
       if (loadedActions > 0 && currentProfile) {
         const { data: streakCheck } = await supabase
           .from('xp_events')
@@ -266,15 +323,49 @@ export default function DashboardPage() {
 
           setProfile((prev) =>
             prev
-              ? {
-                  ...prev,
-                  streak_current: newStreak,
-                  streak_best: newBest,
-                  consecutive_misses: 0,
-                }
+              ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 }
               : prev
           );
           void trackProgress('login_streak', 1);
+        }
+      }
+
+      // --- PASSIVE GOLD FROM SKILLS ---
+      const passiveGold = effects.daily_gold_passive || 0;
+      if (passiveGold > 0 && s) {
+        const { data: goldCheck } = await supabase
+          .from('gold_events')
+          .select('id')
+          .eq('user_id', authUser.id)
+          .eq('event_type', 'skill_passive')
+          .eq('event_date', today);
+
+        if (!goldCheck || goldCheck.length === 0) {
+          await supabase.from('gold_events').insert({
+            user_id: authUser.id,
+            amount: passiveGold,
+            event_type: 'skill_passive',
+            description: `Пассивный доход (навыки): +${passiveGold}`,
+            event_date: today,
+          });
+          await supabase
+            .from('stats')
+            .update({
+              gold: (s.gold || 0) + passiveGold,
+              total_gold_earned: (s.total_gold_earned || 0) + passiveGold,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', authUser.id);
+          setStats((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  gold: (prev.gold || 0) + passiveGold,
+                  total_gold_earned: (prev.total_gold_earned || 0) + passiveGold,
+                }
+              : prev
+          );
+          toast.info(`🧬 +${passiveGold} 🪙 пассивный доход от навыков`);
         }
       }
 
@@ -284,66 +375,6 @@ export default function DashboardPage() {
     loadData();
   }, [router, trackProgress]);
 
-  // ─── PASSIVE GOLD FROM SKILLS (once per day) ───
-  useEffect(() => {
-    if (skillsLoading || !user || !stats || dataLoadedRef.current) return;
-    const passiveGold = skillEffects.daily_gold_passive || 0;
-    if (passiveGold <= 0) {
-      dataLoadedRef.current = true;
-      return;
-    }
-
-    const supabase = createClient();
-    const today = getToday();
-
-    async function grantPassiveGold() {
-      const { data: check } = await supabase
-        .from('gold_events')
-        .select('id')
-        .eq('user_id', user!.id)
-        .eq('event_type', 'skill_passive')
-        .eq('event_date', today);
-
-      if (check && check.length > 0) {
-        dataLoadedRef.current = true;
-        return;
-      }
-
-      await supabase.from('gold_events').insert({
-        user_id: user!.id,
-        amount: passiveGold,
-        event_type: 'skill_passive',
-        description: `Пассивный доход (навыки): +${passiveGold}`,
-        event_date: today,
-      });
-
-      await supabase
-        .from('stats')
-        .update({
-          gold: (stats!.gold || 0) + passiveGold,
-          total_gold_earned: (stats!.total_gold_earned || 0) + passiveGold,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user!.id);
-
-      setStats((prev) =>
-        prev
-          ? {
-              ...prev,
-              gold: (prev.gold || 0) + passiveGold,
-              total_gold_earned: (prev.total_gold_earned || 0) + passiveGold,
-            }
-          : prev
-      );
-
-      toast.info(`🧬 +${passiveGold} 🪙 пассивный доход от навыков`);
-      dataLoadedRef.current = true;
-    }
-
-    grantPassiveGold();
-  }, [skillsLoading, skillEffects, user, stats]);
-
-  // ─── STREAK ON FIRST ACTION ───
   const updateStreakOnFirstAction = useCallback(async () => {
     if (!user || !profile) return;
     const supabase = createClient();
@@ -402,7 +433,6 @@ export default function DashboardPage() {
     setTimeout(() => setXpPulsing(false), 1500);
   }, []);
 
-  // ─── QUICK ACTION (with skills) ───
   async function quickAction(type: string, label: string, event?: React.MouseEvent) {
     if (!user || !stats || !profile) return;
     const supabase = createClient();
@@ -477,7 +507,6 @@ export default function DashboardPage() {
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayActions((prev) => prev + 1);
 
-    // Toast with skill bonuses
     const bonusText = bonusParts.length > 0 ? ` (${bonusParts.join(', ')})` : '';
     toast.success(`+${finalXP} XP  +${finalGold} 🪙 — ${label}${bonusText}`);
 
@@ -490,7 +519,6 @@ export default function DashboardPage() {
       }, 300);
     }
 
-    // Float effects from button
     const xpColor = isCrit ? '#f59e0b' : '#a78bfa';
     addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
@@ -505,7 +533,6 @@ export default function DashboardPage() {
     void trackProgress('complete_quests', 1);
   }
 
-  // ─── ADD INCOME (with skills) ───
   async function addIncome(event?: React.MouseEvent) {
     if (!user || !stats || !profile) return;
     const amountStr = prompt('Сумма дохода (€):');
@@ -625,7 +652,6 @@ export default function DashboardPage() {
     void trackProgress('complete_quests', 1);
   }
 
-  // ─── LOADING ───
   if (loading) {
     return (
       <div
@@ -644,29 +670,14 @@ export default function DashboardPage() {
     );
   }
 
-  // ─── COMPUTED ───
   const levelInfo = stats
     ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
-    : {
-        level: 1,
-        currentXP: 0,
-        xpToNext: 750,
-        progressPercent: 0,
-        title: 'Безымянный',
-        titleIcon: '👤',
-        totalXPEarned: 0,
-      };
+    : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Безымянный', titleIcon: '👤', totalXPEarned: 0 };
 
   const actionsTarget = profile?.daily_actions_target || 30;
-  const actionsPercent = Math.min(
-    Math.round((todayActions / actionsTarget) * 100),
-    100
-  );
+  const actionsPercent = Math.min(Math.round((todayActions / actionsTarget) * 100), 100);
   const monthTarget = profile?.monthly_income_target || 150000;
-  const monthPercent = Math.min(
-    Math.round((monthIncome / monthTarget) * 100),
-    100
-  );
+  const monthPercent = Math.min(Math.round((monthIncome / monthTarget) * 100), 100);
 
   let dayStatusColor = '#eab308';
   let dayStatusText = '⏳ В процессе';
@@ -678,266 +689,85 @@ export default function DashboardPage() {
     dayStatusText = '🔴 Мало времени!';
   }
 
-  // Count active skill bonuses for display
-  const activeSkillCount = Object.values(skillEffects).filter((v) => v > 0).length;
+  const activeSkillCount = Object.values(skillEffects).filter((v) => (v || 0) > 0).length;
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#0a0a0f',
-        color: '#e2e8f0',
-        padding: '16px',
-        maxWidth: '600px',
-        margin: '0 auto',
-      }}
-    >
-      {/* Effects */}
+    <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
       <FloatXPContainer items={floatItems} />
       {levelUpData && (
-        <LevelUpPopup
-          level={levelUpData.level}
-          title={levelUpData.title}
-          onClose={() => setLevelUpData(null)}
-        />
+        <LevelUpPopup level={levelUpData.level} title={levelUpData.title} onClose={() => setLevelUpData(null)} />
       )}
       {showDeath && (
-        <DeathScreen
-          type={deathType}
-          xpLost={deathXP}
-          consecutiveMisses={deathMisses}
-          onAccept={() => setShowDeath(false)}
-        />
+        <DeathScreen type={deathType} xpLost={deathXP} consecutiveMisses={deathMisses} onAccept={() => setShowDeath(false)} />
       )}
       {showEditor && user && (
-        <CharacterEditor
-          userId={user.id}
-          config={charConfig}
-          onSave={(c) => {
-            setCharConfig(c);
-            setShowEditor(false);
-          }}
-          onClose={() => setShowEditor(false)}
-        />
+        <CharacterEditor userId={user.id} config={charConfig} onSave={(c) => { setCharConfig(c); setShowEditor(false); }} onClose={() => setShowEditor(false)} />
       )}
 
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        }}
-      >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>{todayDate}</div>
-          <div style={{ fontSize: '14px', color: '#94a3b8' }}>
-            {profile?.display_name || 'Охотник'}
-          </div>
+          <div style={{ fontSize: '14px', color: '#94a3b8' }}>{profile?.display_name || 'Охотник'}</div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div
-            style={{
-              padding: '6px 12px',
-              borderRadius: '12px',
-              fontSize: '13px',
-              fontWeight: 600,
-              backgroundColor: '#f59e0b20',
-              color: '#f59e0b',
-              border: '1px solid #f59e0b30',
-            }}
-          >
+          <div style={{ padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30' }}>
             🪙 {formatNumber(stats?.gold || 0)}
           </div>
           {activeSkillCount > 0 && (
-            <div
-              style={{
-                padding: '6px 10px',
-                borderRadius: '12px',
-                fontSize: '11px',
-                fontWeight: 600,
-                backgroundColor: '#a78bfa15',
-                color: '#a78bfa',
-                border: '1px solid #a78bfa30',
-              }}
-            >
+            <div style={{ padding: '6px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, backgroundColor: '#a78bfa15', color: '#a78bfa', border: '1px solid #a78bfa30' }}>
               🧬 {activeSkillCount}
             </div>
           )}
-          <div
-            style={{
-              padding: '6px 14px',
-              borderRadius: '20px',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: dayStatusColor,
-              backgroundColor: dayStatusColor + '20',
-              border: `1px solid ${dayStatusColor}30`,
-            }}
-          >
+          <div style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, color: dayStatusColor, backgroundColor: dayStatusColor + '20', border: `1px solid ${dayStatusColor}30` }}>
             {dayStatusText}
           </div>
         </div>
       </div>
 
-      {/* Avatar */}
-      <HunterAvatar
-        level={levelInfo.level}
-        title={levelInfo.title}
-        config={charConfig}
-        onEdit={() => setShowEditor(true)}
-      />
+      <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
-      {/* Streak */}
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner
-          streak={profile?.streak_current || 0}
-          bestStreak={profile?.streak_best || 0}
-        />
+        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
       </div>
 
-      {/* XP Bar */}
-      <XPBar
-        level={levelInfo.level}
-        currentXP={levelInfo.currentXP}
-        xpToNext={levelInfo.xpToNext}
-        progressPercent={levelInfo.progressPercent}
-        pulsing={xpPulsing}
-      />
+      <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />
 
-      {/* Advisor */}
-      {profile &&
-        stats &&
-        (() => {
-          const now = new Date();
-          const { greeting, advice } = generateAdvice({
-            stats,
-            profile,
-            todayActions,
-            todayIncome,
-            monthIncome,
-            hour: currentHour,
-            dayOfWeek: now.getDay(),
-            dayOfMonth: now.getDate(),
-            daysInMonth: new Date(
-              now.getFullYear(),
-              now.getMonth() + 1,
-              0
-            ).getDate(),
-          });
-          if (advice.length === 0) return null;
-          return <AdvisorCard greeting={greeting} advice={advice} />;
-        })()}
+      {profile && stats && (() => {
+        const now = new Date();
+        const { greeting, advice } = generateAdvice({ stats, profile, todayActions, todayIncome, monthIncome, hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(), daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() });
+        if (advice.length === 0) return null;
+        return <AdvisorCard greeting={greeting} advice={advice} />;
+      })()}
 
-      {/* Missions */}
-      <div style={{ marginBottom: '12px' }}>
-        <DailyMissionsCard />
-      </div>
+      <div style={{ marginBottom: '12px' }}><DailyMissionsCard /></div>
       <DailyChallenge />
 
-      {/* Stats Card */}
-      <div
-        style={{
-          backgroundColor: '#12121a',
-          border: '1px solid #1e1e2e',
-          borderRadius: '12px',
-          padding: '16px',
-          marginBottom: '12px',
-        }}
-      >
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ marginBottom: '12px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '13px',
-              marginBottom: '4px',
-            }}
-          >
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
             <span>Действия</span>
-            <span style={{ color: '#a78bfa' }}>
-              {todayActions} / {actionsTarget}
-            </span>
+            <span style={{ color: '#a78bfa' }}>{todayActions} / {actionsTarget}</span>
           </div>
-          <div
-            style={{
-              width: '100%',
-              height: '8px',
-              backgroundColor: '#16161f',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${actionsPercent}%`,
-                height: '100%',
-                borderRadius: '4px',
-                backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed',
-                transition: 'width 0.5s ease',
-              }}
-            />
+          <div style={{ width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: `${actionsPercent}%`, height: '100%', borderRadius: '4px', backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed', transition: 'width 0.5s ease' }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <div
-            style={{
-              flex: 1,
-              backgroundColor: '#16161f',
-              borderRadius: '8px',
-              padding: '10px',
-              textAlign: 'center',
-            }}
-          >
+          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>Сегодня</div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>
-              {formatCurrency(todayIncome)}
-            </div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(todayIncome)}</div>
           </div>
-          <div
-            style={{
-              flex: 1,
-              backgroundColor: '#16161f',
-              borderRadius: '8px',
-              padding: '10px',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>
-              Месяц ({monthPercent}%)
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>
-              {formatCurrency(monthIncome)}
-            </div>
+          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Месяц ({monthPercent}%)</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(monthIncome)}</div>
           </div>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div
-        style={{
-          backgroundColor: '#12121a',
-          border: '1px solid #1e1e2e',
-          borderRadius: '12px',
-          padding: '16px',
-          marginBottom: '12px',
-        }}
-      >
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
           ⚡ Быстрые действия
-          {activeSkillCount > 0 && (
-            <span
-              style={{
-                fontSize: '10px',
-                color: '#a78bfa',
-                marginLeft: '8px',
-                fontWeight: 400,
-              }}
-            >
-              🧬 навыки активны
-            </span>
-          )}
+          {activeSkillCount > 0 && <span style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '8px', fontWeight: 400 }}>🧬 навыки активны</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           {[
@@ -953,48 +783,23 @@ export default function DashboardPage() {
               <button
                 key={i}
                 onClick={(e) => {
-                  if (isIncome) {
-                    void addIncome(e);
-                  } else {
-                    void quickAction(btn.type, btn.actionLabel, e);
-                  }
+                  if (isIncome) void addIncome(e);
+                  else void quickAction(btn.type, btn.actionLabel, e);
                 }}
-                onPointerDown={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)';
-                }}
-                onPointerUp={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-                }}
-                onPointerLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-                }}
+                onPointerDown={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)'; }}
+                onPointerUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+                onPointerLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
                 style={{
-                  padding: '12px 8px',
-                  backgroundColor: isIncome ? '#1a1a2e' : '#16161f',
-                  border: `1px solid ${isIncome ? '#22c55e30' : '#1e1e2e'}`,
-                  borderRadius: '10px',
-                  color: isIncome ? '#22c55e' : '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  textAlign: 'center',
-                  transition: 'transform 0.1s ease',
-                  WebkitTapHighlightColor: 'transparent',
+                  padding: '12px 8px', backgroundColor: isIncome ? '#1a1a2e' : '#16161f',
+                  border: `1px solid ${isIncome ? '#22c55e30' : '#1e1e2e'}`, borderRadius: '10px',
+                  color: isIncome ? '#22c55e' : '#e2e8f0', cursor: 'pointer', fontSize: '13px',
+                  textAlign: 'center', transition: 'transform 0.1s ease', WebkitTapHighlightColor: 'transparent',
                 }}
               >
                 <div style={{ fontSize: '20px' }}>{btn.icon}</div>
                 <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
-                <div
-                  style={{
-                    fontSize: '10px',
-                    color: isIncome ? '#22c55e' : '#7c3aed',
-                    marginTop: '2px',
-                  }}
-                >
-                  +{btn.xp} XP
-                </div>
-                <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>
-                  +{btn.gold} 🪙
-                </div>
+                <div style={{ fontSize: '10px', color: isIncome ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>+{btn.xp} XP</div>
+                <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>+{btn.gold} 🪙</div>
               </button>
             );
           })}
