@@ -21,6 +21,23 @@ import { useMissionTracker } from '@/hooks/use-mission-tracker';
 import LevelUpPopup from '@/components/effects/LevelUpPopup';
 import { FloatXPContainer, useFloatXP } from '@/components/effects/FloatXP';
 import XPBar from '@/components/effects/XPBar';
+import { useSkills } from '@/hooks/use-skills';
+import { applySkillEffects, applyPenaltyReduction } from '@/lib/skill-effects';
+
+function getToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+}
+
+function getMonthStart(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function getYesterday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+}
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -45,7 +62,15 @@ export default function DashboardPage() {
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
+  const dataLoadedRef = useRef(false);
 
+  // Skills — загружаем после получения user/stats
+  const {
+    effects: skillEffects,
+    loading: skillsLoading,
+  } = useSkills(user?.id, stats?.level ?? 1);
+
+  // ─── LOAD DATA ───
   useEffect(() => {
     setCurrentHour(new Date().getHours());
     setTodayDate(
@@ -57,13 +82,6 @@ export default function DashboardPage() {
     );
 
     const supabase = createClient();
-    function getToday() {
-      return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
-    }
-    function getMonthStart() {
-      const n = new Date();
-      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
-    }
 
     async function loadData() {
       const {
@@ -75,10 +93,18 @@ export default function DashboardPage() {
       }
       setUser(authUser);
 
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
       setProfile(p);
 
-      const { data: s } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
+      const { data: s } = await supabase
+        .from('stats')
+        .select('*')
+        .eq('user_id', authUser.id)
+        .single();
       if (s) {
         setStats(s);
         prevLevelRef.current = s.level;
@@ -92,6 +118,7 @@ export default function DashboardPage() {
       setCharConfig(cc);
 
       const today = getToday();
+
       const { data: ct } = await supabase
         .from('completions')
         .select('count_done')
@@ -114,9 +141,7 @@ export default function DashboardPage() {
         .gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+      const yesterdayStr = getYesterday();
 
       const { data: yesterdayCompletions } = await supabase
         .from('completions')
@@ -124,7 +149,8 @@ export default function DashboardPage() {
         .eq('user_id', authUser.id)
         .eq('completion_date', yesterdayStr);
 
-      const yesterdayActions = yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
+      const yesterdayActions =
+        yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
       const target = p?.daily_actions_target || 30;
 
       let currentProfile = p;
@@ -139,13 +165,13 @@ export default function DashboardPage() {
       const alreadyPenalized = penaltyCheck && penaltyCheck.length > 0;
 
       if (yesterdayActions < target && !alreadyPenalized && yesterdayStr !== today) {
-        const penaltyXP = p?.penalty_xp || 100;
+        const basePenaltyXP = p?.penalty_xp || 100;
         const newMisses = (p?.consecutive_misses || 0) + 1;
 
         await supabase.from('xp_events').insert({
           user_id: authUser.id,
           event_type: 'penalty_miss',
-          xp_amount: -penaltyXP,
+          xp_amount: -basePenaltyXP,
           description: `Пропуск дня: ${yesterdayStr}`,
           event_date: yesterdayStr,
         });
@@ -158,8 +184,13 @@ export default function DashboardPage() {
 
         await supabase.from('profiles').update(profileUpdate).eq('id', authUser.id);
 
-        const newTotalLost = (s?.total_xp_lost || 0) + penaltyXP;
-        const updateData: { total_xp_lost: number; updated_at: string; level?: number; current_xp?: number } = {
+        const newTotalLost = (s?.total_xp_lost || 0) + basePenaltyXP;
+        const updateData: {
+          total_xp_lost: number;
+          updated_at: string;
+          level?: number;
+          current_xp?: number;
+        } = {
           total_xp_lost: newTotalLost,
           updated_at: new Date().toISOString(),
         };
@@ -168,13 +199,16 @@ export default function DashboardPage() {
           updateData.level = Math.max((s?.level || 1) - 1, 1);
           updateData.current_xp = 0;
           setDeathType('level_down');
-          await supabase.from('profiles').update({ consecutive_misses: 0 }).eq('id', authUser.id);
+          await supabase
+            .from('profiles')
+            .update({ consecutive_misses: 0 })
+            .eq('id', authUser.id);
         } else {
           setDeathType('miss');
         }
 
         await supabase.from('stats').update(updateData).eq('user_id', authUser.id);
-        setDeathXP(penaltyXP);
+        setDeathXP(basePenaltyXP);
         setDeathMisses(newMisses);
         setShowDeath(true);
 
@@ -232,7 +266,12 @@ export default function DashboardPage() {
 
           setProfile((prev) =>
             prev
-              ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 }
+              ? {
+                  ...prev,
+                  streak_current: newStreak,
+                  streak_best: newBest,
+                  consecutive_misses: 0,
+                }
               : prev
           );
           void trackProgress('login_streak', 1);
@@ -241,13 +280,74 @@ export default function DashboardPage() {
 
       setLoading(false);
     }
+
     loadData();
   }, [router, trackProgress]);
 
+  // ─── PASSIVE GOLD FROM SKILLS (once per day) ───
+  useEffect(() => {
+    if (skillsLoading || !user || !stats || dataLoadedRef.current) return;
+    const passiveGold = skillEffects.daily_gold_passive || 0;
+    if (passiveGold <= 0) {
+      dataLoadedRef.current = true;
+      return;
+    }
+
+    const supabase = createClient();
+    const today = getToday();
+
+    async function grantPassiveGold() {
+      const { data: check } = await supabase
+        .from('gold_events')
+        .select('id')
+        .eq('user_id', user!.id)
+        .eq('event_type', 'skill_passive')
+        .eq('event_date', today);
+
+      if (check && check.length > 0) {
+        dataLoadedRef.current = true;
+        return;
+      }
+
+      await supabase.from('gold_events').insert({
+        user_id: user!.id,
+        amount: passiveGold,
+        event_type: 'skill_passive',
+        description: `Пассивный доход (навыки): +${passiveGold}`,
+        event_date: today,
+      });
+
+      await supabase
+        .from('stats')
+        .update({
+          gold: (stats!.gold || 0) + passiveGold,
+          total_gold_earned: (stats!.total_gold_earned || 0) + passiveGold,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user!.id);
+
+      setStats((prev) =>
+        prev
+          ? {
+              ...prev,
+              gold: (prev.gold || 0) + passiveGold,
+              total_gold_earned: (prev.total_gold_earned || 0) + passiveGold,
+            }
+          : prev
+      );
+
+      toast.info(`🧬 +${passiveGold} 🪙 пассивный доход от навыков`);
+      dataLoadedRef.current = true;
+    }
+
+    grantPassiveGold();
+  }, [skillsLoading, skillEffects, user, stats]);
+
+  // ─── STREAK ON FIRST ACTION ───
   const updateStreakOnFirstAction = useCallback(async () => {
     if (!user || !profile) return;
     const supabase = createClient();
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+    const today = getToday();
 
     const { data: check } = await supabase
       .from('xp_events')
@@ -257,9 +357,7 @@ export default function DashboardPage() {
       .eq('event_date', today);
     if (check && check.length > 0) return;
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+    const yesterdayStr = getYesterday();
 
     const { data: yd } = await supabase
       .from('completions')
@@ -291,18 +389,40 @@ export default function DashboardPage() {
     });
 
     setProfile((prev) =>
-      prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev
+      prev
+        ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 }
+        : prev
     );
     if (newStreak > 1) toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
     void trackProgress('login_streak', 1);
   }, [user, profile, trackProgress]);
 
+  const triggerXpPulse = useCallback(() => {
+    setXpPulsing(true);
+    setTimeout(() => setXpPulsing(false), 1500);
+  }, []);
+
+  // ─── QUICK ACTION (with skills) ───
   async function quickAction(type: string, label: string, event?: React.MouseEvent) {
-    if (!user || !stats) return;
+    if (!user || !stats || !profile) return;
     const supabase = createClient();
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
-    const xp = XP_REWARDS[type as keyof typeof XP_REWARDS] || 5;
-    const gold = Math.round(xp * 0.5);
+    const today = getToday();
+    const baseXP = XP_REWARDS[type as keyof typeof XP_REWARDS] || 5;
+    const baseGold = Math.round(baseXP * 0.5);
+
+    const actionType = type as 'action' | 'task' | 'hard_task';
+    const { finalXP, finalGold, isCrit, bonusParts } = applySkillEffects(
+      baseXP,
+      baseGold,
+      skillEffects,
+      {
+        actionType,
+        hour: new Date().getHours(),
+        todayActions,
+        streak: profile.streak_current || 0,
+        dailyTarget: profile.daily_actions_target || 30,
+      }
+    );
 
     await supabase
       .from('completions')
@@ -310,22 +430,22 @@ export default function DashboardPage() {
     await supabase.from('xp_events').insert({
       user_id: user.id,
       event_type: type,
-      xp_amount: xp,
+      xp_amount: finalXP,
       description: label,
       event_date: today,
     });
     await supabase.from('gold_events').insert({
       user_id: user.id,
-      amount: gold,
+      amount: finalGold,
       event_type: 'quest_reward',
       description: label,
       event_date: today,
     });
 
-    const newTotalEarned = stats.total_xp_earned + xp;
+    const newTotalEarned = stats.total_xp_earned + finalXP;
     const newActions = stats.total_actions + 1;
-    const newGold = (stats.gold || 0) + gold;
-    const newTotalGold = (stats.total_gold_earned || 0) + gold;
+    const newGold = (stats.gold || 0) + finalGold;
+    const newTotalGold = (stats.total_gold_earned || 0) + finalGold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     const oldLevel = stats.level;
@@ -357,17 +477,26 @@ export default function DashboardPage() {
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayActions((prev) => prev + 1);
 
-    toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
+    // Toast with skill bonuses
+    const bonusText = bonusParts.length > 0 ? ` (${bonusParts.join(', ')})` : '';
+    toast.success(`+${finalXP} XP  +${finalGold} 🪙 — ${label}${bonusText}`);
 
-    // Float effects positioned from button click
-    addFloat(`+${xp} XP`, '#a78bfa', event);
-    setTimeout(() => addFloat(`+${gold} 🪙`, '#f59e0b', event), 150);
+    if (isCrit) {
+      setTimeout(() => {
+        toast('⚡ КРИТИЧЕСКИЙ УДАР! XP x2!', {
+          icon: '⚡',
+          style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
+        });
+      }, 300);
+    }
 
-    // XP bar pulse
-    setXpPulsing(true);
-    setTimeout(() => setXpPulsing(false), 1500);
+    // Float effects from button
+    const xpColor = isCrit ? '#f59e0b' : '#a78bfa';
+    addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
+    setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
 
-    // Level Up check
+    triggerXpPulse();
+
     if (oldLevel < newLevel) {
       setLevelUpData({ level: newLevel, title: levelInfo.title });
     }
@@ -376,8 +505,9 @@ export default function DashboardPage() {
     void trackProgress('complete_quests', 1);
   }
 
+  // ─── ADD INCOME (with skills) ───
   async function addIncome(event?: React.MouseEvent) {
-    if (!user || !stats) return;
+    if (!user || !stats || !profile) return;
     const amountStr = prompt('Сумма дохода (€):');
     if (!amountStr) return;
     const amount = Number(amountStr);
@@ -386,34 +516,50 @@ export default function DashboardPage() {
       return;
     }
 
-    const source = prompt('Источник (sale/contract/freelance/bonus/other):', 'sale') || 'sale';
+    const source =
+      prompt('Источник (sale/contract/freelance/bonus/other):', 'sale') || 'sale';
     const supabase = createClient();
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+    const today = getToday();
 
-    await supabase.from('income_events').insert({ user_id: user.id, amount, source, event_date: today });
+    await supabase
+      .from('income_events')
+      .insert({ user_id: user.id, amount, source, event_date: today });
 
-    const xp = XP_REWARDS.sale;
-    const gold = 50;
+    const baseXP = XP_REWARDS.sale;
+    const baseGold = 50;
+
+    const { finalXP, finalGold, isCrit, bonusParts } = applySkillEffects(
+      baseXP,
+      baseGold,
+      skillEffects,
+      {
+        actionType: 'sale',
+        hour: new Date().getHours(),
+        todayActions,
+        streak: profile.streak_current || 0,
+        dailyTarget: profile.daily_actions_target || 30,
+      }
+    );
 
     await supabase.from('xp_events').insert({
       user_id: user.id,
       event_type: 'sale',
-      xp_amount: xp,
+      xp_amount: finalXP,
       description: `Доход: ${amount}€`,
       event_date: today,
     });
     await supabase.from('gold_events').insert({
       user_id: user.id,
-      amount: gold,
+      amount: finalGold,
       event_type: 'quest_reward',
       description: `Доход: ${amount}€`,
       event_date: today,
     });
 
-    const newTotalEarned = stats.total_xp_earned + xp;
+    const newTotalEarned = stats.total_xp_earned + finalXP;
     const newIncome = Number(stats.total_income) + amount;
-    const newGold = (stats.gold || 0) + gold;
-    const newTotalGold = (stats.total_gold_earned || 0) + gold;
+    const newGold = (stats.gold || 0) + finalGold;
+    const newTotalGold = (stats.total_gold_earned || 0) + finalGold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     const oldLevel = stats.level;
@@ -448,16 +594,27 @@ export default function DashboardPage() {
     setTodayIncome((prev) => prev + amount);
     setMonthIncome((prev) => prev + amount);
     setTodayActions((prev) => prev + 1);
-    toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
 
-    // Float effects from button
-    addFloat(`+${xp} XP`, '#a78bfa', event);
-    setTimeout(() => addFloat(`+${gold} 🪙`, '#f59e0b', event), 150);
+    const bonusText = bonusParts.length > 0 ? ` (${bonusParts.join(', ')})` : '';
+    toast.success(
+      `+${formatCurrency(amount)} доход! +${finalXP} XP +${finalGold} 🪙${bonusText}`
+    );
+
+    if (isCrit) {
+      setTimeout(() => {
+        toast('⚡ КРИТИЧЕСКИЙ УДАР! XP x2!', {
+          icon: '⚡',
+          style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
+        });
+      }, 300);
+    }
+
+    const xpColor = isCrit ? '#f59e0b' : '#a78bfa';
+    addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
+    setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
     setTimeout(() => addFloat(`+${formatCurrency(amount)}`, '#22c55e', event), 300);
 
-    // XP bar pulse
-    setXpPulsing(true);
-    setTimeout(() => setXpPulsing(false), 1500);
+    triggerXpPulse();
 
     if (oldLevel < newLevel) {
       setLevelUpData({ level: newLevel, title: levelInfo.title });
@@ -468,6 +625,7 @@ export default function DashboardPage() {
     void trackProgress('complete_quests', 1);
   }
 
+  // ─── LOADING ───
   if (loading) {
     return (
       <div
@@ -486,6 +644,7 @@ export default function DashboardPage() {
     );
   }
 
+  // ─── COMPUTED ───
   const levelInfo = stats
     ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
     : {
@@ -499,9 +658,15 @@ export default function DashboardPage() {
       };
 
   const actionsTarget = profile?.daily_actions_target || 30;
-  const actionsPercent = Math.min(Math.round((todayActions / actionsTarget) * 100), 100);
+  const actionsPercent = Math.min(
+    Math.round((todayActions / actionsTarget) * 100),
+    100
+  );
   const monthTarget = profile?.monthly_income_target || 150000;
-  const monthPercent = Math.min(Math.round((monthIncome / monthTarget) * 100), 100);
+  const monthPercent = Math.min(
+    Math.round((monthIncome / monthTarget) * 100),
+    100
+  );
 
   let dayStatusColor = '#eab308';
   let dayStatusText = '⏳ В процессе';
@@ -512,6 +677,9 @@ export default function DashboardPage() {
     dayStatusColor = '#ef4444';
     dayStatusText = '🔴 Мало времени!';
   }
+
+  // Count active skill bonuses for display
+  const activeSkillCount = Object.values(skillEffects).filter((v) => v > 0).length;
 
   return (
     <div
@@ -533,7 +701,6 @@ export default function DashboardPage() {
           onClose={() => setLevelUpData(null)}
         />
       )}
-
       {showDeath && (
         <DeathScreen
           type={deathType}
@@ -583,6 +750,21 @@ export default function DashboardPage() {
           >
             🪙 {formatNumber(stats?.gold || 0)}
           </div>
+          {activeSkillCount > 0 && (
+            <div
+              style={{
+                padding: '6px 10px',
+                borderRadius: '12px',
+                fontSize: '11px',
+                fontWeight: 600,
+                backgroundColor: '#a78bfa15',
+                color: '#a78bfa',
+                border: '1px solid #a78bfa30',
+              }}
+            >
+              🧬 {activeSkillCount}
+            </div>
+          )}
           <div
             style={{
               padding: '6px 14px',
@@ -609,10 +791,13 @@ export default function DashboardPage() {
 
       {/* Streak */}
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
+        <StreakBanner
+          streak={profile?.streak_current || 0}
+          bestStreak={profile?.streak_best || 0}
+        />
       </div>
 
-      {/* XP Bar with pulse effect */}
+      {/* XP Bar */}
       <XPBar
         level={levelInfo.level}
         currentXP={levelInfo.currentXP}
@@ -635,7 +820,11 @@ export default function DashboardPage() {
             hour: currentHour,
             dayOfWeek: now.getDay(),
             dayOfMonth: now.getDate(),
-            daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+            daysInMonth: new Date(
+              now.getFullYear(),
+              now.getMonth() + 1,
+              0
+            ).getDate(),
           });
           if (advice.length === 0) return null;
           return <AdvisorCard greeting={greeting} advice={advice} />;
@@ -715,7 +904,9 @@ export default function DashboardPage() {
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Месяц ({monthPercent}%)</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>
+              Месяц ({monthPercent}%)
+            </div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>
               {formatCurrency(monthIncome)}
             </div>
@@ -733,15 +924,29 @@ export default function DashboardPage() {
           marginBottom: '12px',
         }}
       >
-        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>⚡ Быстрые действия</div>
+        <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
+          ⚡ Быстрые действия
+          {activeSkillCount > 0 && (
+            <span
+              style={{
+                fontSize: '10px',
+                color: '#a78bfa',
+                marginLeft: '8px',
+                fontWeight: 400,
+              }}
+            >
+              🧬 навыки активны
+            </span>
+          )}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           {[
-            { type: 'action', label: 'Звонок', icon: '📞', xp: 5, gold: 2 },
-            { type: 'action', label: 'Касание', icon: '💬', xp: 5, gold: 2 },
-            { type: 'action', label: 'Лид', icon: '🎯', xp: 5, gold: 2 },
-            { type: 'task', label: 'Задача', icon: '✅', xp: 25, gold: 12 },
-            { type: 'hard_task', label: 'Сложная', icon: '🔥', xp: 50, gold: 25 },
-            { type: 'income', label: 'Доход', icon: '💰', xp: 100, gold: 50 },
+            { type: 'action', label: 'Звонок', actionLabel: '+1 Звонок', icon: '📞', xp: 5, gold: 2 },
+            { type: 'action', label: 'Касание', actionLabel: '+1 Касание', icon: '💬', xp: 5, gold: 2 },
+            { type: 'action', label: 'Лид', actionLabel: '+1 Лид', icon: '🎯', xp: 5, gold: 2 },
+            { type: 'task', label: 'Задача', actionLabel: 'Задача', icon: '✅', xp: 25, gold: 12 },
+            { type: 'hard_task', label: 'Сложная', actionLabel: 'Сложная', icon: '🔥', xp: 50, gold: 25 },
+            { type: 'income', label: 'Доход', actionLabel: 'Доход', icon: '💰', xp: 100, gold: 50 },
           ].map((btn, i) => {
             const isIncome = btn.type === 'income';
             return (
@@ -751,12 +956,17 @@ export default function DashboardPage() {
                   if (isIncome) {
                     void addIncome(e);
                   } else {
-                    const actionLabel =
-                      btn.type === 'action'
-                        ? `+1 ${btn.label}`
-                        : btn.label;
-                    void quickAction(btn.type, actionLabel, e);
+                    void quickAction(btn.type, btn.actionLabel, e);
                   }
+                }}
+                onPointerDown={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)';
+                }}
+                onPointerUp={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+                }}
+                onPointerLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
                 }}
                 style={{
                   padding: '12px 8px',
@@ -767,19 +977,11 @@ export default function DashboardPage() {
                   cursor: 'pointer',
                   fontSize: '13px',
                   textAlign: 'center',
-                  transition: 'transform 0.1s ease, box-shadow 0.2s ease',
-                }}
-                onMouseDown={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.95)';
-                }}
-                onMouseUp={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+                  transition: 'transform 0.1s ease',
+                  WebkitTapHighlightColor: 'transparent',
                 }}
               >
-                <div>{btn.icon}</div>
+                <div style={{ fontSize: '20px' }}>{btn.icon}</div>
                 <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
                 <div
                   style={{
