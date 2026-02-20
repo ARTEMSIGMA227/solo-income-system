@@ -18,22 +18,7 @@ import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { generateAdvice } from '@/lib/advisor';
 import DailyChallenge from './DailyChallenge';
 import { DailyMissionsCard } from "@/components/dashboard/daily-missions-card";
-
-// Утилита обновления прогресса миссий
-async function updateMissionProgress(
-  missionType: string,
-  increment: number
-): Promise<void> {
-  try {
-    await fetch("/api/daily-missions/update-progress", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mission_type: missionType, increment }),
-    });
-  } catch {
-    // Не блокируем основной flow
-  }
-}
+import { useMissionTracker } from "@/hooks/use-mission-tracker";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -52,6 +37,7 @@ export default function DashboardPage() {
   const [deathXP, setDeathXP] = useState(100);
   const [deathMisses, setDeathMisses] = useState(0);
   const router = useRouter();
+  const { trackProgress } = useMissionTracker();
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
@@ -119,23 +105,17 @@ export default function DashboardPage() {
           consecutive_misses: newMisses,
           updated_at: new Date().toISOString(),
         };
-        if (yesterdayActions === 0) {
-          profileUpdate.streak_current = 0;
-        }
+        if (yesterdayActions === 0) profileUpdate.streak_current = 0;
 
         await supabase.from('profiles').update(profileUpdate).eq('id', authUser.id);
 
         const newTotalLost = (s?.total_xp_lost || 0) + penaltyXP;
-        const updateData: {
-          total_xp_lost: number;
-          updated_at: string;
-          level?: number;
-          current_xp?: number;
-        } = { total_xp_lost: newTotalLost, updated_at: new Date().toISOString() };
+        const updateData: { total_xp_lost: number; updated_at: string; level?: number; current_xp?: number } = {
+          total_xp_lost: newTotalLost, updated_at: new Date().toISOString(),
+        };
 
         if (newMisses >= 3) {
-          const newLevel = Math.max((s?.level || 1) - 1, 1);
-          updateData.level = newLevel;
+          updateData.level = Math.max((s?.level || 1) - 1, 1);
           updateData.current_xp = 0;
           setDeathType('level_down');
           await supabase.from('profiles').update({ consecutive_misses: 0 }).eq('id', authUser.id);
@@ -144,7 +124,6 @@ export default function DashboardPage() {
         }
 
         await supabase.from('stats').update(updateData).eq('user_id', authUser.id);
-
         setDeathXP(penaltyXP);
         setDeathMisses(newMisses);
         setShowDeath(true);
@@ -152,71 +131,54 @@ export default function DashboardPage() {
         const { data: freshStats } = await supabase.from('stats').select('*').eq('user_id', authUser.id).single();
         if (freshStats) setStats(freshStats);
         const { data: freshProfile } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
-        if (freshProfile) {
-          currentProfile = freshProfile;
-          setProfile(freshProfile);
-        }
+        if (freshProfile) { currentProfile = freshProfile; setProfile(freshProfile); }
       }
 
       if (loadedActions > 0 && currentProfile) {
         const { data: streakCheck } = await supabase
           .from('xp_events').select('id')
-          .eq('user_id', authUser.id)
-          .eq('event_type', 'streak_checkin')
-          .eq('event_date', today);
+          .eq('user_id', authUser.id).eq('event_type', 'streak_checkin').eq('event_date', today);
 
-        const alreadyCheckedIn = streakCheck && streakCheck.length > 0;
-
-        if (!alreadyCheckedIn) {
+        if (!streakCheck || streakCheck.length === 0) {
           const hadYesterday = yesterdayActions > 0;
           const currentStreak = currentProfile.streak_current || 0;
           const newStreak = hadYesterday ? currentStreak + 1 : 1;
           const newBest = Math.max(newStreak, currentProfile.streak_best || 0);
 
           await supabase.from('profiles').update({
-            streak_current: newStreak,
-            streak_best: newBest,
-            consecutive_misses: 0,
+            streak_current: newStreak, streak_best: newBest, consecutive_misses: 0,
             updated_at: new Date().toISOString(),
           }).eq('id', currentProfile.id);
 
           await supabase.from('xp_events').insert({
             user_id: authUser.id, event_type: 'streak_checkin',
-            xp_amount: 0, description: `Серия: день ${newStreak}`,
-            event_date: today,
+            xp_amount: 0, description: `Серия: день ${newStreak}`, event_date: today,
           });
 
           setProfile(prev => prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev);
-
-          // Обновляем миссию login_streak
-          void updateMissionProgress('login_streak', 1);
+          void trackProgress('login_streak', 1);
         }
       }
 
       setLoading(false);
     }
     loadData();
-  }, [router]);
+  }, [router, trackProgress]);
 
   async function updateStreakOnFirstAction() {
     if (!user || !profile) return;
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    const { data: check } = await supabase
-      .from('xp_events').select('id')
-      .eq('user_id', user.id)
-      .eq('event_type', 'streak_checkin')
-      .eq('event_date', today);
-
+    const { data: check } = await supabase.from('xp_events').select('id')
+      .eq('user_id', user.id).eq('event_type', 'streak_checkin').eq('event_date', today);
     if (check && check.length > 0) return;
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    const { data: yd } = await supabase
-      .from('completions').select('count_done')
+    const { data: yd } = await supabase.from('completions').select('count_done')
       .eq('user_id', user.id).eq('completion_date', yesterdayStr);
 
     const hadYesterday = (yd?.reduce((s, c) => s + c.count_done, 0) || 0) > 0;
@@ -225,26 +187,18 @@ export default function DashboardPage() {
     const newBest = Math.max(newStreak, profile.streak_best || 0);
 
     await supabase.from('profiles').update({
-      streak_current: newStreak,
-      streak_best: newBest,
-      consecutive_misses: 0,
+      streak_current: newStreak, streak_best: newBest, consecutive_misses: 0,
       updated_at: new Date().toISOString(),
     }).eq('id', profile.id);
 
     await supabase.from('xp_events').insert({
       user_id: user.id, event_type: 'streak_checkin',
-      xp_amount: 0, description: `Серия: день ${newStreak}`,
-      event_date: today,
+      xp_amount: 0, description: `Серия: день ${newStreak}`, event_date: today,
     });
 
     setProfile(prev => prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev);
-
-    if (newStreak > 1) {
-      toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
-    }
-
-    // Обновляем миссию login_streak
-    void updateMissionProgress('login_streak', 1);
+    if (newStreak > 1) toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
+    void trackProgress('login_streak', 1);
   }
 
   async function quickAction(type: string, label: string) {
@@ -254,17 +208,9 @@ export default function DashboardPage() {
     const xp = XP_REWARDS[type as keyof typeof XP_REWARDS] || 5;
     const gold = Math.round(xp * 0.5);
 
-    await supabase.from('completions').insert({
-      user_id: user.id, completion_date: today, count_done: 1, notes: label,
-    });
-
-    await supabase.from('xp_events').insert({
-      user_id: user.id, event_type: type, xp_amount: xp, description: label, event_date: today,
-    });
-
-    await supabase.from('gold_events').insert({
-      user_id: user.id, amount: gold, event_type: 'quest_reward', description: label, event_date: today,
-    });
+    await supabase.from('completions').insert({ user_id: user.id, completion_date: today, count_done: 1, notes: label });
+    await supabase.from('xp_events').insert({ user_id: user.id, event_type: type, xp_amount: xp, description: label, event_date: today });
+    await supabase.from('gold_events').insert({ user_id: user.id, amount: gold, event_type: 'quest_reward', description: label, event_date: today });
 
     const newTotalEarned = stats.total_xp_earned + xp;
     const newActions = stats.total_actions + 1;
@@ -273,34 +219,20 @@ export default function DashboardPage() {
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     await supabase.from('stats').update({
-      level: levelInfo.level,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_actions: newActions,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
+      level: levelInfo.level, current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned, total_actions: newActions,
+      gold: newGold, total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({
-      ...stats,
-      level: levelInfo.level,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_actions: newActions,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
-    });
+    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold });
 
-    if (todayActions === 0) {
-      await updateStreakOnFirstAction();
-    }
-
+    if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayActions(prev => prev + 1);
     toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
 
-    // ★ Обновляем прогресс миссий ★
-    void updateMissionProgress('complete_quests', 1);
+    // ★ МИССИИ ★
+    void trackProgress('complete_quests', 1);
   }
 
   async function addIncome() {
@@ -314,22 +246,13 @@ export default function DashboardPage() {
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    await supabase.from('income_events').insert({
-      user_id: user.id, amount, source, event_date: today,
-    });
+    await supabase.from('income_events').insert({ user_id: user.id, amount, source, event_date: today });
 
     const xp = XP_REWARDS.sale;
     const gold = 50;
 
-    await supabase.from('xp_events').insert({
-      user_id: user.id, event_type: 'sale', xp_amount: xp,
-      description: `Доход: ${amount}₽`, event_date: today,
-    });
-
-    await supabase.from('gold_events').insert({
-      user_id: user.id, amount: gold, event_type: 'quest_reward',
-      description: `Доход: ${amount}₽`, event_date: today,
-    });
+    await supabase.from('xp_events').insert({ user_id: user.id, event_type: 'sale', xp_amount: xp, description: `Доход: ${amount}₽`, event_date: today });
+    await supabase.from('gold_events').insert({ user_id: user.id, amount: gold, event_type: 'quest_reward', description: `Доход: ${amount}₽`, event_date: today });
 
     const newTotalEarned = stats.total_xp_earned + xp;
     const newIncome = Number(stats.total_income) + amount;
@@ -338,47 +261,28 @@ export default function DashboardPage() {
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
     await supabase.from('stats').update({
-      level: levelInfo.level,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_income: newIncome,
-      total_sales: stats.total_sales + 1,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
+      level: levelInfo.level, current_xp: levelInfo.currentXP,
+      total_xp_earned: newTotalEarned, total_income: newIncome,
+      total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold,
       updated_at: new Date().toISOString(),
     }).eq('user_id', user.id);
 
-    setStats({
-      ...stats,
-      level: levelInfo.level,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_income: newIncome,
-      total_sales: stats.total_sales + 1,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
-    });
+    setStats({ ...stats, level: levelInfo.level, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_income: newIncome, total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold });
 
-    if (todayActions === 0) {
-      await updateStreakOnFirstAction();
-    }
-
+    if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayIncome(prev => prev + amount);
     setMonthIncome(prev => prev + amount);
     setTodayActions(prev => prev + 1);
     toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
 
-    // ★ Обновляем прогресс миссий ★
-    void updateMissionProgress('earn_income', amount);
-    void updateMissionProgress('complete_quests', 1);
+    // ★ МИССИИ ★
+    void trackProgress('earn_income', amount);
+    void trackProgress('complete_quests', 1);
   }
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa', fontSize: '24px',
-      }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa', fontSize: '24px' }}>
         ⚔️ Загрузка...
       </div>
     );
@@ -399,148 +303,74 @@ export default function DashboardPage() {
   else if (currentHour >= 21) { dayStatusColor = '#ef4444'; dayStatusText = '🔴 Мало времени!'; }
 
   return (
-    <div style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
-      padding: '16px', maxWidth: '600px', margin: '0 auto',
-    }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
+      {showDeath && <DeathScreen type={deathType} xpLost={deathXP} consecutiveMisses={deathMisses} onAccept={() => setShowDeath(false)} />}
+      {showEditor && user && <CharacterEditor userId={user.id} config={charConfig} onSave={(c) => { setCharConfig(c); setShowEditor(false); }} onClose={() => setShowEditor(false)} />}
 
-      {showDeath && (
-        <DeathScreen
-          type={deathType}
-          xpLost={deathXP}
-          consecutiveMisses={deathMisses}
-          onAccept={() => setShowDeath(false)}
-        />
-      )}
-
-      {showEditor && user && (
-        <CharacterEditor
-          userId={user.id}
-          config={charConfig}
-          onSave={(newConfig) => { setCharConfig(newConfig); setShowEditor(false); }}
-          onClose={() => setShowEditor(false)}
-        />
-      )}
-
-      {/* Шапка */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>{todayDate}</div>
           <div style={{ fontSize: '14px', color: '#94a3b8' }}>{profile?.display_name || 'Охотник'}</div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div style={{
-            padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600,
-            backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30',
-          }}>
+          <div style={{ padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30' }}>
             🪙 {formatNumber(stats?.gold || 0)}
           </div>
-          <div style={{
-            padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-            color: dayStatusColor, backgroundColor: dayStatusColor + '20',
-            border: `1px solid ${dayStatusColor}30`,
-          }}>
+          <div style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, color: dayStatusColor, backgroundColor: dayStatusColor + '20', border: `1px solid ${dayStatusColor}30` }}>
             {dayStatusText}
           </div>
         </div>
       </div>
 
-      <HunterAvatar
-        level={levelInfo.level}
-        title={levelInfo.title}
-        config={charConfig}
-        onEdit={() => setShowEditor(true)}
-      />
+      <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner
-          streak={profile?.streak_current || 0}
-          bestStreak={profile?.streak_best || 0}
-        />
+        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
       </div>
 
-      {/* Уровень */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginTop: '12px', marginBottom: '12px',
-      }}>
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginTop: '12px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '24px', fontWeight: 800, color: '#a78bfa' }}>LV. {levelInfo.level}</span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-            {formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP
-          </span>
+          <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatNumber(levelInfo.currentXP)} / {formatNumber(levelInfo.xpToNext)} XP</span>
         </div>
-        <div style={{
-          width: '100%', height: '12px', backgroundColor: '#16161f', borderRadius: '6px',
-          overflow: 'hidden', border: '1px solid #1e1e2e',
-        }}>
-          <div style={{
-            width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px',
-            background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease',
-          }} />
+        <div style={{ width: '100%', height: '12px', backgroundColor: '#16161f', borderRadius: '6px', overflow: 'hidden', border: '1px solid #1e1e2e' }}>
+          <div style={{ width: `${levelInfo.progressPercent}%`, height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg, #7c3aed, #3b82f6)', transition: 'width 0.7s ease' }} />
         </div>
       </div>
 
-      {/* AI Советник */}
       {profile && stats && (() => {
         const now = new Date();
-        const { greeting, advice } = generateAdvice({
-          stats, profile, todayActions, todayIncome, monthIncome,
-          hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(),
-          daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
-        });
+        const { greeting, advice } = generateAdvice({ stats, profile, todayActions, todayIncome, monthIncome, hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(), daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() });
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
       })()}
 
-      {/* Ежедневные миссии */}
-      <div style={{ marginBottom: '12px' }}>
-        <DailyMissionsCard />
-      </div>
-
-      {/* Ежедневный челлендж */}
+      <div style={{ marginBottom: '12px' }}><DailyMissionsCard /></div>
       <DailyChallenge />
 
-      {/* Прогресс */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '12px',
-      }}>
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
             <span>Действия</span>
             <span style={{ color: '#a78bfa' }}>{todayActions} / {actionsTarget}</span>
           </div>
-          <div style={{
-            width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden',
-          }}>
-            <div style={{
-              width: `${actionsPercent}%`, height: '100%', borderRadius: '4px',
-              backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed',
-            }} />
+          <div style={{ width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: `${actionsPercent}%`, height: '100%', borderRadius: '4px', backgroundColor: actionsPercent >= 100 ? '#22c55e' : '#7c3aed' }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <div style={{
-            flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center',
-          }}>
+          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>Сегодня</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(todayIncome)}</div>
           </div>
-          <div style={{
-            flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center',
-          }}>
+          <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>Месяц ({monthPercent}%)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(monthIncome)}</div>
           </div>
         </div>
       </div>
 
-      {/* Быстрые действия */}
-      <div style={{
-        backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px',
-        padding: '16px', marginBottom: '12px',
-      }}>
+      <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>⚡ Быстрые действия</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           {[
@@ -552,21 +382,14 @@ export default function DashboardPage() {
             { fn: addIncome, icon: '💰', label: 'Доход', xp: 100, gold: 50 },
           ].map((btn, i) => (
             <button key={i} onClick={btn.fn} style={{
-              padding: '12px 8px',
-              backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
-              border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`,
-              borderRadius: '10px',
-              color: i === 5 ? '#22c55e' : '#e2e8f0',
-              cursor: 'pointer', fontSize: '13px', textAlign: 'center',
+              padding: '12px 8px', backgroundColor: i === 5 ? '#1a1a2e' : '#16161f',
+              border: `1px solid ${i === 5 ? '#22c55e30' : '#1e1e2e'}`, borderRadius: '10px',
+              color: i === 5 ? '#22c55e' : '#e2e8f0', cursor: 'pointer', fontSize: '13px', textAlign: 'center',
             }}>
               <div>{btn.icon}</div>
               <div style={{ fontSize: '11px', marginTop: '2px' }}>{btn.label}</div>
-              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>
-                +{btn.xp} XP
-              </div>
-              <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>
-                +{btn.gold} 🪙
-              </div>
+              <div style={{ fontSize: '10px', color: i === 5 ? '#22c55e' : '#7c3aed', marginTop: '2px' }}>+{btn.xp} XP</div>
+              <div style={{ fontSize: '9px', color: '#f59e0b', marginTop: '1px' }}>+{btn.gold} 🪙</div>
             </button>
           ))}
         </div>
