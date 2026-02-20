@@ -1,6 +1,6 @@
 'use client';
 
-import type { SkillNode, SkillBranch } from '@/lib/skill-tree';
+import type { SkillNode } from '@/lib/skill-tree';
 import { SKILL_BRANCHES, canAllocate } from '@/lib/skill-tree';
 
 interface SkillNodeCardProps {
@@ -62,7 +62,6 @@ export default function SkillNodeCard({
         overflow: 'hidden',
       }}
     >
-      {/* Glow effect on maxed */}
       {isMaxed && (
         <div
           style={{
@@ -75,7 +74,6 @@ export default function SkillNodeCard({
       )}
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '20px' }}>{node.icon}</span>
@@ -101,12 +99,10 @@ export default function SkillNodeCard({
           </div>
         </div>
 
-        {/* Description */}
         <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', lineHeight: 1.4 }}>
           {node.description}
         </div>
 
-        {/* Effects */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {node.effects.map((effect, i) => {
             const currentVal = currentLevel > 0 ? effect.value + effect.perLevel * (currentLevel - 1) : 0;
@@ -115,21 +111,18 @@ export default function SkillNodeCard({
               <div key={i} style={{ fontSize: '10px', color: isUnlocked ? branch.color : '#4a4a5a' }}>
                 {currentLevel > 0 && currentLevel < node.maxLevel
                   ? `${effect.description.replace('{value}', String(currentVal))} → ${nextVal}`
-                  : effect.description.replace('{value}', String(currentLevel > 0 ? currentVal : nextVal))
-                }
+                  : effect.description.replace('{value}', String(currentLevel > 0 ? currentVal : nextVal))}
               </div>
             );
           })}
         </div>
 
-        {/* Locked reason */}
         {!check.can && !isMaxed && check.reason && (
           <div style={{ fontSize: '9px', color: '#ef444480', marginTop: '4px' }}>
             🔒 {check.reason}
           </div>
         )}
 
-        {/* Can allocate indicator */}
         {check.can && (
           <div
             style={{

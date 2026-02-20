@@ -1,8 +1,8 @@
 'use client';
 
-import type { SkillNode, SkillBranch } from '@/lib/skill-tree';
+import type { SkillBranch } from '@/lib/skill-tree';
 import { SKILL_BRANCHES, getSkillsByBranch } from '@/lib/skill-tree';
-import SkillNodeCard from './SkillNodeCard';
+import SkillNodeCard from '@/components/skills/SkillNodeCard';
 
 interface SkillBranchColumnProps {
   branch: SkillBranch;
@@ -33,7 +33,6 @@ export default function SkillBranchColumn({
         marginBottom: '12px',
       }}
     >
-      {/* Branch Header */}
       <div
         style={{
           display: 'flex',
@@ -67,7 +66,6 @@ export default function SkillBranchColumn({
         </div>
       </div>
 
-      {/* Skill Nodes with connection lines */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {nodes.map((node, i) => (
           <div key={node.id}>
@@ -78,15 +76,8 @@ export default function SkillBranchColumn({
               availablePoints={availablePoints}
               onAllocate={onAllocate}
             />
-            {/* Connection line */}
             {i < nodes.length - 1 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  padding: '2px 0',
-                }}
-              >
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0' }}>
                 <div
                   style={{
                     width: '2px',
