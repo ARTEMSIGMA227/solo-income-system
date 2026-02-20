@@ -221,3 +221,11 @@ export interface Achievement {
   achievement_key: string;
   unlocked_at: string;
 }
+
+export interface UserSkillAllocation {
+  id: string;
+  user_id: string;
+  skill_id: string;
+  level: number;
+  allocated_at: string;
+}

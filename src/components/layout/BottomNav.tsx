@@ -15,6 +15,7 @@ const MORE_ITEMS = [
   { path: '/leaderboard', label: 'Топ', icon: '🏆' },
   { path: '/advisor', label: 'Советник', icon: '🤖' },
   { path: '/focus', label: 'Фокус', icon: '🎯' },
+  { path: '/skills', icon: '⚔️', label: 'Навыки' },
   { path: '/achievements', label: 'Ачивки', icon: '🏆' },
   { path: '/bosses', label: 'Боссы', icon: '💀' },
   { path: '/analytics', label: 'Аналитика', icon: '📈' },
