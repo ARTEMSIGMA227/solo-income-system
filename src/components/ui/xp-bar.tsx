@@ -3,6 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
+function xpToNextLevel(level: number): number {
+  return 500 + level * 250;
+}
+
 interface StatsLevel {
   level: number;
   currentXP: number;
@@ -20,20 +24,19 @@ function useStatsLevel() {
 
         const { data } = await supabase
           .from("stats")
-          .select("level, current_xp, total_xp_earned, total_xp_lost")
+          .select("level, current_xp")
           .eq("user_id", user.id)
           .single();
 
         if (!data) return null;
 
-        // Используем ту же формулу что и getLevelInfo
         const level = data.level || 1;
         const currentXP = data.current_xp || 0;
-        // xpToNext для каждого уровня = level * 750
-        const xpToNext = level * 750;
+        const xpToNext = xpToNextLevel(level);
 
         return { level, currentXP, xpToNext };
-      } catch {
+      } catch (err) {
+        console.error("useStatsLevel error:", err);
         return null;
       }
     },
