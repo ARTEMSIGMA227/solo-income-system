@@ -1,5 +1,7 @@
 export type TerritoryStatus = 'locked' | 'foggy' | 'available' | 'in_progress' | 'captured';
 
+export type BiomeType = 'plains' | 'forest' | 'desert' | 'mountain' | 'swamp' | 'snow' | 'magical' | 'crystal';
+
 export interface TerritoryReward {
   type: 'xp_bonus' | 'gold_bonus' | 'passive_gold' | 'skill_points' | 'title';
   value: number | string;
@@ -24,6 +26,7 @@ export interface Territory {
   icon: string;
   color: string;
   bgGradient: string;
+  biome: BiomeType;
   position: { x: number; y: number };
   requiredXP: number;
   maxLevel: number;
@@ -34,6 +37,21 @@ export interface Territory {
   lore: string;
 }
 
+export const BIOME_CONFIG: Record<BiomeType, {
+  label: string;
+  accent: string;
+  bgTint: string;
+}> = {
+  plains:  { label: 'Равнины',           accent: '#7cb342', bgTint: 'rgba(124,179,66,0.06)' },
+  forest:  { label: 'Лес',              accent: '#4a7c2e', bgTint: 'rgba(74,124,46,0.06)' },
+  desert:  { label: 'Пустыня',          accent: '#c49a3c', bgTint: 'rgba(196,154,60,0.06)' },
+  mountain:{ label: 'Горы',             accent: '#8d7b6b', bgTint: 'rgba(141,123,107,0.06)' },
+  swamp:   { label: 'Болота',           accent: '#5e7a5e', bgTint: 'rgba(94,122,94,0.06)' },
+  snow:    { label: 'Снежные вершины',  accent: '#a8b8c8', bgTint: 'rgba(168,184,200,0.06)' },
+  magical: { label: 'Магические земли', accent: '#8b6cc1', bgTint: 'rgba(139,108,193,0.06)' },
+  crystal: { label: 'Кристальный',      accent: '#d46ca8', bgTint: 'rgba(212,108,168,0.06)' },
+};
+
 export const TERRITORIES: Territory[] = [
   {
     id: 'starter_village',
@@ -42,6 +60,7 @@ export const TERRITORIES: Territory[] = [
     icon: '🏘️',
     color: '#22c55e',
     bgGradient: 'from-green-900/40 to-green-800/20',
+    biome: 'plains',
     position: { x: 50, y: 85 },
     requiredXP: 500,
     maxLevel: 5,
@@ -64,6 +83,7 @@ export const TERRITORIES: Territory[] = [
     icon: '🏪',
     color: '#f59e0b',
     bgGradient: 'from-amber-900/40 to-amber-800/20',
+    biome: 'forest',
     position: { x: 25, y: 65 },
     requiredXP: 1000,
     maxLevel: 5,
@@ -90,6 +110,7 @@ export const TERRITORIES: Territory[] = [
     icon: '🏰',
     color: '#ef4444',
     bgGradient: 'from-red-900/40 to-red-800/20',
+    biome: 'mountain',
     position: { x: 75, y: 65 },
     requiredXP: 1000,
     maxLevel: 5,
@@ -116,6 +137,7 @@ export const TERRITORIES: Territory[] = [
     icon: '📚',
     color: '#6366f1',
     bgGradient: 'from-indigo-900/40 to-indigo-800/20',
+    biome: 'magical',
     position: { x: 15, y: 40 },
     requiredXP: 1500,
     maxLevel: 5,
@@ -141,6 +163,7 @@ export const TERRITORIES: Territory[] = [
     icon: '⛰️',
     color: '#8b5cf6',
     bgGradient: 'from-violet-900/40 to-violet-800/20',
+    biome: 'snow',
     position: { x: 85, y: 40 },
     requiredXP: 1500,
     maxLevel: 5,
@@ -166,6 +189,7 @@ export const TERRITORIES: Territory[] = [
     icon: '⚙️',
     color: '#06b6d4',
     bgGradient: 'from-cyan-900/40 to-cyan-800/20',
+    biome: 'desert',
     position: { x: 60, y: 40 },
     requiredXP: 1200,
     maxLevel: 5,
@@ -191,6 +215,7 @@ export const TERRITORIES: Territory[] = [
     icon: '🌑',
     color: '#71717a',
     bgGradient: 'from-zinc-900/40 to-zinc-800/20',
+    biome: 'swamp',
     position: { x: 30, y: 20 },
     requiredXP: 2000,
     maxLevel: 5,
@@ -217,6 +242,7 @@ export const TERRITORIES: Territory[] = [
     icon: '💎',
     color: '#ec4899',
     bgGradient: 'from-pink-900/40 to-fuchsia-900/20',
+    biome: 'crystal',
     position: { x: 50, y: 5 },
     requiredXP: 5000,
     maxLevel: 5,

@@ -28,17 +28,23 @@ export default function MapPage() {
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              width: '40px',
-              height: '40px',
-              border: '2px solid #6366f1',
+              width: '36px',
+              height: '36px',
+              border: '2px solid rgba(139, 105, 20, 0.4)',
               borderTopColor: 'transparent',
               borderRadius: '50%',
               animation: 'spin 1s linear infinite',
               margin: '0 auto 12px',
             }}
           />
-          <p style={{ fontSize: '14px', color: '#a1a1aa' }}>
-            Загрузка карты...
+          <p
+            style={{
+              fontSize: '13px',
+              color: 'rgba(180, 160, 120, 0.7)',
+              fontFamily: 'serif',
+            }}
+          >
+            Разворачиваем карту...
           </p>
         </div>
       </div>
@@ -88,13 +94,13 @@ export default function MapPage() {
   return (
     <div style={{ paddingBottom: '96px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '14px' }}>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            marginBottom: '4px',
+            marginBottom: '3px',
           }}
         >
           <span style={{ fontSize: '20px' }}>🗺️</span>
@@ -104,17 +110,26 @@ export default function MapPage() {
               fontWeight: 700,
               color: '#fff',
               margin: 0,
+              fontFamily: 'serif',
+              letterSpacing: '0.02em',
             }}
           >
             Карта Территорий
           </h1>
         </div>
-        <p style={{ fontSize: '12px', color: '#a1a1aa', margin: 0 }}>
+        <p
+          style={{
+            fontSize: '12px',
+            color: 'rgba(180, 160, 120, 0.6)',
+            margin: 0,
+            fontFamily: 'serif',
+          }}
+        >
           Захватывай территории, получай бонусы и открывай новые земли
         </p>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats bar — parchment cards */}
       <div
         style={{
           display: 'grid',
@@ -123,102 +138,68 @@ export default function MapPage() {
           marginBottom: '12px',
         }}
       >
-        <div
-          style={{
-            backgroundColor: '#12121a',
-            border: '1px solid #1e1e2e',
-            borderRadius: '12px',
-            padding: '12px',
-            textAlign: 'center',
-          }}
-        >
+        {[
+          {
+            icon: '👑',
+            value: capturedCount,
+            label: 'Захвачено',
+            accent: '#8b6914',
+          },
+          {
+            icon: '🔒',
+            value: totalCount - capturedCount,
+            label: 'Осталось',
+            accent: '#7a6c58',
+          },
+          {
+            icon: '⚔️',
+            value: `${progressPercent}%`,
+            label: 'Прогресс',
+            accent: '#5a8a30',
+          },
+        ].map((stat) => (
           <div
+            key={stat.label}
             style={{
-              fontSize: '18px',
-              fontWeight: 700,
-              color: '#facc15',
+              background: 'linear-gradient(145deg, rgba(200,180,140,0.1), rgba(160,140,100,0.05))',
+              border: '1px solid rgba(140, 120, 80, 0.15)',
+              borderRadius: '8px',
+              padding: '10px',
+              textAlign: 'center',
             }}
           >
-            👑 {capturedCount}
+            <div
+              style={{
+                fontSize: '17px',
+                fontWeight: 700,
+                color: stat.accent,
+                fontFamily: 'serif',
+              }}
+            >
+              {stat.icon} {stat.value}
+            </div>
+            <p
+              style={{
+                fontSize: '9px',
+                color: 'rgba(180, 160, 120, 0.5)',
+                margin: '2px 0 0',
+                fontFamily: 'serif',
+                letterSpacing: '0.05em',
+              }}
+            >
+              {stat.label}
+            </p>
           </div>
-          <p
-            style={{
-              fontSize: '10px',
-              color: '#71717a',
-              margin: '2px 0 0',
-            }}
-          >
-            Захвачено
-          </p>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: '#12121a',
-            border: '1px solid #1e1e2e',
-            borderRadius: '12px',
-            padding: '12px',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontSize: '18px',
-              fontWeight: 700,
-              color: '#a1a1aa',
-            }}
-          >
-            🔒 {totalCount - capturedCount}
-          </div>
-          <p
-            style={{
-              fontSize: '10px',
-              color: '#71717a',
-              margin: '2px 0 0',
-            }}
-          >
-            Осталось
-          </p>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: '#12121a',
-            border: '1px solid #1e1e2e',
-            borderRadius: '12px',
-            padding: '12px',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            style={{
-              fontSize: '18px',
-              fontWeight: 700,
-              color: '#818cf8',
-            }}
-          >
-            ⚔️ {progressPercent}%
-          </div>
-          <p
-            style={{
-              fontSize: '10px',
-              color: '#71717a',
-              margin: '2px 0 0',
-            }}
-          >
-            Прогресс
-          </p>
-        </div>
+        ))}
       </div>
 
-      {/* Active territory info */}
+      {/* Active territory banner — scroll style */}
       {activeTerritory && activeProgress && (
         <div
           style={{
-            background:
-              'linear-gradient(135deg, rgba(34,211,238,0.08), rgba(99,102,241,0.08))',
-            border: '1px solid rgba(34,211,238,0.2)',
-            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(139,105,20,0.1), rgba(120,90,50,0.06))',
+            border: '1px solid rgba(139, 105, 20, 0.2)',
+            borderRadius: '8px',
             padding: '12px',
             marginBottom: '12px',
           }}
@@ -243,6 +224,7 @@ export default function MapPage() {
                     fontWeight: 600,
                     color: '#fff',
                     margin: 0,
+                    fontFamily: 'serif',
                   }}
                 >
                   {activeTerritory.name}
@@ -250,8 +232,9 @@ export default function MapPage() {
                 <p
                   style={{
                     fontSize: '10px',
-                    color: '#22d3ee',
+                    color: 'rgba(200, 170, 100, 0.8)',
                     margin: '2px 0 0',
+                    fontFamily: 'monospace',
                   }}
                 >
                   Lv.{activeProgress.level} · {activeProgress.current_xp}/
@@ -265,9 +248,10 @@ export default function MapPage() {
             </div>
             <span
               style={{
-                fontSize: '12px',
-                color: '#22d3ee',
-                fontWeight: 500,
+                fontSize: '11px',
+                color: 'rgba(200, 170, 100, 0.8)',
+                fontWeight: 600,
+                fontFamily: 'serif',
               }}
             >
               ⚔️ Активна
@@ -277,7 +261,7 @@ export default function MapPage() {
             style={{
               marginTop: '8px',
               height: '5px',
-              backgroundColor: '#27272a',
+              backgroundColor: 'rgba(80, 55, 30, 0.15)',
               borderRadius: '3px',
               overflow: 'hidden',
             }}
@@ -286,9 +270,10 @@ export default function MapPage() {
               style={{
                 height: '100%',
                 width: `${activeXPPercent}%`,
-                background: 'linear-gradient(90deg, #22d3ee, #6366f1)',
+                background: 'linear-gradient(90deg, #8b6914, #b08a20, #c8a030)',
                 borderRadius: '3px',
                 transition: 'width 0.6s ease',
+                boxShadow: '0 0 6px rgba(139,105,20,0.3)',
               }}
             />
           </div>
@@ -303,23 +288,17 @@ export default function MapPage() {
         style={{
           textAlign: 'center',
           fontSize: '10px',
-          color: '#3f3f46',
-          marginTop: '12px',
+          color: 'rgba(140, 120, 80, 0.4)',
+          marginTop: '10px',
+          fontFamily: 'serif',
+          fontStyle: 'italic',
         }}
       >
-        💡 20% XP от действий идёт в прогресс активной территории
+        ✦ 20% XP от действий идёт в прогресс активной территории ✦
       </p>
 
       {/* CSS animations */}
       <style>{`
-        @keyframes territory-pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
-        }
-        @keyframes territory-modal-in {
-          from { transform: scale(0.92); opacity: 0; }
-          to { transform: scale(1); opacity: 1; }
-        }
         @keyframes spin {
           to { transform: rotate(360deg); }
         }

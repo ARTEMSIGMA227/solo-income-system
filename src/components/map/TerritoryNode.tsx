@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Territory, TerritoryStatus } from '@/lib/map-data';
-import { calculateTerritoryXPForLevel } from '@/lib/map-data';
+import { BIOME_CONFIG, calculateTerritoryXPForLevel } from '@/lib/map-data';
 import type { TerritoryProgress } from '@/hooks/use-map';
 
 interface TerritoryNodeProps {
@@ -33,52 +33,58 @@ const STATUS_CONFIG: Record<
     glowShadow: string;
     bgColor: string;
     borderStyle: string;
+    sealColor: string;
   }
 > = {
   locked: {
     label: 'Заблокировано',
     icon: Lock,
-    ringColor: '#3a3530',
-    textColor: '#5a5040',
+    ringColor: '#8a7c68',
+    textColor: '#7a6c58',
     glowShadow: 'none',
-    bgColor: '#15130e',
-    borderStyle: '1px dashed #3a353080',
+    bgColor: '#a89878',
+    borderStyle: '1.5px dashed #8a7c6850',
+    sealColor: '#6b5c48',
   },
   foggy: {
     label: 'В тумане',
     icon: Eye,
-    ringColor: '#5a5545',
-    textColor: '#8a8070',
-    glowShadow: '0 0 15px rgba(100,90,70,0.15)',
-    bgColor: '#1a1812',
-    borderStyle: '1px solid #5a554540',
+    ringColor: '#9a8c78',
+    textColor: '#8a7c68',
+    glowShadow: '0 0 10px rgba(150,130,100,0.15)',
+    bgColor: '#b0a088',
+    borderStyle: '1.5px solid #9a8c7850',
+    sealColor: '#7a6c58',
   },
   available: {
     label: 'Доступно',
     icon: ChevronRight,
-    ringColor: '#5d8a3c',
-    textColor: '#7db856',
-    glowShadow: '0 0 20px rgba(93,138,60,0.3), 0 0 40px rgba(93,138,60,0.1)',
-    bgColor: '#151a10',
-    borderStyle: '2px solid #5d8a3c70',
+    ringColor: '#5a8a30',
+    textColor: '#4a7c22',
+    glowShadow: '0 0 15px rgba(90,138,48,0.3), 0 0 30px rgba(90,138,48,0.1)',
+    bgColor: '#c4b894',
+    borderStyle: '2px solid #5a8a3080',
+    sealColor: '#4a7c22',
   },
   in_progress: {
     label: 'В процессе',
     icon: Swords,
-    ringColor: '#c4880d',
-    textColor: '#e5a420',
-    glowShadow: '0 0 20px rgba(196,136,13,0.35), 0 0 40px rgba(196,136,13,0.1)',
-    bgColor: '#1a1508',
-    borderStyle: '2px solid #c4880d70',
+    ringColor: '#b07808',
+    textColor: '#a06a00',
+    glowShadow: '0 0 18px rgba(176,120,8,0.35), 0 0 35px rgba(176,120,8,0.1)',
+    bgColor: '#d0c098',
+    borderStyle: '2px solid #b0780880',
+    sealColor: '#a06a00',
   },
   captured: {
     label: 'Захвачено',
     icon: Crown,
-    ringColor: '#d4a830',
-    textColor: '#f0c848',
-    glowShadow: '0 0 25px rgba(212,168,48,0.4), 0 0 50px rgba(212,168,48,0.15)',
-    bgColor: '#1a1808',
-    borderStyle: '2px solid #d4a83090',
+    ringColor: '#8b6914',
+    textColor: '#7a5a08',
+    glowShadow: '0 0 22px rgba(139,105,20,0.4), 0 0 45px rgba(139,105,20,0.15)',
+    bgColor: '#d8c898',
+    borderStyle: '2px solid #8b691490',
+    sealColor: '#7a5a08',
   },
 };
 
@@ -107,7 +113,7 @@ export function TerritoryNode({
   const isInteractable = status === 'available' || status === 'in_progress';
   const isCaptured = status === 'captured';
 
-  const circumference = 2 * Math.PI * 30;
+  const circumference = 2 * Math.PI * 28;
   const strokeOffset = circumference * (1 - xpPercent / 100);
 
   return (
@@ -126,12 +132,12 @@ export function TerritoryNode({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '3px',
+          gap: '2px',
           background: 'none',
           border: 'none',
           padding: 0,
           cursor: isLocked ? 'not-allowed' : 'pointer',
-          opacity: isLocked ? 0.3 : isFoggy ? 0.5 : 1,
+          opacity: isLocked ? 0.35 : isFoggy ? 0.55 : 1,
           transition: 'opacity 0.3s, transform 0.15s',
           WebkitTapHighlightColor: 'transparent',
           zIndex: 10,
@@ -151,15 +157,31 @@ export function TerritoryNode({
             'translate(-50%, -50%) scale(1)';
         }}
       >
-        {/* Glow ring under node */}
+        {/* Ground shadow */}
         {(isInteractable || isCaptured) && (
           <div
             style={{
               position: 'absolute',
-              width: '80px',
-              height: '80px',
+              width: '56px',
+              height: '14px',
               borderRadius: '50%',
-              background: `radial-gradient(circle, ${config.ringColor}20, transparent 70%)`,
+              background: 'rgba(60, 40, 20, 0.15)',
+              bottom: '10px',
+              filter: 'blur(3px)',
+              zIndex: 0,
+            }}
+          />
+        )}
+
+        {/* Glow ring */}
+        {(isInteractable || isCaptured) && (
+          <div
+            style={{
+              position: 'absolute',
+              width: '76px',
+              height: '76px',
+              borderRadius: '50%',
+              background: `radial-gradient(circle, ${config.sealColor}18, transparent 70%)`,
               animation: isCaptured
                 ? 'node-glow-captured 3s ease-in-out infinite'
                 : isActive
@@ -170,16 +192,16 @@ export function TerritoryNode({
           />
         )}
 
-        {/* Main circle — shield/medallion style */}
+        {/* Main medallion / wax seal */}
         <div
           style={{
             position: 'relative',
-            width: '58px',
-            height: '58px',
+            width: '54px',
+            height: '54px',
             borderRadius: '50%',
-            background: `radial-gradient(circle at 35% 35%, ${config.bgColor}, #0a0908)`,
+            background: `radial-gradient(circle at 38% 35%, ${config.bgColor}, ${config.bgColor}cc)`,
             border: config.borderStyle,
-            boxShadow: config.glowShadow,
+            boxShadow: `${config.glowShadow}${config.glowShadow !== 'none' ? ',' : ''} inset 0 1px 2px rgba(255,255,255,0.15), inset 0 -2px 3px rgba(0,0,0,0.1), 0 2px 6px rgba(40,30,15,0.3)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -187,24 +209,36 @@ export function TerritoryNode({
             zIndex: 2,
           }}
         >
-          {/* Inner ring decoration */}
+          {/* Wax seal texture (for locked) */}
+          {isLocked && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                background: `radial-gradient(circle at 40% 35%, rgba(160,130,90,0.3), rgba(100,80,50,0.4))`,
+              }}
+            />
+          )}
+
+          {/* Inner ring */}
           <div
             style={{
               position: 'absolute',
               inset: '3px',
               borderRadius: '50%',
-              border: `1px solid ${config.ringColor}30`,
+              border: `1px solid ${config.ringColor}25`,
             }}
           />
 
-          {/* Active territory pulse */}
+          {/* Active territory pulse ring */}
           {isActive && (
             <div
               style={{
                 position: 'absolute',
                 inset: '-4px',
                 borderRadius: '50%',
-                border: '2px solid rgba(220, 190, 120, 0.6)',
+                border: '2px solid rgba(140, 100, 30, 0.6)',
                 animation: 'territory-pulse 2s ease-in-out infinite',
               }}
             />
@@ -215,27 +249,23 @@ export function TerritoryNode({
             <svg
               style={{
                 position: 'absolute',
-                inset: '-3px',
-                width: 'calc(100% + 6px)',
-                height: 'calc(100% + 6px)',
+                inset: '-4px',
+                width: 'calc(100% + 8px)',
+                height: 'calc(100% + 8px)',
                 transform: 'rotate(-90deg)',
               }}
-              viewBox="0 0 64 64"
+              viewBox="0 0 60 60"
             >
               <circle
-                cx="32"
-                cy="32"
-                r="30"
+                cx="30" cy="30" r="28"
                 fill="none"
-                stroke={`${config.ringColor}15`}
+                stroke={`${config.ringColor}12`}
                 strokeWidth="2.5"
               />
               <circle
-                cx="32"
-                cy="32"
-                r="30"
+                cx="30" cy="30" r="28"
                 fill="none"
-                stroke={config.ringColor}
+                stroke={config.sealColor}
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
@@ -252,15 +282,14 @@ export function TerritoryNode({
                 position: 'absolute',
                 inset: 0,
                 borderRadius: '50%',
-                background:
-                  'radial-gradient(circle, rgba(80,70,50,0.5), rgba(40,35,25,0.3))',
-                backdropFilter: 'blur(2px)',
+                background: 'radial-gradient(circle, rgba(180,160,130,0.6), rgba(150,130,100,0.4))',
+                backdropFilter: 'blur(1px)',
                 animation: 'fog-swirl 6s ease-in-out infinite',
               }}
             />
           )}
 
-          {/* Captured crown particles */}
+          {/* Captured sparkles */}
           {isCaptured && (
             <>
               <div
@@ -269,12 +298,12 @@ export function TerritoryNode({
                   width: '4px',
                   height: '4px',
                   borderRadius: '50%',
-                  backgroundColor: '#d4a830',
-                  top: '-2px',
+                  backgroundColor: '#b08a20',
+                  top: '-1px',
                   left: '50%',
                   transform: 'translateX(-50%)',
                   animation: 'sparkle-float 2.5s ease-in-out infinite',
-                  opacity: 0.6,
+                  opacity: 0.7,
                 }}
               />
               <div
@@ -283,11 +312,11 @@ export function TerritoryNode({
                   width: '3px',
                   height: '3px',
                   borderRadius: '50%',
-                  backgroundColor: '#e5c040',
-                  top: '5px',
+                  backgroundColor: '#c0a030',
+                  top: '6px',
                   right: '2px',
-                  animation: 'sparkle-float 3s ease-in-out infinite 0.5s',
-                  opacity: 0.4,
+                  animation: 'sparkle-float 3s ease-in-out infinite 0.6s',
+                  opacity: 0.5,
                 }}
               />
             </>
@@ -296,11 +325,15 @@ export function TerritoryNode({
           {/* Icon */}
           <span
             style={{
-              fontSize: '24px',
-              filter: isLocked ? 'grayscale(1) brightness(0.4)' : isFoggy ? 'grayscale(0.8) brightness(0.5)' : 'none',
+              fontSize: '22px',
+              filter: isLocked
+                ? 'grayscale(0.8) brightness(0.5)'
+                : isFoggy
+                  ? 'grayscale(0.7) brightness(0.6)'
+                  : 'none',
               position: 'relative',
               zIndex: 2,
-              textShadow: isCaptured ? '0 0 8px rgba(212,168,48,0.5)' : 'none',
+              textShadow: isCaptured ? '0 0 6px rgba(139,105,20,0.4)' : 'none',
             }}
           >
             {isFoggy ? '❓' : territory.icon}
@@ -310,21 +343,22 @@ export function TerritoryNode({
           <div
             style={{
               position: 'absolute',
-              top: '-3px',
-              right: '-3px',
-              width: '18px',
-              height: '18px',
+              top: '-2px',
+              right: '-2px',
+              width: '16px',
+              height: '16px',
               borderRadius: '50%',
-              backgroundColor: '#0d0c08',
-              border: `1px solid ${config.ringColor}80`,
+              backgroundColor: config.bgColor,
+              border: `1.5px solid ${config.sealColor}60`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 3,
+              boxShadow: '0 1px 3px rgba(40,30,15,0.2)',
             }}
           >
             <StatusIcon
-              style={{ width: '9px', height: '9px', color: config.textColor }}
+              style={{ width: '8px', height: '8px', color: config.sealColor }}
             />
           </div>
 
@@ -333,32 +367,33 @@ export function TerritoryNode({
             <div
               style={{
                 position: 'absolute',
-                bottom: '-5px',
+                bottom: '-4px',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                backgroundColor: '#12100a',
-                border: '1px solid #d4a83060',
-                borderRadius: '8px',
-                padding: '1px 5px',
+                backgroundColor: 'rgba(200, 180, 140, 0.95)',
+                border: '1px solid rgba(139, 105, 20, 0.4)',
+                borderRadius: '7px',
+                padding: '0px 4px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '2px',
+                gap: '1px',
                 zIndex: 3,
+                boxShadow: '0 1px 2px rgba(40,30,15,0.2)',
               }}
             >
               <Star
                 style={{
                   width: '7px',
                   height: '7px',
-                  color: '#d4a830',
-                  fill: '#d4a830',
+                  color: '#8b6914',
+                  fill: '#8b6914',
                 }}
               />
               <span
                 style={{
                   fontSize: '8px',
                   fontWeight: 700,
-                  color: '#d4a830',
+                  color: '#6b5010',
                   fontFamily: 'serif',
                 }}
               >
@@ -368,26 +403,36 @@ export function TerritoryNode({
           )}
         </div>
 
-        {/* Name label — parchment style */}
-        <span
+        {/* Name label — ribbon/banner style */}
+        <div
           style={{
-            fontSize: '9px',
-            fontWeight: 500,
-            color: config.textColor,
-            maxWidth: '76px',
-            textAlign: 'center',
-            lineHeight: '1.15',
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            fontFamily: 'serif',
-            letterSpacing: '0.02em',
-            textShadow: isCaptured ? `0 0 6px ${config.ringColor}40` : '0 1px 2px rgba(0,0,0,0.8)',
+            position: 'relative',
+            backgroundColor: 'rgba(200, 180, 140, 0.8)',
+            borderRadius: '3px',
+            padding: '1px 6px',
+            border: '0.5px solid rgba(120, 90, 50, 0.2)',
+            maxWidth: '80px',
+            boxShadow: '0 1px 2px rgba(40,30,15,0.15)',
           }}
         >
-          {isFoggy ? '???' : territory.name}
-        </span>
+          <span
+            style={{
+              fontSize: '8px',
+              fontWeight: 600,
+              color: config.sealColor,
+              textAlign: 'center',
+              lineHeight: '1.2',
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              fontFamily: 'serif',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {isFoggy ? '???' : territory.name}
+          </span>
+        </div>
       </button>
 
       {/* Details Modal */}
@@ -411,7 +456,7 @@ export function TerritoryNode({
       <style>{`
         @keyframes territory-pulse {
           0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.05); }
+          50% { opacity: 0.8; transform: scale(1.06); }
         }
         @keyframes node-glow-captured {
           0%, 100% { opacity: 0.5; transform: scale(1); }
@@ -426,14 +471,8 @@ export function TerritoryNode({
           50% { opacity: 0.7; }
         }
         @keyframes sparkle-float {
-          0%, 100% { 
-            transform: translateY(0) scale(1); 
-            opacity: 0.3; 
-          }
-          50% { 
-            transform: translateY(-4px) scale(1.3); 
-            opacity: 0.8; 
-          }
+          0%, 100% { transform: translateY(0) scale(1); opacity: 0.3; }
+          50% { transform: translateY(-4px) scale(1.3); opacity: 0.8; }
         }
         @keyframes territory-modal-in {
           from { transform: scale(0.92); opacity: 0; }
@@ -444,7 +483,7 @@ export function TerritoryNode({
   );
 }
 
-/* ─── Details Modal ─── */
+/* ─── Details Modal — Parchment Scroll ─── */
 
 interface TerritoryDetailsProps {
   territory: Territory;
@@ -473,6 +512,7 @@ function TerritoryDetails({
   xpPercent,
 }: TerritoryDetailsProps) {
   const config = STATUS_CONFIG[status];
+  const biomeInfo = BIOME_CONFIG[territory.biome];
   const isCaptured = status === 'captured';
   const canActivate = status === 'available' || (status === 'in_progress' && !isActive);
 
@@ -486,8 +526,8 @@ function TerritoryDetails({
         alignItems: 'center',
         justifyContent: 'center',
         padding: '16px',
-        backgroundColor: 'rgba(5,5,3,0.75)',
-        backdropFilter: 'blur(6px)',
+        backgroundColor: 'rgba(40, 30, 15, 0.65)',
+        backdropFilter: 'blur(4px)',
       }}
       onClick={onClose}
     >
@@ -495,108 +535,120 @@ function TerritoryDetails({
         style={{
           width: '100%',
           maxWidth: '380px',
-          backgroundColor: '#15130e',
-          border: '1px solid rgba(140, 120, 80, 0.25)',
-          borderRadius: '12px',
+          background: 'linear-gradient(170deg, #d8c8a0 0%, #c8b888 40%, #b8a878 100%)',
+          border: '2px solid rgba(120, 90, 50, 0.4)',
+          borderRadius: '8px',
           overflow: 'hidden',
           animation: 'territory-modal-in 0.25s ease',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(140,120,80,0.1)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header — parchment banner */}
+        {/* Header */}
         <div
           style={{
             position: 'relative',
             padding: '16px',
-            borderBottom: '1px solid rgba(140, 120, 80, 0.15)',
-            background: `linear-gradient(135deg, ${territory.color}10, rgba(20,18,12,0.95))`,
+            borderBottom: '1px solid rgba(120, 90, 50, 0.2)',
+            background: `linear-gradient(135deg, rgba(120,90,50,0.08), transparent)`,
           }}
         >
-          {/* Decorative corner */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '20px',
-              height: '20px',
-              borderLeft: '2px solid rgba(140,120,80,0.2)',
-              borderTop: '2px solid rgba(140,120,80,0.2)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              width: '20px',
-              height: '20px',
-              borderRight: '2px solid rgba(140,120,80,0.2)',
-              borderTop: '2px solid rgba(140,120,80,0.2)',
-            }}
-          />
+          {/* Corner ornaments */}
+          {[
+            { top: 0, left: 0, bL: '2px', bT: '2px' },
+            { top: 0, right: 0, bR: '2px', bT: '2px' },
+          ].map((pos, i) => (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                ...pos,
+                width: '16px',
+                height: '16px',
+                borderColor: 'rgba(120, 90, 50, 0.3)',
+                borderStyle: 'solid',
+                borderWidth: 0,
+                borderLeftWidth: pos.bL ?? 0,
+                borderRightWidth: pos.bR ?? 0,
+                borderTopWidth: pos.bT ?? 0,
+              } as React.CSSProperties}
+            />
+          ))}
 
           <button
             type="button"
             onClick={onClose}
             style={{
               position: 'absolute',
-              top: '12px',
-              right: '12px',
-              width: '28px',
-              height: '28px',
+              top: '10px',
+              right: '10px',
+              width: '26px',
+              height: '26px',
               borderRadius: '50%',
-              backgroundColor: 'rgba(20,18,12,0.8)',
-              border: '1px solid rgba(140,120,80,0.2)',
+              backgroundColor: 'rgba(120, 90, 50, 0.1)',
+              border: '1px solid rgba(120, 90, 50, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: 'rgba(180,160,120,0.6)',
+              color: 'rgba(80, 55, 30, 0.6)',
             }}
           >
-            <X style={{ width: '14px', height: '14px' }} />
+            <X style={{ width: '13px', height: '13px' }} />
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '50px',
-                height: '50px',
+                width: '48px',
+                height: '48px',
                 borderRadius: '50%',
-                background: `radial-gradient(circle at 35% 35%, ${territory.color}15, #0a0908)`,
-                border: `1px solid ${territory.color}40`,
+                background: `radial-gradient(circle at 38% 35%, ${config.bgColor}, ${config.bgColor}bb)`,
+                border: `1.5px solid ${config.sealColor}50`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: `0 0 15px ${territory.color}20`,
+                boxShadow: `inset 0 1px 2px rgba(255,255,255,0.15), 0 2px 6px rgba(40,30,15,0.2)`,
               }}
             >
-              <span style={{ fontSize: '28px' }}>{territory.icon}</span>
+              <span style={{ fontSize: '26px' }}>{territory.icon}</span>
             </div>
             <div>
               <h2
                 style={{
                   fontSize: '17px',
                   fontWeight: 700,
-                  color: 'rgba(220, 200, 160, 0.95)',
+                  color: 'rgba(60, 40, 20, 0.9)',
                   margin: 0,
                   fontFamily: 'serif',
                 }}
               >
                 {territory.name}
               </h2>
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  color: config.textColor,
-                }}
-              >
-                {config.label}
-                {currentLevel > 0 ? ` · Lv.${currentLevel}` : ''}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color: config.sealColor,
+                  }}
+                >
+                  {config.label}
+                  {currentLevel > 0 ? ` · Lv.${currentLevel}` : ''}
+                </span>
+                <span
+                  style={{
+                    fontSize: '9px',
+                    color: biomeInfo.accent,
+                    backgroundColor: `${biomeInfo.accent}15`,
+                    padding: '1px 4px',
+                    borderRadius: '3px',
+                    fontFamily: 'serif',
+                  }}
+                >
+                  {biomeInfo.label}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -604,16 +656,16 @@ function TerritoryDetails({
         {/* Body */}
         <div
           style={{
-            padding: '16px',
+            padding: '14px 16px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '12px',
+            gap: '10px',
           }}
         >
           <p
             style={{
               fontSize: '12px',
-              color: 'rgba(180, 160, 120, 0.7)',
+              color: 'rgba(60, 40, 20, 0.7)',
               margin: 0,
               lineHeight: 1.5,
             }}
@@ -621,19 +673,19 @@ function TerritoryDetails({
             {territory.description}
           </p>
 
-          {/* Lore — scroll style */}
+          {/* Lore — scroll quote */}
           <div
             style={{
-              padding: '8px 10px',
-              backgroundColor: 'rgba(30, 25, 15, 0.5)',
-              borderRadius: '4px',
-              borderLeft: '2px solid rgba(140, 120, 80, 0.3)',
+              padding: '7px 10px',
+              backgroundColor: 'rgba(80, 55, 30, 0.06)',
+              borderRadius: '3px',
+              borderLeft: '2px solid rgba(120, 90, 50, 0.25)',
             }}
           >
             <p
               style={{
                 fontSize: '10px',
-                color: 'rgba(140, 120, 80, 0.6)',
+                color: 'rgba(80, 55, 30, 0.55)',
                 fontStyle: 'italic',
                 margin: 0,
                 fontFamily: 'serif',
@@ -655,35 +707,35 @@ function TerritoryDetails({
                   marginBottom: '4px',
                 }}
               >
-                <span style={{ color: 'rgba(180,160,120,0.6)' }}>Прогресс захвата</span>
-                <span style={{ color: '#e5a420', fontFamily: 'monospace' }}>
+                <span style={{ color: 'rgba(80,55,30,0.6)' }}>Прогресс захвата</span>
+                <span style={{ color: '#8b6914', fontFamily: 'monospace', fontWeight: 600 }}>
                   {currentXP}/{requiredXP} XP
                 </span>
               </div>
               <div
                 style={{
                   height: '6px',
-                  backgroundColor: 'rgba(40,35,25,0.8)',
+                  backgroundColor: 'rgba(80, 55, 30, 0.1)',
                   borderRadius: '3px',
                   overflow: 'hidden',
-                  border: '1px solid rgba(100,85,55,0.2)',
+                  border: '1px solid rgba(120, 90, 50, 0.15)',
                 }}
               >
                 <div
                   style={{
                     height: '100%',
                     width: `${xpPercent}%`,
-                    background: 'linear-gradient(90deg, #8a6010, #c4880d, #e5a420)',
+                    background: 'linear-gradient(90deg, #8b6914, #b08a20, #c8a030)',
                     borderRadius: '2px',
                     transition: 'width 0.6s ease',
-                    boxShadow: '0 0 6px rgba(196,136,13,0.4)',
+                    boxShadow: '0 0 4px rgba(139,105,20,0.3)',
                   }}
                 />
               </div>
               <p
                 style={{
                   fontSize: '9px',
-                  color: 'rgba(120,100,70,0.5)',
+                  color: 'rgba(80,55,30,0.4)',
                   marginTop: '3px',
                 }}
               >
@@ -700,17 +752,17 @@ function TerritoryDetails({
                 alignItems: 'center',
                 gap: '8px',
                 padding: '8px 12px',
-                backgroundColor: 'rgba(212,168,48,0.08)',
-                borderRadius: '6px',
-                border: '1px solid rgba(212,168,48,0.2)',
+                backgroundColor: 'rgba(139,105,20,0.08)',
+                borderRadius: '4px',
+                border: '1px solid rgba(139,105,20,0.2)',
               }}
             >
-              <Crown style={{ width: '14px', height: '14px', color: '#d4a830' }} />
+              <Crown style={{ width: '14px', height: '14px', color: '#8b6914' }} />
               <span
                 style={{
                   fontSize: '11px',
-                  color: '#d4a830',
-                  fontWeight: 500,
+                  color: '#6b5010',
+                  fontWeight: 600,
                   fontFamily: 'serif',
                 }}
               >
@@ -725,11 +777,12 @@ function TerritoryDetails({
               <h3
                 style={{
                   fontSize: '9px',
-                  fontWeight: 600,
-                  color: 'rgba(180,160,120,0.5)',
+                  fontWeight: 700,
+                  color: 'rgba(80,55,30,0.5)',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: '5px',
+                  letterSpacing: '0.1em',
+                  marginBottom: '4px',
+                  fontFamily: 'serif',
                 }}
               >
                 ⚙ Требования
@@ -745,10 +798,10 @@ function TerritoryDetails({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '5px',
                       fontSize: '11px',
-                      color: met ? '#7db856' : 'rgba(120,100,70,0.5)',
-                      marginBottom: '3px',
+                      color: met ? '#4a7c22' : 'rgba(80,55,30,0.4)',
+                      marginBottom: '2px',
                     }}
                   >
                     <span>{met ? '✅' : '❌'}</span>
@@ -764,11 +817,12 @@ function TerritoryDetails({
             <h3
               style={{
                 fontSize: '9px',
-                fontWeight: 600,
-                color: 'rgba(180,160,120,0.5)',
+                fontWeight: 700,
+                color: 'rgba(80,55,30,0.5)',
                 textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginBottom: '5px',
+                letterSpacing: '0.1em',
+                marginBottom: '4px',
+                fontFamily: 'serif',
               }}
             >
               🏆 Награды
@@ -779,10 +833,10 @@ function TerritoryDetails({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   fontSize: '11px',
-                  color: isCaptured ? '#d4a830' : 'rgba(180,160,120,0.6)',
-                  marginBottom: '3px',
+                  color: isCaptured ? '#6b5010' : 'rgba(60,40,20,0.6)',
+                  marginBottom: '2px',
                 }}
               >
                 <span>
@@ -806,19 +860,19 @@ function TerritoryDetails({
             <p
               style={{
                 fontSize: '9px',
-                color: 'rgba(120,100,70,0.5)',
+                color: 'rgba(80,55,30,0.45)',
                 margin: 0,
                 fontFamily: 'serif',
               }}
             >
               Связанная ветка:{' '}
-              <span style={{ color: 'rgba(180,160,120,0.7)', fontWeight: 500 }}>
+              <span style={{ color: 'rgba(60,40,20,0.7)', fontWeight: 600 }}>
                 {territory.skillBranch}
               </span>
             </p>
           )}
 
-          {/* Activate button — seal style */}
+          {/* Activate button */}
           {canActivate && (
             <button
               type="button"
@@ -827,21 +881,22 @@ function TerritoryDetails({
               style={{
                 width: '100%',
                 padding: '10px',
-                borderRadius: '8px',
-                border: status === 'available'
-                  ? '1px solid rgba(93,138,60,0.4)'
-                  : '1px solid rgba(196,136,13,0.4)',
-                fontWeight: 600,
+                borderRadius: '6px',
+                border:
+                  status === 'available'
+                    ? '1.5px solid rgba(74,124,34,0.5)'
+                    : '1.5px solid rgba(176,120,8,0.5)',
+                fontWeight: 700,
                 fontSize: '13px',
                 cursor: isActivating ? 'not-allowed' : 'pointer',
                 opacity: isActivating ? 0.5 : 1,
                 backgroundColor:
                   status === 'available'
-                    ? 'rgba(93,138,60,0.15)'
-                    : 'rgba(196,136,13,0.15)',
+                    ? 'rgba(74,124,34,0.12)'
+                    : 'rgba(176,120,8,0.12)',
                 color:
-                  status === 'available' ? '#7db856' : '#e5a420',
-                transition: 'background-color 0.2s',
+                  status === 'available' ? '#3a6c18' : '#8b6914',
+                transition: 'background-color 0.2s, transform 0.1s',
                 fontFamily: 'serif',
                 letterSpacing: '0.03em',
               }}
@@ -872,19 +927,19 @@ function TerritoryDetails({
                 justifyContent: 'center',
                 gap: '8px',
                 padding: '8px',
-                backgroundColor: 'rgba(220,190,120,0.06)',
-                borderRadius: '8px',
-                border: '1px solid rgba(220,190,120,0.15)',
+                backgroundColor: 'rgba(139,105,20,0.06)',
+                borderRadius: '6px',
+                border: '1px solid rgba(139,105,20,0.15)',
               }}
             >
               <Swords
-                style={{ width: '13px', height: '13px', color: 'rgba(220,190,120,0.7)' }}
+                style={{ width: '13px', height: '13px', color: 'rgba(100,75,20,0.7)' }}
               />
               <span
                 style={{
                   fontSize: '11px',
-                  color: 'rgba(220,190,120,0.7)',
-                  fontWeight: 500,
+                  color: 'rgba(100,75,20,0.7)',
+                  fontWeight: 600,
                   fontFamily: 'serif',
                 }}
               >
@@ -894,31 +949,14 @@ function TerritoryDetails({
           )}
         </div>
 
-        {/* Bottom decorative corners */}
-        <div style={{ position: 'relative', height: '4px' }}>
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              width: '20px',
-              height: '20px',
-              borderLeft: '2px solid rgba(140,120,80,0.15)',
-              borderBottom: '2px solid rgba(140,120,80,0.15)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              right: 0,
-              width: '20px',
-              height: '20px',
-              borderRight: '2px solid rgba(140,120,80,0.15)',
-              borderBottom: '2px solid rgba(140,120,80,0.15)',
-            }}
-          />
-        </div>
+        {/* Bottom decorative line */}
+        <div
+          style={{
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent, rgba(120,90,50,0.2), transparent)',
+            margin: '0 16px 8px',
+          }}
+        />
       </div>
     </div>
   );
