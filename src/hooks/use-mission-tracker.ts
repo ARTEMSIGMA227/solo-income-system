@@ -1,3 +1,4 @@
+// src/hooks/use-mission-tracker.ts
 "use client";
 
 import { useCallback } from "react";
@@ -15,6 +16,7 @@ export function useMissionTracker() {
           body: JSON.stringify({ mission_type: missionType, increment }),
         });
         void queryClient.invalidateQueries({ queryKey: ["daily-missions"] });
+        void queryClient.invalidateQueries({ queryKey: ["stats-level"] });
       } catch {
         // silent
       }
