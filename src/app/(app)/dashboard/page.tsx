@@ -1,3 +1,4 @@
+// src/app/(app)/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -17,6 +18,22 @@ import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { generateAdvice } from '@/lib/advisor';
 import DailyChallenge from './DailyChallenge';
 import { DailyMissionsCard } from "@/components/dashboard/daily-missions-card";
+
+// Утилита обновления прогресса миссий
+async function updateMissionProgress(
+  missionType: string,
+  increment: number
+): Promise<void> {
+  try {
+    await fetch("/api/daily-missions/update-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mission_type: missionType, increment }),
+    });
+  } catch {
+    // Не блокируем основной flow
+  }
+}
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -69,7 +86,6 @@ export default function DashboardPage() {
       const { data: im } = await supabase.from('income_events').select('amount').eq('user_id', authUser.id).gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
-      // ── Вычисляем вчерашние данные один раз ──
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -81,13 +97,8 @@ export default function DashboardPage() {
       const yesterdayActions = yesterdayCompletions?.reduce((sum, c) => sum + c.count_done, 0) || 0;
       const target = p?.daily_actions_target || 30;
 
-      // ── Мутабельная ссылка на актуальный профиль ──
       let currentProfile = p;
 
-      // ══════════════════════════════════════════════
-      //  ШТРАФ ЗА НЕВЫПОЛНЕНИЕ ЦЕЛИ (XP penalty)
-      //  НЕ трогаем streak если вчера была хоть какая-то активность
-      // ══════════════════════════════════════════════
       const { data: penaltyCheck } = await supabase
         .from('xp_events').select('id')
         .eq('user_id', authUser.id).eq('event_type', 'penalty_miss').eq('event_date', yesterdayStr);
@@ -104,7 +115,6 @@ export default function DashboardPage() {
           event_date: yesterdayStr,
         });
 
-        // ★ FIX: сбрасываем серию ТОЛЬКО если вчера было 0 действий
         const profileUpdate: Record<string, unknown> = {
           consecutive_misses: newMisses,
           updated_at: new Date().toISOString(),
@@ -148,10 +158,6 @@ export default function DashboardPage() {
         }
       }
 
-      // ══════════════════════════════════════════════
-      //  СЕРИЯ: авто-обновление при наличии действий сегодня
-      //  Используем currentProfile (свежий после штрафа)
-      // ══════════════════════════════════════════════
       if (loadedActions > 0 && currentProfile) {
         const { data: streakCheck } = await supabase
           .from('xp_events').select('id')
@@ -181,6 +187,9 @@ export default function DashboardPage() {
           });
 
           setProfile(prev => prev ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 } : prev);
+
+          // Обновляем миссию login_streak
+          void updateMissionProgress('login_streak', 1);
         }
       }
 
@@ -189,13 +198,11 @@ export default function DashboardPage() {
     loadData();
   }, [router]);
 
-  /* ═══════════════ ОБНОВЛЕНИЕ СЕРИИ ПРИ ПЕРВОМ ДЕЙСТВИИ ═══════════════ */
   async function updateStreakOnFirstAction() {
     if (!user || !profile) return;
     const supabase = createClient();
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
 
-    // Проверяем — может уже отметили сегодня
     const { data: check } = await supabase
       .from('xp_events').select('id')
       .eq('user_id', user.id)
@@ -204,7 +211,6 @@ export default function DashboardPage() {
 
     if (check && check.length > 0) return;
 
-    // Проверяем вчерашнюю активность (ЛЮБУЮ, не по таргету)
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -225,7 +231,6 @@ export default function DashboardPage() {
       updated_at: new Date().toISOString(),
     }).eq('id', profile.id);
 
-    // Маркер чтобы не считать повторно
     await supabase.from('xp_events').insert({
       user_id: user.id, event_type: 'streak_checkin',
       xp_amount: 0, description: `Серия: день ${newStreak}`,
@@ -237,9 +242,11 @@ export default function DashboardPage() {
     if (newStreak > 1) {
       toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
     }
+
+    // Обновляем миссию login_streak
+    void updateMissionProgress('login_streak', 1);
   }
 
-  /* ═══════════════ БЫСТРОЕ ДЕЙСТВИЕ ═══════════════ */
   async function quickAction(type: string, label: string) {
     if (!user || !stats) return;
     const supabase = createClient();
@@ -285,16 +292,17 @@ export default function DashboardPage() {
       total_gold_earned: newTotalGold,
     });
 
-    // ★ СЕРИЯ: первое действие дня → обновить streak ★
     if (todayActions === 0) {
       await updateStreakOnFirstAction();
     }
 
     setTodayActions(prev => prev + 1);
     toast.success(`+${xp} XP  +${gold} 🪙 — ${label}`);
+
+    // ★ Обновляем прогресс миссий ★
+    void updateMissionProgress('complete_quests', 1);
   }
 
-  /* ═══════════════ ДОХОД ═══════════════ */
   async function addIncome() {
     if (!user || !stats) return;
     const amountStr = prompt('Сумма дохода (₽):');
@@ -351,7 +359,6 @@ export default function DashboardPage() {
       total_gold_earned: newTotalGold,
     });
 
-    // ★ СЕРИЯ: если первое действие сегодня ★
     if (todayActions === 0) {
       await updateStreakOnFirstAction();
     }
@@ -360,6 +367,10 @@ export default function DashboardPage() {
     setMonthIncome(prev => prev + amount);
     setTodayActions(prev => prev + 1);
     toast.success(`+${formatCurrency(amount)} доход! +${xp} XP +${gold} 🪙`);
+
+    // ★ Обновляем прогресс миссий ★
+    void updateMissionProgress('earn_income', amount);
+    void updateMissionProgress('complete_quests', 1);
   }
 
   if (loading) {
@@ -441,7 +452,6 @@ export default function DashboardPage() {
         onEdit={() => setShowEditor(true)}
       />
 
-      {/* Streak */}
       <div style={{ marginTop: '12px' }}>
         <StreakBanner
           streak={profile?.streak_current || 0}
@@ -482,6 +492,11 @@ export default function DashboardPage() {
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
       })()}
+
+      {/* Ежедневные миссии */}
+      <div style={{ marginBottom: '12px' }}>
+        <DailyMissionsCard />
+      </div>
 
       {/* Ежедневный челлендж */}
       <DailyChallenge />
