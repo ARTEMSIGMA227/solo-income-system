@@ -19,6 +19,8 @@ import {
   X,
   MoreHorizontal,
   ChevronDown,
+  Trophy,
+  GitBranch,
 } from "lucide-react";
 
 interface NavItem {
@@ -31,12 +33,14 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, mobileBottom: true },
   { href: "/quests", label: "Квесты", icon: Swords, mobileBottom: true },
+  { href: "/skills", label: "Навыки", icon: GitBranch, mobileBottom: true },
   { href: "/shop", label: "Магазин", icon: ShoppingBag, mobileBottom: false },
   { href: "/focus", label: "Фокус", icon: Timer, mobileBottom: true },
   { href: "/bosses", label: "Боссы", icon: Skull, mobileBottom: false },
-  { href: "/guilds", label: "Гильдии", icon: Users, mobileBottom: true },
+  { href: "/guilds", label: "Гильдии", icon: Users, mobileBottom: false },
+  { href: "/achievements", label: "Ачивки", icon: Trophy, mobileBottom: false },
   { href: "/analytics", label: "Аналитика", icon: BarChart3, mobileBottom: false },
-  { href: "/settings", label: "Настройки", icon: Settings, mobileBottom: true },
+  { href: "/settings", label: "Настройки", icon: Settings, mobileBottom: false },
 ];
 
 const BOTTOM_MAIN_ITEMS = NAV_ITEMS.filter((i) => i.mobileBottom);
@@ -167,7 +171,9 @@ function MobileSidebarOverlay({
         role="button"
         tabIndex={0}
         aria-label="Закрыть меню"
-        onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+        }}
       />
       <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-gray-950 shadow-2xl">
         <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
@@ -234,7 +240,6 @@ function MobileSidebarOverlay({
 function BottomBar({ pathname }: { pathname: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // Закрываем "Ещё" при смене страницы
   useEffect(() => {
     setMoreOpen(false);
   }, [pathname]);
@@ -245,7 +250,6 @@ function BottomBar({ pathname }: { pathname: string }) {
     <>
       {moreOpen && (
         <>
-          {/* Невидимый backdrop для закрытия по тапу */}
           <div
             className="fixed inset-0 z-30 lg:hidden"
             onClick={() => setMoreOpen(false)}
@@ -287,7 +291,7 @@ function BottomBar({ pathname }: { pathname: string }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 backdrop-blur-sm lg:hidden">
         <ul className="flex h-16 items-center justify-around px-1">
-          {BOTTOM_MAIN_ITEMS.slice(0, 4).map((item) => {
+          {BOTTOM_MAIN_ITEMS.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
             return (
@@ -319,24 +323,6 @@ function BottomBar({ pathname }: { pathname: string }) {
               Ещё
             </button>
           </li>
-
-          {BOTTOM_MAIN_ITEMS.slice(4).map((item) => {
-            const active = isActive(pathname, item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium transition-colors ${
-                    active ? "text-violet-400" : "text-gray-500 hover:text-gray-300"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
         </ul>
       </nav>
     </>
@@ -356,7 +342,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setMobileSidebarOpen(false)}
         pathname={pathname}
       />
-      {/* pt-[72px] = header 56px + xp bar 16px */}
       <main className="min-h-screen pt-[72px] pb-20 lg:pt-0 lg:pb-0 lg:pl-60">
         <div className="mx-auto max-w-7xl p-4 lg:p-6">{children}</div>
       </main>

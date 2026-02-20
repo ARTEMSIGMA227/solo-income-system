@@ -6,8 +6,8 @@ import { useState } from 'react';
 const MAIN_NAV = [
   { path: '/dashboard', label: 'Охотник', icon: '⚔️' },
   { path: '/quests', label: 'Квесты', icon: '📋' },
+  { path: '/skills', label: 'Навыки', icon: '🧬' },
   { path: '/shop', label: 'Магазин', icon: '🏪' },
-  { path: '/guild', label: 'Гильдия', icon: '🛡️' },
   { path: '/more', label: 'Ещё', icon: '⋯' },
 ];
 
@@ -15,10 +15,10 @@ const MORE_ITEMS = [
   { path: '/leaderboard', label: 'Топ', icon: '🏆' },
   { path: '/advisor', label: 'Советник', icon: '🤖' },
   { path: '/focus', label: 'Фокус', icon: '🎯' },
-  { path: '/skills', icon: '⚔️', label: 'Навыки' },
-  { path: '/achievements', label: 'Ачивки', icon: '🏆' },
-  { path: '/bosses', label: 'Боссы', icon: '💀' },
+  { path: '/achievements', label: 'Ачивки', icon: '🏅' },
+  { path: '/bosses', label: 'Боссы', icon: '👀' },
   { path: '/analytics', label: 'Аналитика', icon: '📈' },
+  { path: '/guild', label: 'Гильдия', icon: '🛡️' },
   { path: '/stats', label: 'Статы', icon: '📊' },
   { path: '/settings', label: 'Настройки', icon: '⚙️' },
 ];
