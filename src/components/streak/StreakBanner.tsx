@@ -1,150 +1,202 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+
 interface StreakBannerProps {
   streak: number;
   bestStreak: number;
 }
 
-function getStreakMultiplier(streak: number): number {
-  if (streak >= 30) return 2.0;
-  if (streak >= 14) return 1.8;
-  if (streak >= 7) return 1.5;
-  if (streak >= 3) return 1.2;
-  return 1.0;
-}
-
-function getStreakColor(streak: number): string {
-  if (streak >= 30) return '#f59e0b';
-  if (streak >= 14) return '#7c3aed';
-  if (streak >= 7) return '#3b82f6';
-  if (streak >= 3) return '#22c55e';
-  return '#475569';
-}
-
-function getNextMilestone(streak: number): { target: number; multiplier: number } {
-  if (streak < 3) return { target: 3, multiplier: 1.2 };
-  if (streak < 7) return { target: 7, multiplier: 1.5 };
-  if (streak < 14) return { target: 14, multiplier: 1.8 };
-  if (streak < 30) return { target: 30, multiplier: 2.0 };
-  return { target: streak, multiplier: 2.0 };
-}
-
 export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) {
-  const multiplier = getStreakMultiplier(streak);
-  const color = getStreakColor(streak);
-  const next = getNextMilestone(streak);
-  const progressToNext = streak < next.target
-    ? Math.round((streak / next.target) * 100)
-    : 100;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number>(0);
 
-  if (streak === 0) {
-    return (
-      <div style={{
-        backgroundColor: '#1a0f0f', border: '1px solid #ef444430',
-        borderRadius: '12px', padding: '12px 16px', marginBottom: '12px',
-        display: 'flex', alignItems: 'center', gap: '12px',
-      }}>
-        <span style={{ fontSize: '24px' }}>💀</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: '#ef4444' }}>
-            Серия: 0 дней
-          </div>
-          <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-            Выполни план сегодня чтобы начать серию!
-          </div>
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    if (streak < 2) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    interface Particle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      size: number;
+      life: number;
+      maxLife: number;
+      color: string;
+    }
+
+    const particles: Particle[] = [];
+    const colors = ['#f97316', '#fb923c', '#fbbf24', '#ef4444', '#f59e0b'];
+
+    function spawnParticle() {
+      const w = rect.width;
+      const h = rect.height;
+      particles.push({
+        x: Math.random() * w,
+        y: h + 5,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -(Math.random() * 2 + 1),
+        size: Math.random() * 3 + 1,
+        life: 0,
+        maxLife: 40 + Math.random() * 30,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+
+    function animate() {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      // Spawn rate based on streak
+      const spawnRate = Math.min(streak, 10);
+      for (let i = 0; i < spawnRate; i++) {
+        if (Math.random() < 0.3) spawnParticle();
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life++;
+
+        const alpha = 1 - p.life / p.maxLife;
+        if (alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    return () => {
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [streak]);
+
+  if (streak < 1) return null;
+
+  const isHot = streak >= 3;
+  const isOnFire = streak >= 7;
+  const isLegendary = streak >= 14;
+
+  let borderColor = '#f59e0b30';
+  let bgColor = '#f59e0b10';
+  let textColor = '#f59e0b';
+  let emoji = '🔥';
+
+  if (isLegendary) {
+    borderColor = '#ef444460';
+    bgColor = '#ef444420';
+    textColor = '#ef4444';
+    emoji = '💀🔥';
+  } else if (isOnFire) {
+    borderColor = '#f9731650';
+    bgColor = '#f9731615';
+    textColor = '#f97316';
+    emoji = '🔥🔥';
+  } else if (isHot) {
+    borderColor = '#f59e0b40';
+    bgColor = '#f59e0b12';
+    textColor = '#f59e0b';
+    emoji = '🔥';
   }
 
-  const showFire = streak >= 7;
-
   return (
-    <div style={{
-      backgroundColor: '#12121a', border: `1px solid ${color}30`,
-      borderRadius: '12px', padding: '12px 16px', marginBottom: '12px',
-      boxShadow: streak >= 7 ? `0 0 20px ${color}15` : 'none',
-      position: 'relative', overflow: 'hidden',
-    }}>
-      {/* Огненные частицы */}
-      {showFire && (
-        <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-          {[...Array(6)].map((_, i) => (
-            <div key={i} style={{
-              position: 'absolute',
-              bottom: '-10px',
-              left: `${10 + i * 16}%`,
-              width: '6px', height: '6px',
-              borderRadius: '50%',
-              backgroundColor: color,
-              opacity: 0.4,
-              animation: `fireParticle ${1.5 + i * 0.3}s ease-in-out infinite`,
-              animationDelay: `${i * 0.2}s`,
-            }} />
-          ))}
-        </div>
+    <div
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        backgroundColor: bgColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: '12px',
+        padding: '12px 16px',
+      }}
+    >
+      {/* Fire particles canvas */}
+      {streak >= 2 && (
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+          }}
+        />
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', position: 'relative', zIndex: 2 }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            fontSize: '24px',
-            animation: streak >= 7 ? 'streakBounce 2s ease-in-out infinite' : 'none',
-          }}>
-            {streak >= 30 ? '👑' : streak >= 14 ? '⚡' : streak >= 7 ? '💎' : streak >= 3 ? '🔥' : '✨'}
+          <span
+            style={{
+              fontSize: '20px',
+              animation: isHot ? 'streakFlame 0.5s ease-in-out infinite alternate' : undefined,
+            }}
+          >
+            {emoji}
           </span>
           <div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color }}>
-              {streak} {streak === 1 ? 'день' : streak < 5 ? 'дня' : 'дней'} подряд!
+            <div style={{ fontSize: '14px', fontWeight: 700, color: textColor }}>
+              Серия: {streak} {streak === 1 ? 'день' : streak < 5 ? 'дня' : 'дней'}
             </div>
-            <div style={{ fontSize: '11px', color: '#94a3b8' }}>
-              Рекорд: {bestStreak} дн.
-            </div>
+            {bestStreak > streak && (
+              <div style={{ fontSize: '11px', color: '#64748b' }}>
+                Рекорд: {bestStreak}
+              </div>
+            )}
           </div>
         </div>
-        <div style={{
-          padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 800,
-          backgroundColor: color + '20', color,
-          border: `1px solid ${color}40`,
-          animation: streak >= 14 ? 'multiplierGlow 2s ease-in-out infinite' : 'none',
-        }}>
-          x{multiplier}
-        </div>
+
+        {streak >= 5 && (
+          <div
+            style={{
+              fontSize: '11px',
+              color: textColor,
+              backgroundColor: `${textColor}15`,
+              padding: '4px 10px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              border: `1px solid ${textColor}30`,
+            }}
+          >
+            ×{Math.min(1 + streak * 0.1, 3).toFixed(1)} XP
+          </div>
+        )}
       </div>
 
-      {streak < 30 && (
-        <div style={{ position: 'relative', zIndex: 2 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#475569', marginBottom: '4px' }}>
-            <span>До x{next.multiplier}</span>
-            <span>{streak}/{next.target} дней</span>
-          </div>
-          <div style={{ width: '100%', height: '4px', backgroundColor: '#16161f', borderRadius: '2px', overflow: 'hidden' }}>
-            <div style={{
-              width: `${progressToNext}%`, height: '100%', borderRadius: '2px',
-              backgroundColor: color, transition: 'width 0.7s ease',
-              boxShadow: streak >= 7 ? `0 0 8px ${color}` : 'none',
-            }} />
-          </div>
-        </div>
-      )}
-
       <style>{`
-        @keyframes fireParticle {
-          0% { transform: translateY(0) scale(1); opacity: 0.4; }
-          50% { transform: translateY(-40px) scale(0.6); opacity: 0.7; }
-          100% { transform: translateY(-80px) scale(0); opacity: 0; }
-        }
-        @keyframes streakBounce {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.15); }
-        }
-        @keyframes multiplierGlow {
-          0%, 100% { box-shadow: 0 0 0px transparent; }
-          50% { box-shadow: 0 0 15px ${color}40; }
+        @keyframes streakFlame {
+          from { transform: scale(1) rotate(-3deg); }
+          to { transform: scale(1.15) rotate(3deg); }
         }
       `}</style>
     </div>
   );
 }
-
-export { getStreakMultiplier };

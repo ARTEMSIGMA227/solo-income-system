@@ -1,77 +1,107 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface FloatItem {
-  id: number;
+  id: string;
   text: string;
   color: string;
+  x: number;
+  y: number;
 }
-
-let nextId = 0;
 
 export function useFloatXP() {
   const [items, setItems] = useState<FloatItem[]>([]);
 
-  const addFloat = useCallback((text: string, color: string = '#a78bfa') => {
-    const id = nextId++;
-    setItems(prev => [...prev, { id, text, color }]);
+  const addFloat = useCallback((text: string, color: string, event?: React.MouseEvent | { clientX: number; clientY: number }) => {
+    let x: number;
+    let y: number;
+
+    if (event && 'clientX' in event) {
+      x = event.clientX;
+      y = event.clientY;
+    } else {
+      // Fallback: center-top area
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 2;
+    }
+
+    const id = `float-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    setItems(prev => [...prev, { id, text, color, x, y }]);
+
     setTimeout(() => {
-      setItems(prev => prev.filter(i => i.id !== id));
-    }, 1600);
+      setItems(prev => prev.filter(item => item.id !== id));
+    }, 1200);
   }, []);
 
   return { items, addFloat };
 }
 
-export function FloatXPContainer({ items }: { items: FloatItem[] }) {
-  if (items.length === 0) return null;
-
+function FloatXPItem({ item }: { item: FloatItem }) {
   return (
-    <div style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      pointerEvents: 'none',
-      zIndex: 100,
-      width: '200px',
-      height: '200px',
-    }}>
-      {items.map((item, index) => (
-        <FloatText key={item.id} text={item.text} color={item.color} index={index} />
-      ))}
+    <div
+      style={{
+        position: 'fixed',
+        left: item.x,
+        top: item.y,
+        pointerEvents: 'none',
+        zIndex: 99999,
+        color: item.color,
+        fontWeight: 800,
+        fontSize: '18px',
+        textShadow: `0 0 12px ${item.color}60, 0 2px 4px rgba(0,0,0,0.8)`,
+        animation: 'floatXPUp 1.2s ease-out forwards',
+        willChange: 'transform, opacity',
+      }}
+    >
+      {item.text}
+      <style>{`
+        @keyframes floatXPUp {
+          0% {
+            transform: translate(-50%, 0) scale(0.5);
+            opacity: 0;
+          }
+          15% {
+            transform: translate(-50%, -10px) scale(1.2);
+            opacity: 1;
+          }
+          30% {
+            transform: translate(-50%, -20px) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -80px) scale(0.8);
+            opacity: 0;
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
-function FloatText({ text, color, index }: { text: string; color: string; index: number }) {
-  const [animate, setAnimate] = useState(false);
+export function FloatXPContainer({ items }: { items: FloatItem[] }) {
+  if (typeof window === 'undefined') return null;
+  if (items.length === 0) return null;
 
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setAnimate(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  // Каждый элемент немного смещён по горизонтали
-  const offsetX = (index % 3 - 1) * 30;
-
-  return (
-    <div style={{
-      position: 'absolute',
-      left: '50%',
-      top: '50%',
-      transform: `translate(calc(-50% + ${offsetX}px), ${animate ? '-80px' : '0px'})`,
-      opacity: animate ? 0 : 1,
-      fontSize: '18px',
-      fontWeight: 800,
-      color,
-      textShadow: `0 0 12px ${color}60`,
-      transition: 'all 1.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-      pointerEvents: 'none',
-      whiteSpace: 'nowrap',
-    }}>
-      {text}
-    </div>
+  return createPortal(
+    <>
+      {items.map((item, index) => (
+        <div
+          key={item.id}
+          style={{
+            position: 'fixed',
+            left: item.x,
+            top: item.y - index * 28,
+            pointerEvents: 'none',
+            zIndex: 99999 + index,
+          }}
+        >
+          <FloatXPItem item={{ ...item, y: item.y - index * 28 }} />
+        </div>
+      ))}
+    </>,
+    document.body
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import confetti from 'canvas-confetti';
+import { useEffect, useCallback } from 'react';
 
 interface LevelUpPopupProps {
   level: number;
@@ -10,120 +9,160 @@ interface LevelUpPopupProps {
 }
 
 export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProps) {
-  const [visible, setVisible] = useState(false);
+  const fireConfetti = useCallback(async () => {
+    try {
+      const confetti = (await import('canvas-confetti')).default;
+
+      // First burst
+      void confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { x: 0.5, y: 0.5 },
+        colors: ['#7c3aed', '#3b82f6', '#a78bfa', '#fbbf24', '#22c55e'],
+        startVelocity: 30,
+        gravity: 0.8,
+        ticks: 120,
+        zIndex: 100001,
+      });
+
+      // Side bursts
+      setTimeout(() => {
+        void confetti({
+          particleCount: 40,
+          angle: 60,
+          spread: 50,
+          origin: { x: 0, y: 0.6 },
+          colors: ['#7c3aed', '#a78bfa', '#fbbf24'],
+          zIndex: 100001,
+        });
+        void confetti({
+          particleCount: 40,
+          angle: 120,
+          spread: 50,
+          origin: { x: 1, y: 0.6 },
+          colors: ['#3b82f6', '#a78bfa', '#22c55e'],
+          zIndex: 100001,
+        });
+      }, 250);
+    } catch {
+      // canvas-confetti not available
+    }
+  }, []);
 
   useEffect(() => {
-    setVisible(true);
+    void fireConfetti();
 
-    // Конфетти
-    const duration = 2000;
-    const end = Date.now() + duration;
-
-    const frame = () => {
-      confetti({
-        particleCount: 3,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.7 },
-        colors: ['#7c3aed', '#a78bfa', '#3b82f6', '#f59e0b'],
-      });
-      confetti({
-        particleCount: 3,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.7 },
-        colors: ['#7c3aed', '#a78bfa', '#3b82f6', '#f59e0b'],
-      });
-
-      if (Date.now() < end) requestAnimationFrame(frame);
-    };
-    frame();
-
-    const timer = setTimeout(() => {
-      setVisible(false);
-      setTimeout(onClose, 400);
+    const timeout = setTimeout(() => {
+      onClose();
     }, 4000);
 
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    return () => clearTimeout(timeout);
+  }, [fireConfetti, onClose]);
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      backdropFilter: 'blur(8px)',
-      opacity: visible ? 1 : 0,
-      transition: 'opacity 0.4s ease',
-      pointerEvents: visible ? 'auto' : 'none',
-    }}>
-      <div style={{
-        textAlign: 'center',
-        transform: visible ? 'scale(1)' : 'scale(0.5)',
-        transition: 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
-      }}>
-        {/* Аура */}
-        <div style={{
-          width: '160px', height: '160px', margin: '0 auto 20px',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, #7c3aed30 0%, transparent 70%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          animation: 'levelUpPulse 1.5s ease-in-out infinite',
-        }}>
-          <div style={{
-            width: '120px', height: '120px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, #7c3aed, #3b82f6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '48px', fontWeight: 900, color: '#fff',
-            boxShadow: '0 0 60px #7c3aed50',
-            border: '3px solid #a78bfa',
-          }}>
-            {level}
-          </div>
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100000,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(8px)',
+        animation: 'levelUpFadeIn 0.3s ease-out',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          textAlign: 'center',
+          animation: 'levelUpScale 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          cursor: 'pointer',
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        {/* Glow ring */}
+        <div
+          style={{
+            width: '120px',
+            height: '120px',
+            margin: '0 auto 24px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, #7c3aed40 0%, transparent 70%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'levelUpRingPulse 2s ease-in-out infinite',
+            border: '2px solid #7c3aed60',
+          }}
+        >
+          <span style={{ fontSize: '48px', filter: 'drop-shadow(0 0 16px #7c3aed)' }}>⚔️</span>
         </div>
 
-        <div style={{
-          fontSize: '14px', letterSpacing: '4px', color: '#a78bfa',
-          textTransform: 'uppercase', marginBottom: '8px',
-          animation: 'levelUpFadeIn 0.8s ease 0.3s both',
-        }}>
-          ⚡ LEVEL UP ⚡
+        <div
+          style={{
+            fontSize: '14px',
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: '4px',
+            marginBottom: '8px',
+            fontWeight: 600,
+          }}
+        >
+          Level Up!
         </div>
 
-        <div style={{
-          fontSize: '32px', fontWeight: 900, color: '#fff',
-          marginBottom: '8px',
-          animation: 'levelUpFadeIn 0.8s ease 0.5s both',
-        }}>
-          Уровень {level}
+        <div
+          style={{
+            fontSize: '48px',
+            fontWeight: 900,
+            color: '#a78bfa',
+            textShadow: '0 0 30px #7c3aed80, 0 0 60px #7c3aed40',
+            lineHeight: 1.2,
+          }}
+        >
+          LV. {level}
         </div>
 
-        <div style={{
-          fontSize: '16px', color: '#a78bfa',
-          animation: 'levelUpFadeIn 0.8s ease 0.7s both',
-        }}>
+        <div
+          style={{
+            fontSize: '18px',
+            color: '#e2e8f0',
+            marginTop: '12px',
+            fontWeight: 600,
+          }}
+        >
           {title}
         </div>
 
-        <button onClick={() => { setVisible(false); setTimeout(onClose, 400); }} style={{
-          marginTop: '24px', padding: '10px 32px',
-          backgroundColor: '#7c3aed', color: '#fff',
-          border: 'none', borderRadius: '12px',
-          fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-          animation: 'levelUpFadeIn 0.8s ease 0.9s both',
-        }}>
-          Продолжить
-        </button>
+        <div
+          style={{
+            fontSize: '12px',
+            color: '#64748b',
+            marginTop: '24px',
+          }}
+        >
+          Нажми чтобы продолжить
+        </div>
       </div>
 
       <style>{`
-        @keyframes levelUpPulse {
-          0%, 100% { transform: scale(1); opacity: 0.6; }
-          50% { transform: scale(1.1); opacity: 1; }
-        }
         @keyframes levelUpFadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes levelUpScale {
+          0% { transform: scale(0.3); opacity: 0; }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes levelUpRingPulse {
+          0%, 100% { box-shadow: 0 0 20px #7c3aed30; }
+          50% { box-shadow: 0 0 40px #7c3aed60, 0 0 60px #7c3aed20; }
         }
       `}</style>
     </div>
