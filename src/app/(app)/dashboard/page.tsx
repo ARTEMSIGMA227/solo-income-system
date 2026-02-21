@@ -29,6 +29,7 @@ import {
   loadSkillEffectsFromDB,
 } from '@/lib/skill-effects';
 import { addXPToActiveTerritory } from '@/lib/territory-integration';
+import { useT } from '@/lib/i18n';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -74,11 +75,12 @@ export default function DashboardPage() {
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
+  const { t, locale } = useT();
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
     setTodayDate(
-      new Date().toLocaleDateString('ru-RU', {
+      new Date().toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
         weekday: 'long',
         day: 'numeric',
         month: 'long',
@@ -202,14 +204,13 @@ export default function DashboardPage() {
               user_id: authUser.id,
               event_type: 'streak_shield',
               xp_amount: 0,
-              description: `🛡️ Щит серии использован (${usedThisMonth + 1}/${shieldDays})`,
+              description: `🛡️ Shield used (${usedThisMonth + 1}/${shieldDays})`,
               event_date: yesterdayStr,
             });
 
-            toast.info(
-              `🛡️ Щит серии активирован! Серия защищена (${usedThisMonth + 1}/${shieldDays} в этом месяце)`,
-              { duration: 5000 }
-            );
+            toast.info(t.dashboard.toast.shieldActivated(usedThisMonth + 1, shieldDays), {
+              duration: 5000,
+            });
             shieldUsed = true;
           }
         }
@@ -219,11 +220,15 @@ export default function DashboardPage() {
           const finalPenaltyXP = applyPenaltyReduction(basePenaltyXP, effects);
           const newMisses = (p?.consecutive_misses || 0) + 1;
 
+          const penaltyDesc = finalPenaltyXP < basePenaltyXP
+            ? `${t.dashboard.penalty.missDay} ${yesterdayStr} (${t.dashboard.toast.penaltyReduced(basePenaltyXP, finalPenaltyXP)})`
+            : `${t.dashboard.penalty.missDay} ${yesterdayStr}`;
+
           await supabase.from('xp_events').insert({
             user_id: authUser.id,
             event_type: 'penalty_miss',
             xp_amount: -finalPenaltyXP,
-            description: `Пропуск дня: ${yesterdayStr}${finalPenaltyXP < basePenaltyXP ? ` (снижено навыками: ${basePenaltyXP}→${finalPenaltyXP})` : ''}`,
+            description: penaltyDesc,
             event_date: yesterdayStr,
           });
 
@@ -313,7 +318,7 @@ export default function DashboardPage() {
             user_id: authUser.id,
             event_type: 'streak_checkin',
             xp_amount: 0,
-            description: `Серия: день ${newStreak}`,
+            description: `Streak: day ${newStreak}`,
             event_date: today,
           });
 
@@ -341,7 +346,7 @@ export default function DashboardPage() {
             user_id: authUser.id,
             amount: passiveGold,
             event_type: 'skill_passive',
-            description: `Пассивный доход (навыки): +${passiveGold}`,
+            description: `Passive income (skills): +${passiveGold}`,
             event_date: today,
           });
           await supabase
@@ -361,7 +366,7 @@ export default function DashboardPage() {
                 }
               : prev
           );
-          toast.info(`🧬 +${passiveGold} 🪙 пассивный доход от навыков`);
+          toast.info(t.dashboard.toast.passiveGold(passiveGold));
         }
       }
 
@@ -369,7 +374,7 @@ export default function DashboardPage() {
     }
 
     loadData();
-  }, [router, trackProgress]);
+  }, [router, trackProgress, locale, t]);
 
   const updateStreakOnFirstAction = useCallback(async () => {
     if (!user || !profile) return;
@@ -411,7 +416,7 @@ export default function DashboardPage() {
       user_id: user.id,
       event_type: 'streak_checkin',
       xp_amount: 0,
-      description: `Серия: день ${newStreak}`,
+      description: `Streak: day ${newStreak}`,
       event_date: today,
     });
 
@@ -420,9 +425,9 @@ export default function DashboardPage() {
         ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 }
         : prev
     );
-    if (newStreak > 1) toast(`🔥 Серия: ${newStreak} дней подряд!`, { icon: '🔥' });
+    if (newStreak > 1) toast(t.dashboard.toast.streak(newStreak), { icon: '🔥' });
     void trackProgress('login_streak', 1);
-  }, [user, profile, trackProgress]);
+  }, [user, profile, trackProgress, t]);
 
   const triggerXpPulse = useCallback(() => {
     setXpPulsing(true);
@@ -508,7 +513,7 @@ export default function DashboardPage() {
 
     if (isCrit) {
       setTimeout(() => {
-        toast('⚡ КРИТИЧЕСКИЙ УДАР! XP x2!', {
+        toast(t.dashboard.toast.critHit, {
           icon: '⚡',
           style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
         });
@@ -528,17 +533,16 @@ export default function DashboardPage() {
     prevLevelRef.current = newLevel;
     void trackProgress('complete_quests', 1);
 
-    // --- TERRITORY XP INTEGRATION (20% of earned XP) ---
     try {
       const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
       if (territoryResult) {
         if (territoryResult.captured) {
           toast.success(
-            `🎉 ${territoryResult.territoryIcon} ${territoryResult.territoryName} ЗАХВАЧЕНА!`,
-            { description: 'Территория покорена! Награды получены.', duration: 5000 }
+            t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName),
+            { description: '', duration: 5000 }
           );
         } else {
-          toast(`🗺️ +${territoryResult.xpAdded} XP → ${territoryResult.territoryIcon}`, {
+          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), {
             duration: 2000,
           });
         }
@@ -550,16 +554,16 @@ export default function DashboardPage() {
 
   async function addIncome(event?: React.MouseEvent) {
     if (!user || !stats || !profile) return;
-    const amountStr = prompt('Сумма дохода (€):');
+    const amountStr = prompt(t.dashboard.incomePrompt.amount);
     if (!amountStr) return;
     const amount = Number(amountStr);
     if (isNaN(amount) || amount <= 0) {
-      toast.error('Некорректная сумма');
+      toast.error(t.dashboard.incomePrompt.invalid);
       return;
     }
 
     const source =
-      prompt('Источник (sale/contract/freelance/bonus/other):', 'sale') || 'sale';
+      prompt(t.dashboard.incomePrompt.source, 'sale') || 'sale';
     const supabase = createClient();
     const today = getToday();
 
@@ -587,14 +591,14 @@ export default function DashboardPage() {
       user_id: user.id,
       event_type: 'sale',
       xp_amount: finalXP,
-      description: `Доход: ${amount}€`,
+      description: `Income: ${amount}€`,
       event_date: today,
     });
     await supabase.from('gold_events').insert({
       user_id: user.id,
       amount: finalGold,
       event_type: 'quest_reward',
-      description: `Доход: ${amount}€`,
+      description: `Income: ${amount}€`,
       event_date: today,
     });
 
@@ -638,13 +642,11 @@ export default function DashboardPage() {
     setTodayActions((prev) => prev + 1);
 
     const bonusText = bonusParts.length > 0 ? ` (${bonusParts.join(', ')})` : '';
-    toast.success(
-      `+${formatCurrency(amount)} доход! +${finalXP} XP +${finalGold} 🪙${bonusText}`
-    );
+    toast.success(t.dashboard.toast.incomeAdded(formatCurrency(amount), finalXP, finalGold) + bonusText);
 
     if (isCrit) {
       setTimeout(() => {
-        toast('⚡ КРИТИЧЕСКИЙ УДАР! XP x2!', {
+        toast(t.dashboard.toast.critHit, {
           icon: '⚡',
           style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
         });
@@ -666,17 +668,16 @@ export default function DashboardPage() {
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
 
-    // --- TERRITORY XP INTEGRATION (20% of earned XP) ---
     try {
       const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
       if (territoryResult) {
         if (territoryResult.captured) {
           toast.success(
-            `🎉 ${territoryResult.territoryIcon} ${territoryResult.territoryName} ЗАХВАЧЕНА!`,
-            { description: 'Территория покорена! Награды получены.', duration: 5000 }
+            t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName),
+            { description: '', duration: 5000 }
           );
         } else {
-          toast(`🗺️ +${territoryResult.xpAdded} XP → ${territoryResult.territoryIcon}`, {
+          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), {
             duration: 2000,
           });
         }
@@ -699,14 +700,14 @@ export default function DashboardPage() {
           fontSize: '24px',
         }}
       >
-        ⚔️ Загрузка...
+        {t.dashboard.loading}
       </div>
     );
   }
 
   const levelInfo = stats
     ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
-    : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Безымянный', titleIcon: '👤', totalXPEarned: 0 };
+    : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Unnamed', titleIcon: '👤', totalXPEarned: 0 };
 
   const actionsTarget = profile?.daily_actions_target || 30;
   const actionsPercent = Math.min(Math.round((todayActions / actionsTarget) * 100), 100);
@@ -714,16 +715,25 @@ export default function DashboardPage() {
   const monthPercent = Math.min(Math.round((monthIncome / monthTarget) * 100), 100);
 
   let dayStatusColor = '#eab308';
-  let dayStatusText = '⏳ В процессе';
+  let dayStatusText = t.dashboard.dayStatus.inProgress;
   if (actionsPercent >= 100) {
     dayStatusColor = '#22c55e';
-    dayStatusText = '✅ День закрыт!';
+    dayStatusText = t.dashboard.dayStatus.dayClosed;
   } else if (currentHour >= 21) {
     dayStatusColor = '#ef4444';
-    dayStatusText = '🔴 Мало времени!';
+    dayStatusText = t.dashboard.dayStatus.lowTime;
   }
 
   const activeSkillCount = Object.values(skillEffects).filter((v) => (v || 0) > 0).length;
+
+  const quickButtons = [
+    { type: 'action', label: t.dashboard.quickActions.call, actionLabel: t.dashboard.quickActions.callAction, icon: '📞', xp: 5, gold: 2 },
+    { type: 'action', label: t.dashboard.quickActions.touch, actionLabel: t.dashboard.quickActions.touchAction, icon: '💬', xp: 5, gold: 2 },
+    { type: 'action', label: t.dashboard.quickActions.lead, actionLabel: t.dashboard.quickActions.leadAction, icon: '🎯', xp: 5, gold: 2 },
+    { type: 'task', label: t.dashboard.quickActions.task, actionLabel: t.dashboard.quickActions.task, icon: '✅', xp: 25, gold: 12 },
+    { type: 'hard_task', label: t.dashboard.quickActions.hardTask, actionLabel: t.dashboard.quickActions.hardTask, icon: '🔥', xp: 50, gold: 25 },
+    { type: 'income', label: t.dashboard.quickActions.income, actionLabel: t.dashboard.quickActions.income, icon: '💰', xp: 100, gold: 50 },
+  ];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
@@ -741,7 +751,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <div style={{ fontSize: '12px', color: '#94a3b8' }}>{todayDate}</div>
-          <div style={{ fontSize: '14px', color: '#94a3b8' }}>{profile?.display_name || 'Охотник'}</div>
+          <div style={{ fontSize: '14px', color: '#94a3b8' }}>{profile?.display_name || t.common.hunter}</div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30' }}>
@@ -779,7 +789,7 @@ export default function DashboardPage() {
       <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
-            <span>Действия</span>
+            <span>{t.dashboard.actionsLabel}</span>
             <span style={{ color: '#a78bfa' }}>{todayActions} / {actionsTarget}</span>
           </div>
           <div style={{ width: '100%', height: '8px', backgroundColor: '#16161f', borderRadius: '4px', overflow: 'hidden' }}>
@@ -788,11 +798,11 @@ export default function DashboardPage() {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Сегодня</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t.dashboard.todayIncome}</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(todayIncome)}</div>
           </div>
           <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: '#94a3b8' }}>Месяц ({monthPercent}%)</div>
+            <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t.dashboard.monthIncome} ({monthPercent}%)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(monthIncome)}</div>
           </div>
         </div>
@@ -800,18 +810,11 @@ export default function DashboardPage() {
 
       <div style={{ backgroundColor: '#12121a', border: '1px solid #1e1e2e', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          ⚡ Быстрые действия
-          {activeSkillCount > 0 && <span style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '8px', fontWeight: 400 }}>🧬 навыки активны</span>}
+          {t.dashboard.quickActions.title}
+          {activeSkillCount > 0 && <span style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '8px', fontWeight: 400 }}>{t.dashboard.quickActions.skillsActive}</span>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-          {[
-            { type: 'action', label: 'Звонок', actionLabel: '+1 Звонок', icon: '📞', xp: 5, gold: 2 },
-            { type: 'action', label: 'Касание', actionLabel: '+1 Касание', icon: '💬', xp: 5, gold: 2 },
-            { type: 'action', label: 'Лид', actionLabel: '+1 Лид', icon: '🎯', xp: 5, gold: 2 },
-            { type: 'task', label: 'Задача', actionLabel: 'Задача', icon: '✅', xp: 25, gold: 12 },
-            { type: 'hard_task', label: 'Сложная', actionLabel: 'Сложная', icon: '🔥', xp: 50, gold: 25 },
-            { type: 'income', label: 'Доход', actionLabel: 'Доход', icon: '💰', xp: 100, gold: 50 },
-          ].map((btn, i) => {
+          {quickButtons.map((btn, i) => {
             const isIncome = btn.type === 'income';
             return (
               <button

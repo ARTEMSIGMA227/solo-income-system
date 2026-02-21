@@ -1,7 +1,7 @@
-// src/app/(app)/layout.tsx
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
+import { I18nProvider } from "@/lib/i18n";
 
 export default async function AppLayout({
   children,
@@ -17,5 +17,9 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <I18nProvider>
+      <AppShell>{children}</AppShell>
+    </I18nProvider>
+  );
 }

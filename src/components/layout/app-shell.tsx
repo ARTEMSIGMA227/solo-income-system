@@ -1,9 +1,10 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useProfile } from "@/hooks/use-profile";
+import { useT } from "@/lib/i18n";
 import { XPBar } from "@/components/ui/xp-bar";
 import { ClassBadge } from "@/components/ui/class-badge";
 import {
@@ -24,29 +25,24 @@ import {
   Map,
 } from "lucide-react";
 
-interface NavItem {
+const NAV_ITEMS_CONFIG: Array<{
   href: string;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
   mobileBottom: boolean;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, mobileBottom: true },
-  { href: "/quests", label: "Квесты", icon: Swords, mobileBottom: true },
-  { href: "/skills", label: "Навыки", icon: GitBranch, mobileBottom: true },
-  { href: "/focus", label: "Фокус", icon: Timer, mobileBottom: true },
-  { href: "/map", label: "Карта", icon: Map, mobileBottom: false },
-  { href: "/shop", label: "Магазин", icon: ShoppingBag, mobileBottom: false },
-  { href: "/bosses", label: "Боссы", icon: Skull, mobileBottom: false },
-  { href: "/guilds", label: "Гильдии", icon: Users, mobileBottom: false },
-  { href: "/achievements", label: "Ачивки", icon: Trophy, mobileBottom: false },
-  { href: "/analytics", label: "Аналитика", icon: BarChart3, mobileBottom: false },
-  { href: "/settings", label: "Настройки", icon: Settings, mobileBottom: false },
+}> = [
+  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard, mobileBottom: true },
+  { href: "/quests", labelKey: "quests", icon: Swords, mobileBottom: true },
+  { href: "/skills", labelKey: "skills", icon: GitBranch, mobileBottom: true },
+  { href: "/focus", labelKey: "focus", icon: Timer, mobileBottom: true },
+  { href: "/map", labelKey: "map", icon: Map, mobileBottom: false },
+  { href: "/shop", labelKey: "shop", icon: ShoppingBag, mobileBottom: false },
+  { href: "/bosses", labelKey: "bosses", icon: Skull, mobileBottom: false },
+  { href: "/guilds", labelKey: "guilds", icon: Users, mobileBottom: false },
+  { href: "/achievements", labelKey: "achievements", icon: Trophy, mobileBottom: false },
+  { href: "/analytics", labelKey: "analytics", icon: BarChart3, mobileBottom: false },
+  { href: "/settings", labelKey: "settings", icon: Settings, mobileBottom: false },
 ];
-
-const BOTTOM_MAIN_ITEMS = NAV_ITEMS.filter((i) => i.mobileBottom);
-const BOTTOM_MORE_ITEMS = NAV_ITEMS.filter((i) => !i.mobileBottom);
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
@@ -64,6 +60,16 @@ function UserAvatar({ displayName }: { displayName: string | null | undefined })
 
 function Sidebar({ pathname }: { pathname: string }) {
   const { data: profile } = useProfile();
+  const { t } = useT();
+
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS_CONFIG.map((item) => ({
+        ...item,
+        label: t.nav[item.labelKey as keyof typeof t.nav] || item.labelKey,
+      })),
+    [t],
+  );
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-white/10 bg-gray-950 lg:flex">
@@ -79,7 +85,7 @@ function Sidebar({ pathname }: { pathname: string }) {
           <UserAvatar displayName={profile?.display_name} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">
-              {profile?.display_name || "Охотник"}
+              {profile?.display_name || t.common.hunter}
             </p>
             <div className="mt-0.5 flex items-center gap-2">
               <span className="text-xs text-gray-400">
@@ -96,7 +102,7 @@ function Sidebar({ pathname }: { pathname: string }) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
             return (
@@ -127,7 +133,18 @@ function Sidebar({ pathname }: { pathname: string }) {
 
 function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const pathname = usePathname();
-  const current = NAV_ITEMS.find((item) => isActive(pathname, item.href));
+  const { t } = useT();
+
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS_CONFIG.map((item) => ({
+        ...item,
+        label: t.nav[item.labelKey as keyof typeof t.nav] || item.labelKey,
+      })),
+    [t],
+  );
+
+  const current = navItems.find((item) => isActive(pathname, item.href));
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-gray-950/95 backdrop-blur-sm lg:hidden">
@@ -136,7 +153,7 @@ function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           type="button"
           onClick={onOpenSidebar}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white"
-          aria-label="Открыть меню"
+          aria-label={t.nav.openMenu}
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -162,6 +179,16 @@ function MobileSidebarOverlay({
   pathname: string;
 }) {
   const { data: profile } = useProfile();
+  const { t } = useT();
+
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS_CONFIG.map((item) => ({
+        ...item,
+        label: t.nav[item.labelKey as keyof typeof t.nav] || item.labelKey,
+      })),
+    [t],
+  );
 
   if (!open) return null;
 
@@ -172,19 +199,19 @@ function MobileSidebarOverlay({
         onClick={onClose}
         role="button"
         tabIndex={0}
-        aria-label="Закрыть меню"
+        aria-label={t.nav.closeMenu}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
         }}
       />
       <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-gray-950 shadow-2xl">
         <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
-          <span className="text-sm font-bold text-white">Меню</span>
+          <span className="text-sm font-bold text-white">{t.nav.menu}</span>
           <button
             type="button"
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white"
-            aria-label="Закрыть"
+            aria-label={t.nav.closeMenu}
           >
             <X className="h-5 w-5" />
           </button>
@@ -195,7 +222,7 @@ function MobileSidebarOverlay({
             <UserAvatar displayName={profile?.display_name} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">
-                {profile?.display_name || "Охотник"}
+                {profile?.display_name || t.common.hunter}
               </p>
               <div className="mt-0.5 flex items-center gap-2">
                 <span className="text-xs text-gray-400">
@@ -212,7 +239,7 @@ function MobileSidebarOverlay({
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const active = isActive(pathname, item.href);
               const Icon = item.icon;
               return (
@@ -241,12 +268,25 @@ function MobileSidebarOverlay({
 
 function BottomBar({ pathname }: { pathname: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const { t } = useT();
+
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS_CONFIG.map((item) => ({
+        ...item,
+        label: t.nav[item.labelKey as keyof typeof t.nav] || item.labelKey,
+      })),
+    [t],
+  );
+
+  const bottomMainItems = navItems.filter((i) => i.mobileBottom);
+  const bottomMoreItems = navItems.filter((i) => !i.mobileBottom);
 
   useEffect(() => {
     setMoreOpen(false);
   }, [pathname]);
 
-  const moreIsActive = BOTTOM_MORE_ITEMS.some((i) => isActive(pathname, i.href));
+  const moreIsActive = bottomMoreItems.some((i) => isActive(pathname, i.href));
 
   return (
     <>
@@ -258,17 +298,17 @@ function BottomBar({ pathname }: { pathname: string }) {
           />
           <div className="fixed inset-x-0 bottom-16 z-40 mx-4 rounded-xl border border-white/10 bg-gray-900 p-2 shadow-2xl lg:hidden">
             <div className="mb-2 flex items-center justify-between px-2">
-              <span className="text-xs font-semibold text-gray-400">Ещё</span>
+              <span className="text-xs font-semibold text-gray-400">{t.nav.more}</span>
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
                 className="text-gray-500 hover:text-white"
-                aria-label="Закрыть"
+                aria-label={t.nav.closeMenu}
               >
                 <ChevronDown className="h-4 w-4" />
               </button>
             </div>
-            {BOTTOM_MORE_ITEMS.map((item) => {
+            {bottomMoreItems.map((item) => {
               const active = isActive(pathname, item.href);
               const Icon = item.icon;
               return (
@@ -293,7 +333,7 @@ function BottomBar({ pathname }: { pathname: string }) {
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-gray-950/95 backdrop-blur-sm lg:hidden">
         <ul className="flex h-16 items-center justify-around px-1">
-          {BOTTOM_MAIN_ITEMS.map((item) => {
+          {bottomMainItems.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
             return (
@@ -322,7 +362,7 @@ function BottomBar({ pathname }: { pathname: string }) {
               }`}
             >
               <MoreHorizontal className="h-5 w-5" />
-              Ещё
+              {t.nav.more}
             </button>
           </li>
         </ul>
