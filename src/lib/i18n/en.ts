@@ -572,6 +572,10 @@ export const en: TranslationDictionary = {
       reject: 'Reject',
       hunterLabel: (id) => `Hunter #${id}`,
     },
+    chat: {
+      empty: 'No messages yet. Start the conversation!',
+      placeholder: 'Write a message...',
+    },
   },
 
   achievements: {
@@ -735,6 +739,12 @@ export const en: TranslationDictionary = {
     streakDay1: 'day',
     streakDay234: 'days',
     streakDay5plus: 'days',
+  },
+
+  streakBanner: {
+    currentStreak: 'Current streak',
+    notStarted: 'No streak yet',
+    atRiskWarning: '⚠️ Take action to keep your streak!',
   },
 
   death: {

@@ -3,12 +3,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGuildChat, useSendMessage } from '@/hooks/useGuild';
 import { Send } from 'lucide-react';
+import { useT } from '@/lib/i18n';
 
 export default function GuildChat() {
   const { data: messages, isLoading } = useGuildChat();
   const sendMessage = useSendMessage();
   const [content, setContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { t, locale } = useT();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -23,19 +25,21 @@ export default function GuildChat() {
     });
   };
 
+  const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
+
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);
-    return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' });
   };
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return 'Сегодня';
+    if (d.toDateString() === today.toDateString()) return t.common.today;
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
-    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+    if (d.toDateString() === yesterday.toDateString()) return t.common.yesterday;
+    return d.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' });
   };
 
   // Группируем сообщения по дням
@@ -57,10 +61,10 @@ export default function GuildChat() {
       {/* Сообщения */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
-          <div className="text-center text-gray-400 py-8">Загрузка...</div>
+          <div className="text-center text-gray-400 py-8">{t.common.loading}</div>
         ) : !messages?.length ? (
           <div className="text-center text-gray-500 py-8">
-            Нет сообщений. Начните общение!
+            {t.guilds.chat.empty}
           </div>
         ) : (
           groupedMessages.map((group) => (
@@ -99,7 +103,7 @@ export default function GuildChat() {
           type="text"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Написать сообщение..."
+          placeholder={t.guilds.chat.placeholder}
           maxLength={500}
           className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />

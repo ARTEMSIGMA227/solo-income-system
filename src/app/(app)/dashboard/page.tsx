@@ -75,12 +75,9 @@ export default function DashboardPage() {
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
-  const { t } = useT();
-  const locale = t === t ? 'ru' : 'en'; // locale from useT context
+  const { t, locale } = useT();
 
-  // We need locale separately for date formatting
-  // Since useT returns the dictionary, we need useLocale for the locale string
-  // But based on the existing code pattern, let's keep it working:
+  // locale is provided by useT() — used for date formatting
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
@@ -640,7 +637,7 @@ export default function DashboardPage() {
       <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
+        <StreakBanner userId={user?.id ?? ''} />
       </div>
 
       <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />

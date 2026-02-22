@@ -51,7 +51,7 @@ export const ru: TranslationDictionary = {
   },
 
   nav: {
-    dashboard: 'Дашборд',
+    dashboard: 'Главная',
     quests: 'Квесты',
     skills: 'Навыки',
     focus: 'Фокус',
@@ -572,6 +572,10 @@ export const ru: TranslationDictionary = {
       reject: 'Отклонить',
       hunterLabel: (id) => `Охотник #${id}`,
     },
+    chat: {
+      empty: 'Нет сообщений. Начните общение!',
+      placeholder: 'Написать сообщение...',
+    },
   },
 
   achievements: {
@@ -735,6 +739,12 @@ export const ru: TranslationDictionary = {
     streakDay1: 'день',
     streakDay234: 'дня',
     streakDay5plus: 'дней',
+  },
+
+  streakBanner: {
+    currentStreak: 'Текущая серия',
+    notStarted: 'Серия не начата',
+    atRiskWarning: '⚠️ Выполни действие чтобы сохранить серию!',
   },
 
   death: {

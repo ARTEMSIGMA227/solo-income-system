@@ -3,17 +3,22 @@
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { getStreakDisplay } from '@/lib/streak'
-
-function plural(n: number): string {
-  const mod10 = n % 10
-  const mod100 = n % 100
-  if (mod10 === 1 && mod100 !== 11) return 'день'
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня'
-  return 'дней'
-}
+import { useT } from '@/lib/i18n'
 
 export default function StreakBanner({ userId }: { userId: string }) {
   const supabase = createClient()
+  const { t, locale } = useT()
+
+  function pluralDays(n: number): string {
+    if (locale !== 'ru') {
+      return n === 1 ? t.effects.streakDay1 : t.effects.streakDay5plus;
+    }
+    const mod10 = n % 10
+    const mod100 = n % 100
+    if (mod10 === 1 && mod100 !== 11) return t.effects.streakDay1
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return t.effects.streakDay234
+    return t.effects.streakDay5plus
+  }
 
   const { data } = useQuery({
     queryKey: ['streak-display', userId],
@@ -38,23 +43,23 @@ export default function StreakBanner({ userId }: { userId: string }) {
         <span className="text-3xl">{current > 0 ? '🔥' : '❄️'}</span>
         <div>
           <p className="text-xl font-bold text-white">
-            {current} {plural(current)}
+            {current} {pluralDays(current)}
           </p>
           <p className="text-xs text-zinc-400">
-            {current > 0 ? 'Текущая серия' : 'Серия не начата'}
+            {current > 0 ? t.streakBanner.currentStreak : t.streakBanner.notStarted}
           </p>
         </div>
       </div>
 
       <div className="text-right">
         <p className="text-base font-semibold text-zinc-300">🏆 {best}</p>
-        <p className="text-xs text-zinc-500">Рекорд</p>
+        <p className="text-xs text-zinc-500">{t.effects.streakRecord}</p>
       </div>
 
       {isAtRisk && (
         <div className="w-full mt-3 absolute -bottom-5 left-0 flex justify-center">
           <span className="bg-orange-600 text-white text-[10px] px-3 py-1 rounded-full font-medium shadow-lg">
-            ⚠️ Выполни действие чтобы сохранить серию!
+            {t.streakBanner.atRiskWarning}
           </span>
         </div>
       )}

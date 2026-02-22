@@ -437,6 +437,10 @@ export interface TranslationDictionary {
       reject: string;
       hunterLabel: (id: string) => string;
     };
+    chat: {
+      empty: string;
+      placeholder: string;
+    };
   };
 
   achievements: {
@@ -600,6 +604,12 @@ export interface TranslationDictionary {
     streakDay1: string;
     streakDay234: string;
     streakDay5plus: string;
+  };
+
+  streakBanner: {
+    currentStreak: string;
+    notStarted: string;
+    atRiskWarning: string;
   };
 
   death: {
