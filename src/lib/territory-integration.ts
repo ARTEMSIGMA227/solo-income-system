@@ -97,7 +97,7 @@ export async function addXPToActiveTerritory(
     xpAdded: territoryXP,
     newLevel,
     captured,
-    territoryName: territory.name,
+    territoryName: territory.nameKey,
     territoryIcon: territory.icon,
   };
 }

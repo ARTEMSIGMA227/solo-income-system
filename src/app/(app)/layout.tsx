@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
-import { I18nProvider } from "@/lib/i18n";
+import { LanguageProvider } from "@/lib/i18n";
 
 export default async function AppLayout({
   children,
@@ -18,8 +18,8 @@ export default async function AppLayout({
   }
 
   return (
-    <I18nProvider>
+    <LanguageProvider>
       <AppShell>{children}</AppShell>
-    </I18nProvider>
+    </LanguageProvider>
   );
 }

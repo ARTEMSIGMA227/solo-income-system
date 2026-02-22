@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 import type { CharacterConfig, LevelImages } from '@/types/database';
 
 interface CharacterEditorProps {
@@ -12,16 +13,10 @@ interface CharacterEditorProps {
   onClose: () => void;
 }
 
-const LEVEL_TIERS = [
-  { key: 'novice' as const, label: 'Новичок', levels: 'LV 1-4', rank: 'E', color: '#475569' },
-  { key: 'hunter' as const, label: 'Охотник', levels: 'LV 5-11', rank: 'C', color: '#22c55e' },
-  { key: 'warrior' as const, label: 'Воин', levels: 'LV 12-19', rank: 'B', color: '#ef4444' },
-  { key: 'knight' as const, label: 'Рыцарь', levels: 'LV 20-29', rank: 'A', color: '#3b82f6' },
-  { key: 'srank' as const, label: 'S-ранг', levels: 'LV 30-39', rank: 'S', color: '#7c3aed' },
-  { key: 'monarch' as const, label: 'Монарх', levels: 'LV 40+', rank: 'SS', color: '#f59e0b' },
-];
-
 export default function CharacterEditor({ userId, config, onSave, onClose }: CharacterEditorProps) {
+  const { t } = useT();
+  const ed = t.character.editor;
+
   const [tab, setTab] = useState<'single' | 'levels'>('single');
   const [singleImage, setSingleImage] = useState(config?.custom_image_url || '');
   const [levelImages, setLevelImages] = useState<LevelImages>(config?.level_images || {});
@@ -31,6 +26,15 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<string>('single');
 
+  const LEVEL_TIERS = [
+    { key: 'novice' as const, label: t.character.tiers.novice, levels: 'LV 1-4', rank: 'E', color: '#475569' },
+    { key: 'hunter' as const, label: t.character.tiers.hunter, levels: 'LV 5-11', rank: 'C', color: '#22c55e' },
+    { key: 'warrior' as const, label: t.character.tiers.warrior, levels: 'LV 12-19', rank: 'B', color: '#ef4444' },
+    { key: 'knight' as const, label: t.character.tiers.knight, levels: 'LV 20-29', rank: 'A', color: '#3b82f6' },
+    { key: 'srank' as const, label: t.character.tiers.srank, levels: 'LV 30-39', rank: 'S', color: '#7c3aed' },
+    { key: 'monarch' as const, label: t.character.tiers.monarch, levels: 'LV 40+', rank: 'SS', color: '#f59e0b' },
+  ];
+
   async function uploadImage(file: File, target: string) {
     setUploading(target);
     const supabase = createClient();
@@ -38,7 +42,6 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
     const fileExt = file.name.split('.').pop();
     const fileName = `${userId}/${target}_${Date.now()}.${fileExt}`;
 
-    // Удалить старую если есть
     const { data: oldFiles } = await supabase.storage
       .from('avatars')
       .list(userId, { search: target });
@@ -57,7 +60,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
       .upload(fileName, file, { upsert: true });
 
     if (error) {
-      toast.error('Ошибка загрузки: ' + error.message);
+      toast.error(ed.uploadError + error.message);
       setUploading(null);
       return null;
     }
@@ -81,15 +84,13 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Проверка размера (макс 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Файл слишком большой. Максимум 5MB');
+      toast.error(ed.fileTooLarge);
       return;
     }
 
-    // Проверка типа
     if (!file.type.startsWith('image/')) {
-      toast.error('Можно загружать только картинки');
+      toast.error(ed.onlyImages);
       return;
     }
 
@@ -102,9 +103,8 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
       setLevelImages(prev => ({ ...prev, [uploadTarget]: url }));
     }
 
-    toast.success('Картинка загружена! 🎨');
+    toast.success(ed.imageUploaded);
 
-    // Сбросить input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -137,7 +137,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
     }
 
     setSaving(false);
-    toast.success('Персонаж сохранён! ⚔️');
+    toast.success(ed.saved);
     onSave({ ...data, id: config?.id || '', created_at: config?.created_at || '' } as CharacterConfig);
   }
 
@@ -148,7 +148,6 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '16px',
     }}>
-      {/* Скрытый input для файлов */}
       <input
         ref={fileInputRef}
         type="file"
@@ -162,9 +161,9 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
         padding: '24px', width: '100%', maxWidth: '450px', maxHeight: '85vh',
         overflowY: 'auto',
       }}>
-        {/* Шапка */}
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 700 }}>⚔️ Персонаж</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 700 }}>{ed.title}</h2>
           <button onClick={onClose} style={{
             width: '32px', height: '32px', backgroundColor: '#16161f', border: '1px solid #1e1e2e',
             borderRadius: '8px', color: '#94a3b8', cursor: 'pointer', fontSize: '16px',
@@ -172,13 +171,13 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           }}>✕</button>
         </div>
 
-        {/* Тип персонажа */}
+        {/* Body type */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>Тип персонажа</div>
+          <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>{ed.bodyType}</div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {[
-              { value: 'male_1', label: '👤 Мужской' },
-              { value: 'female_1', label: '👩 Женский' },
+              { value: 'male_1', label: ed.male },
+              { value: 'female_1', label: ed.female },
             ].map(bt => (
               <button key={bt.value} onClick={() => setBodyType(bt.value)} style={{
                 flex: 1, padding: '10px', borderRadius: '8px',
@@ -192,7 +191,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           </div>
         </div>
 
-        {/* Табы */}
+        {/* Tabs */}
         <div style={{
           display: 'flex', marginBottom: '20px', backgroundColor: '#16161f',
           borderRadius: '8px', padding: '4px',
@@ -203,7 +202,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
             backgroundColor: tab === 'single' ? '#7c3aed' : 'transparent',
             color: tab === 'single' ? '#fff' : '#94a3b8',
           }}>
-            🖼️ Одна картинка
+            {ed.singleTab}
           </button>
           <button onClick={() => setTab('levels')} style={{
             flex: 1, padding: '8px', borderRadius: '6px', border: 'none',
@@ -211,13 +210,13 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
             backgroundColor: tab === 'levels' ? '#7c3aed' : 'transparent',
             color: tab === 'levels' ? '#fff' : '#94a3b8',
           }}>
-            ⚔️ По уровням
+            {ed.levelsTab}
           </button>
         </div>
 
         {tab === 'single' ? (
           <div>
-            {/* Превью */}
+            {/* Preview */}
             <div style={{
               width: '160px', height: '200px', margin: '0 auto 16px',
               borderRadius: '16px', overflow: 'hidden',
@@ -233,13 +232,13 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                 <>
                   <div style={{ fontSize: '40px', marginBottom: '8px' }}>📷</div>
                   <div style={{ fontSize: '12px', color: '#475569', textAlign: 'center', padding: '0 8px' }}>
-                    Нажми чтобы загрузить
+                    {ed.clickToUpload}
                   </div>
                 </>
               )}
             </div>
 
-            {/* Кнопки */}
+            {/* Buttons */}
             <button
               onClick={() => triggerFileUpload('single')}
               disabled={uploading === 'single'}
@@ -250,7 +249,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                 fontSize: '14px', marginBottom: '8px',
               }}
             >
-              {uploading === 'single' ? '⏳ Загружаю...' : '📱 Загрузить с устройства'}
+              {uploading === 'single' ? ed.uploading : ed.uploadFromDevice}
             </button>
 
             {singleImage && (
@@ -263,14 +262,14 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                   fontSize: '13px',
                 }}
               >
-                🗑️ Удалить картинку
+                {ed.deleteImage}
               </button>
             )}
           </div>
         ) : (
           <div>
             <div style={{ fontSize: '12px', color: '#475569', marginBottom: '12px' }}>
-              Загрузи картинки для каждого этапа. Персонаж будет меняться с ростом уровня!
+              {ed.levelsHint}
             </div>
 
             {LEVEL_TIERS.map((tier) => (
@@ -292,7 +291,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {/* Превью */}
+                  {/* Preview */}
                   <div
                     onClick={() => triggerFileUpload(tier.key)}
                     style={{
@@ -311,7 +310,7 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                     )}
                   </div>
 
-                  {/* Кнопка загрузки */}
+                  {/* Upload button */}
                   <button
                     onClick={() => triggerFileUpload(tier.key)}
                     disabled={uploading === tier.key}
@@ -322,10 +321,10 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
                       fontSize: '12px', textAlign: 'center',
                     }}
                   >
-                    {uploading === tier.key ? '⏳...' : levelImages[tier.key] ? '🔄 Заменить' : '📱 Загрузить'}
+                    {uploading === tier.key ? '⏳...' : levelImages[tier.key] ? ed.replace : ed.upload}
                   </button>
 
-                  {/* Удалить */}
+                  {/* Delete */}
                   {levelImages[tier.key] && (
                     <button
                       onClick={() => setLevelImages(prev => {
@@ -350,14 +349,14 @@ export default function CharacterEditor({ userId, config, onSave, onClose }: Cha
           </div>
         )}
 
-        {/* Сохранить */}
+        {/* Save */}
         <button onClick={handleSave} disabled={saving} style={{
           width: '100%', padding: '14px', marginTop: '20px',
           backgroundColor: saving ? '#4c1d95' : '#7c3aed',
           color: '#fff', border: 'none', borderRadius: '10px',
           fontSize: '16px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
         }}>
-          {saving ? '⏳ Сохраняю...' : '✅ Сохранить персонажа'}
+          {saving ? t.common.saving : ed.save}
         </button>
       </div>
     </div>

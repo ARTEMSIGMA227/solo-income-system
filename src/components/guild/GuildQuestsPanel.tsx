@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useGuildQuests, useCreateGuildQuest, useContributeQuest } from '@/hooks/useGuild';
+import { useT } from '@/lib/i18n';
 import { Swords, Plus, Target, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function GuildQuestsPanel({ canManage }: Props) {
+  const { t } = useT();
   const { data: quests, isLoading } = useGuildQuests();
   const createQuest = useCreateGuildQuest();
   const contribute = useContributeQuest();
@@ -36,7 +38,7 @@ export default function GuildQuestsPanel({ canManage }: Props) {
           setDescription('');
         },
         onError: (err) => alert(err.message),
-      }
+      },
     );
   };
 
@@ -46,20 +48,24 @@ export default function GuildQuestsPanel({ canManage }: Props) {
       {
         onSuccess: (data) => {
           if (data.completed) {
-            alert('🎉 Квест выполнен!');
+            alert(`🎉 ${t.guilds.guildQuests.questCompleted}`);
           }
         },
         onError: (err) => alert(err.message),
-      }
+      },
     );
   };
 
   const statusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'failed': return <XCircle className="w-4 h-4 text-red-400" />;
-      case 'expired': return <Clock className="w-4 h-4 text-gray-400" />;
-      default: return <Target className="w-4 h-4 text-blue-400" />;
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-red-400" />;
+      case 'expired':
+        return <Clock className="w-4 h-4 text-gray-400" />;
+      default:
+        return <Target className="w-4 h-4 text-blue-400" />;
     }
   };
 
@@ -76,7 +82,7 @@ export default function GuildQuestsPanel({ canManage }: Props) {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Создать квест
+              {t.guilds.guildQuests.createQuest}
             </button>
           ) : (
             <form
@@ -87,20 +93,22 @@ export default function GuildQuestsPanel({ canManage }: Props) {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Название квеста"
+                placeholder={t.guilds.guildQuests.questTitlePlaceholder}
                 required
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500"
               />
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Описание (необязательно)"
+                placeholder={t.guilds.guildQuests.questDescriptionPlaceholder}
                 rows={2}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 resize-none"
               />
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Цель</label>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    {t.guilds.guildQuests.target}
+                  </label>
                   <input
                     type="number"
                     value={targetValue}
@@ -110,7 +118,9 @@ export default function GuildQuestsPanel({ canManage }: Props) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">XP награда</label>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    {t.guilds.guildQuests.xpReward}
+                  </label>
                   <input
                     type="number"
                     value={xpReward}
@@ -120,7 +130,9 @@ export default function GuildQuestsPanel({ canManage }: Props) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Золото</label>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    {t.guilds.guildQuests.goldReward}
+                  </label>
                   <input
                     type="number"
                     value={goldReward}
@@ -136,14 +148,16 @@ export default function GuildQuestsPanel({ canManage }: Props) {
                   disabled={createQuest.isPending}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg"
                 >
-                  {createQuest.isPending ? 'Создание...' : 'Создать'}
+                  {createQuest.isPending
+                    ? t.guilds.guildQuests.creating
+                    : t.guilds.guildQuests.create}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
                   className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg"
                 >
-                  Отмена
+                  {t.guilds.guildQuests.cancel}
                 </button>
               </div>
             </form>
@@ -152,19 +166,24 @@ export default function GuildQuestsPanel({ canManage }: Props) {
       )}
 
       {isLoading ? (
-        <div className="text-center text-gray-400 py-8">Загрузка...</div>
+        <div className="text-center text-gray-400 py-8">
+          {t.guilds.guildQuests.loading}
+        </div>
       ) : (
         <>
-          {/* Активные квесты */}
+          {/* Active quests */}
           {activeQuests.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
-                Активные квесты
+                {t.guilds.guildQuests.activeQuests}
               </h3>
               {activeQuests.map((quest) => {
-                const progress = quest.target_value > 0
-                  ? Math.round((quest.current_value / quest.target_value) * 100)
-                  : 0;
+                const progress =
+                  quest.target_value > 0
+                    ? Math.round(
+                        (quest.current_value / quest.target_value) * 100,
+                      )
+                    : 0;
 
                 return (
                   <div
@@ -177,12 +196,18 @@ export default function GuildQuestsPanel({ canManage }: Props) {
                         <h4 className="font-medium text-white">{quest.title}</h4>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="text-yellow-400">{quest.xp_reward} XP</span>
-                        <span className="text-amber-400">{quest.gold_reward} 🪙</span>
+                        <span className="text-yellow-400">
+                          {quest.xp_reward} XP
+                        </span>
+                        <span className="text-amber-400">
+                          {quest.gold_reward} 🪙
+                        </span>
                       </div>
                     </div>
                     {quest.description && (
-                      <p className="text-sm text-gray-400 mb-3">{quest.description}</p>
+                      <p className="text-sm text-gray-400 mb-3">
+                        {quest.description}
+                      </p>
                     )}
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
@@ -210,11 +235,11 @@ export default function GuildQuestsPanel({ canManage }: Props) {
             </div>
           )}
 
-          {/* Завершённые квесты */}
+          {/* Completed quests */}
           {completedQuests.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide">
-                Завершённые
+                {t.guilds.guildQuests.completedQuests}
               </h3>
               {completedQuests.map((quest) => (
                 <div
@@ -235,7 +260,10 @@ export default function GuildQuestsPanel({ canManage }: Props) {
 
           {!activeQuests.length && !completedQuests.length && (
             <div className="text-center text-gray-500 py-8">
-              Нет квестов. {canManage ? 'Создайте первый!' : 'Лидер скоро добавит квесты.'}
+              {t.guilds.guildQuests.emptyState}{' '}
+              {canManage
+                ? t.guilds.guildQuests.emptyCanManage
+                : t.guilds.guildQuests.emptyMember}
             </div>
           )}
         </>

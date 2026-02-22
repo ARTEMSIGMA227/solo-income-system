@@ -1,8 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { createClient } from '@/lib/supabase/client';
+import { useT } from '@/lib/i18n';
 
 function xpToNextLevel(level: number): number {
   return 500 + level * 250;
@@ -16,7 +17,7 @@ interface StatsLevel {
 
 function useStatsLevel() {
   return useQuery<StatsLevel | null>({
-    queryKey: ["stats-level"],
+    queryKey: ['stats-level'],
     queryFn: async () => {
       try {
         const supabase = createClient();
@@ -24,9 +25,9 @@ function useStatsLevel() {
         if (!user) return null;
 
         const { data } = await supabase
-          .from("stats")
-          .select("level, current_xp")
-          .eq("user_id", user.id)
+          .from('stats')
+          .select('level, current_xp')
+          .eq('user_id', user.id)
           .single();
 
         if (!data) return null;
@@ -50,23 +51,23 @@ interface XPBarProps {
 }
 
 export function XPBar({ compact = false }: XPBarProps) {
+  const { t } = useT();
   const { data: level, isLoading } = useStatsLevel();
   const [pulse, setPulse] = useState(false);
   const prevXP = useRef<number | null>(null);
 
-  // Пульсация при изменении XP
   useEffect(() => {
     if (level && prevXP.current !== null && level.currentXP !== prevXP.current) {
       setPulse(true);
-      const t = setTimeout(() => setPulse(false), 800);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setPulse(false), 800);
+      return () => clearTimeout(timer);
     }
     if (level) prevXP.current = level.currentXP;
   }, [level]);
 
   if (isLoading) {
     return (
-      <div className={`${compact ? "h-6" : "h-10"} animate-pulse rounded-lg bg-white/5`} />
+      <div className={`${compact ? 'h-6' : 'h-10'} animate-pulse rounded-lg bg-white/5`} />
     );
   }
 
@@ -81,7 +82,7 @@ export function XPBar({ compact = false }: XPBarProps) {
     return (
       <div className="flex items-center gap-2">
         <span className={`shrink-0 text-xs font-bold text-violet-400 transition-transform duration-300 ${pulse ? 'scale-125' : 'scale-100'}`}>
-          Lv.{level.level}
+          {t.xpBar.level}{level.level}
         </span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
           <div
@@ -103,7 +104,7 @@ export function XPBar({ compact = false }: XPBarProps) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <span className={`text-xs font-bold transition-all duration-300 ${pulse ? 'text-violet-300 scale-110' : 'text-violet-400 scale-100'}`}>
-          Lv.{level.level}
+          {t.xpBar.level}{level.level}
         </span>
         <span className={`text-[10px] tabular-nums transition-colors duration-300 ${pulse ? 'text-violet-400' : 'text-gray-500'}`}>
           {level.currentXP} / {level.xpToNext} XP

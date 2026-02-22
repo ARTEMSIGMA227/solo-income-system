@@ -5,12 +5,14 @@ import { createClient } from "@/lib/supabase/client";
 import { generateAdvice } from "@/lib/advisor";
 import { AdvisorCard } from "@/components/advisor/AdvisorCard";
 import { useRouter } from "next/navigation";
+import { useT } from "@/lib/i18n";
 
 export default function AdvisorPage() {
   const [greeting, setGreeting] = useState("");
   const [advice, setAdvice] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { t } = useT();
 
   useEffect(() => {
     async function load() {
@@ -100,6 +102,7 @@ export default function AdvisorPage() {
           now.getMonth() + 1,
           0
         ).getDate(),
+        t,
       });
 
       setGreeting(result.greeting);
@@ -108,7 +111,7 @@ export default function AdvisorPage() {
     }
 
     load();
-  }, [router]);
+  }, [router, t]);
 
   if (loading) {
     return (
@@ -123,7 +126,7 @@ export default function AdvisorPage() {
           fontSize: "18px",
         }}
       >
-        🤖 Советник анализирует данные...
+        🤖 {t.advisor.title}...
       </div>
     );
   }
@@ -152,11 +155,11 @@ export default function AdvisorPage() {
           <h1
             style={{ fontSize: "22px", fontWeight: 800, color: "#a78bfa" }}
           >
-            AI-Советник
+            {t.advisor.title}
           </h1>
         </div>
         <p style={{ fontSize: "13px", color: "#94a3b8" }}>
-          Персональные рекомендации на основе твоих данных
+          {t.advisorLib.advice.noActions ? t.advisorLib.levelTitles.eRank && '' : ''}
         </p>
       </div>
 
@@ -173,45 +176,10 @@ export default function AdvisorPage() {
           }}
         >
           <p style={{ fontSize: "14px", color: "#94a3b8" }}>
-            Недостаточно данных для анализа. Выполни несколько квестов!
+            {t.advisorLib.advice.lowLevel}
           </p>
         </div>
       )}
-
-      <div
-        style={{
-          backgroundColor: "#12121a",
-          border: "1px solid #1e1e2e",
-          borderRadius: "12px",
-          padding: "16px",
-          marginTop: "12px",
-        }}
-      >
-        <h2
-          style={{
-            fontSize: "13px",
-            fontWeight: 700,
-            color: "#e2e8f0",
-            marginBottom: "8px",
-          }}
-        >
-          Как работает советник?
-        </h2>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px",
-            fontSize: "12px",
-            color: "#94a3b8",
-          }}
-        >
-          <span>📊 Анализирует streak, действия, доход и прогресс</span>
-          <span>🎯 Определяет приоритетную область для роста</span>
-          <span>💡 Даёт конкретные советы для текущей ситуации</span>
-          <span>⏰ Учитывает время суток и день недели</span>
-        </div>
-      </div>
 
       <div style={{ height: "32px" }} />
     </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useDailyMissions } from "@/hooks/use-daily-missions";
 import { useClaimMission } from "@/hooks/use-claim-mission";
 import { useToast } from "@/hooks/use-toast";
+import { useT } from "@/lib/i18n";
 import {
   DIFFICULTY_CONFIG,
   ALL_COMPLETE_BONUS_XP,
@@ -18,14 +19,14 @@ function useResetTimer() {
     function calc() {
       const now = new Date();
       const tomorrow = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
       );
       const diff = tomorrow.getTime() - now.getTime();
       const h = Math.floor(diff / 3_600_000);
       const m = Math.floor((diff % 3_600_000) / 60_000);
       const s = Math.floor((diff % 60_000) / 1_000);
       setTimeLeft(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`,
       );
     }
 
@@ -40,9 +41,12 @@ function useResetTimer() {
 function MissionRow({ entry }: { entry: UserDailyMission }) {
   const claimMission = useClaimMission();
   const { toast } = useToast();
+  const { t } = useT();
 
   const mission = entry.mission;
   const diffCfg = DIFFICULTY_CONFIG[mission.difficulty];
+  const diffLabel =
+    t.dailyMissions.difficultyLabels[mission.difficulty] ?? mission.difficulty;
   const pct =
     mission.target_value > 0
       ? Math.min((entry.progress / mission.target_value) * 100, 100)
@@ -55,33 +59,34 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
         onSuccess: (result) => {
           toast({
             title: `${mission.emoji} +${result.xp_awarded} XP`,
-            description: result.gold_awarded > 0
-              ? `+${result.gold_awarded} золота`
-              : "Награда получена!",
+            description:
+              result.gold_awarded > 0
+                ? t.dailyMissions.goldAwarded(result.gold_awarded)
+                : t.dailyMissions.rewardReceived,
           });
 
           if (result.all_completed_bonus) {
             toast({
-              title: "🏆 Все миссии выполнены!",
-              description: `Бонус +${ALL_COMPLETE_BONUS_XP} XP`,
+              title: `🏆 ${t.dailyMissions.allComplete}`,
+              description: t.dailyMissions.allCompleteBonus(ALL_COMPLETE_BONUS_XP),
             });
           }
 
           if (result.leveled_up) {
             toast({
               title: "🎉 Level Up!",
-              description: `Уровень ${result.new_level}!`,
+              description: t.dailyMissions.leveledUp(result.new_level),
             });
           }
         },
         onError: (error) => {
           toast({
-            title: "Ошибка",
+            title: t.dailyMissions.error,
             description: error.message,
             variant: "destructive",
           });
         },
-      }
+      },
     );
   };
 
@@ -110,7 +115,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
             <span
               className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${diffCfg.bgColor} ${diffCfg.color}`}
             >
-              {diffCfg.label}
+              {diffLabel}
             </span>
           </div>
 
@@ -150,7 +155,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
             ) : (
               <Gift className="h-3.5 w-3.5" />
             )}
-            Забрать
+            {t.dailyMissions.claim}
           </button>
         )}
 
@@ -165,6 +170,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
 export function DailyMissionsCard() {
   const { data: missions, isLoading } = useDailyMissions();
   const timeLeft = useResetTimer();
+  const { t } = useT();
 
   const completedCount = missions?.filter((m) => m.completed).length ?? 0;
   const claimedCount = missions?.filter((m) => m.claimed).length ?? 0;
@@ -188,10 +194,10 @@ export function DailyMissionsCard() {
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-violet-400" />
-          <h3 className="text-sm font-bold text-white">Ежедневные миссии</h3>
+          <h3 className="text-sm font-bold text-white">{t.dailyMissions.empty}</h3>
         </div>
         <p className="mt-3 text-center text-sm text-gray-500">
-          Миссии на сегодня ещё не назначены. Обновите страницу.
+          {t.dailyMissions.emptyHint}
         </p>
       </div>
     );
@@ -202,13 +208,13 @@ export function DailyMissionsCard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-violet-400" />
-          <h3 className="text-sm font-bold text-white">Ежедневные миссии</h3>
+          <h3 className="text-sm font-bold text-white">{t.dailyMissions.title}</h3>
           <span className="rounded-full bg-violet-600/20 px-2 py-0.5 text-[10px] font-bold text-violet-400">
             {completedCount}/{totalCount}
           </span>
           {hasBonusSlots && (
             <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
-              🧬 +{totalCount - 3}
+              {t.dailyMissions.bonusSlots} +{totalCount - 3}
             </span>
           )}
         </div>
@@ -222,9 +228,11 @@ export function DailyMissionsCard() {
         <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-600/10 p-3">
           <span className="text-xl">🏆</span>
           <div>
-            <p className="text-sm font-bold text-emerald-400">Все миссии выполнены!</p>
+            <p className="text-sm font-bold text-emerald-400">
+              {t.dailyMissions.allComplete}
+            </p>
             <p className="text-[10px] text-emerald-400/60">
-              Бонус +{ALL_COMPLETE_BONUS_XP} XP получен
+              {t.dailyMissions.allCompleteBonus(ALL_COMPLETE_BONUS_XP)}
             </p>
           </div>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useCallback } from 'react';
+import { useT } from '@/lib/i18n';
 
 interface LevelUpPopupProps {
   level: number;
@@ -9,11 +10,12 @@ interface LevelUpPopupProps {
 }
 
 export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProps) {
+  const { t } = useT();
+
   const fireConfetti = useCallback(async () => {
     try {
       const confetti = (await import('canvas-confetti')).default;
 
-      // First burst
       void confetti({
         particleCount: 80,
         spread: 70,
@@ -25,7 +27,6 @@ export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProp
         zIndex: 100001,
       });
 
-      // Side bursts
       setTimeout(() => {
         void confetti({
           particleCount: 40,
@@ -100,7 +101,9 @@ export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProp
             border: '2px solid #7c3aed60',
           }}
         >
-          <span style={{ fontSize: '48px', filter: 'drop-shadow(0 0 16px #7c3aed)' }}>⚔️</span>
+          <span style={{ fontSize: '48px', filter: 'drop-shadow(0 0 16px #7c3aed)' }}>
+            ⚔️
+          </span>
         </div>
 
         <div
@@ -113,7 +116,7 @@ export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProp
             fontWeight: 600,
           }}
         >
-          Level Up!
+          {t.levelUp.title}
         </div>
 
         <div
@@ -146,7 +149,7 @@ export default function LevelUpPopup({ level, title, onClose }: LevelUpPopupProp
             marginTop: '24px',
           }}
         >
-          Нажми чтобы продолжить
+          {t.levelUp.tapToContinue}
         </div>
       </div>
 

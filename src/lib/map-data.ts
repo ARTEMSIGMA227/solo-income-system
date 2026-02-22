@@ -1,17 +1,27 @@
+// src/lib/map-data.ts
+
 export type TerritoryStatus = 'locked' | 'foggy' | 'available' | 'in_progress' | 'captured';
 
-export type BiomeType = 'plains' | 'forest' | 'desert' | 'mountain' | 'swamp' | 'snow' | 'magical' | 'crystal';
+export type BiomeType =
+  | 'plains'
+  | 'forest'
+  | 'desert'
+  | 'mountain'
+  | 'swamp'
+  | 'snow'
+  | 'magical'
+  | 'crystal';
 
 export interface TerritoryReward {
   type: 'xp_bonus' | 'gold_bonus' | 'passive_gold' | 'skill_points' | 'title';
   value: number | string;
-  label: string;
+  labelKey: string; // i18n key — resolved at render time
 }
 
 export interface TerritoryRequirement {
   type: 'level' | 'skill_branch' | 'territory' | 'streak';
   value: string | number;
-  label: string;
+  labelKey: string; // i18n key — resolved at render time
 }
 
 export interface TerritoryConnection {
@@ -21,8 +31,8 @@ export interface TerritoryConnection {
 
 export interface Territory {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string; // key into t.map.territories_names
+  descriptionKey: string; // key into t.map.territories_descriptions
   icon: string;
   color: string;
   bgGradient: string;
@@ -34,29 +44,14 @@ export interface Territory {
   rewards: TerritoryReward[];
   connections: TerritoryConnection[];
   skillBranch: string | null;
-  lore: string;
+  loreKey: string; // key into t.map.territories_lore
 }
-
-export const BIOME_CONFIG: Record<BiomeType, {
-  label: string;
-  accent: string;
-  bgTint: string;
-}> = {
-  plains:  { label: 'Равнины',           accent: '#7cb342', bgTint: 'rgba(124,179,66,0.06)' },
-  forest:  { label: 'Лес',              accent: '#4a7c2e', bgTint: 'rgba(74,124,46,0.06)' },
-  desert:  { label: 'Пустыня',          accent: '#c49a3c', bgTint: 'rgba(196,154,60,0.06)' },
-  mountain:{ label: 'Горы',             accent: '#8d7b6b', bgTint: 'rgba(141,123,107,0.06)' },
-  swamp:   { label: 'Болота',           accent: '#5e7a5e', bgTint: 'rgba(94,122,94,0.06)' },
-  snow:    { label: 'Снежные вершины',  accent: '#a8b8c8', bgTint: 'rgba(168,184,200,0.06)' },
-  magical: { label: 'Магические земли', accent: '#8b6cc1', bgTint: 'rgba(139,108,193,0.06)' },
-  crystal: { label: 'Кристальный',      accent: '#d46ca8', bgTint: 'rgba(212,108,168,0.06)' },
-};
 
 export const TERRITORIES: Territory[] = [
   {
     id: 'starter_village',
-    name: 'Деревня Начала',
-    description: 'Место, где начинается путь каждого охотника за доходом.',
+    nameKey: 'starter_village',
+    descriptionKey: 'starter_village',
     icon: '🏘️',
     color: '#22c55e',
     bgGradient: 'from-green-900/40 to-green-800/20',
@@ -66,20 +61,20 @@ export const TERRITORIES: Territory[] = [
     maxLevel: 5,
     requirements: [],
     rewards: [
-      { type: 'xp_bonus', value: 5, label: '+5% XP ко всем действиям' },
-      { type: 'gold_bonus', value: 50, label: '50 🪙 за захват' },
+      { type: 'xp_bonus', value: 5, labelKey: 'xp_bonus_5' },
+      { type: 'gold_bonus', value: 50, labelKey: 'gold_bonus_50' },
     ],
     connections: [
       { targetId: 'trade_outpost', bidirectional: true },
       { targetId: 'discipline_fort', bidirectional: true },
     ],
     skillBranch: null,
-    lore: 'Тихая деревня на краю мира. Здесь ты делаешь первые шаги к величию.',
+    loreKey: 'starter_village',
   },
   {
     id: 'trade_outpost',
-    name: 'Торговый Аванпост',
-    description: 'Центр коммерции. Навыки продаж решают всё.',
+    nameKey: 'trade_outpost',
+    descriptionKey: 'trade_outpost',
     icon: '🏪',
     color: '#f59e0b',
     bgGradient: 'from-amber-900/40 to-amber-800/20',
@@ -88,12 +83,12 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 1000,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'starter_village', label: 'Захватить Деревню Начала' },
-      { type: 'level', value: 3, label: 'Уровень 3+' },
+      { type: 'territory', value: 'starter_village', labelKey: 'req_capture_starter_village' },
+      { type: 'level', value: 3, labelKey: 'req_level_3' },
     ],
     rewards: [
-      { type: 'gold_bonus', value: 10, label: '+10% 🪙 за продажи' },
-      { type: 'passive_gold', value: 5, label: '+5 🪙/день пассивно' },
+      { type: 'gold_bonus', value: 10, labelKey: 'gold_bonus_10_pct' },
+      { type: 'passive_gold', value: 5, labelKey: 'passive_gold_5' },
     ],
     connections: [
       { targetId: 'starter_village', bidirectional: true },
@@ -101,12 +96,12 @@ export const TERRITORIES: Territory[] = [
       { targetId: 'shadow_market', bidirectional: true },
     ],
     skillBranch: 'communication',
-    lore: 'Торговцы со всего мира стекаются сюда. Кто владеет словом — владеет золотом.',
+    loreKey: 'trade_outpost',
   },
   {
     id: 'discipline_fort',
-    name: 'Форт Дисциплины',
-    description: 'Военная крепость. Только системные действия приносят результат.',
+    nameKey: 'discipline_fort',
+    descriptionKey: 'discipline_fort',
     icon: '🏰',
     color: '#ef4444',
     bgGradient: 'from-red-900/40 to-red-800/20',
@@ -115,12 +110,12 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 1000,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'starter_village', label: 'Захватить Деревню Начала' },
-      { type: 'streak', value: 3, label: 'Streak 3+ дней' },
+      { type: 'territory', value: 'starter_village', labelKey: 'req_capture_starter_village' },
+      { type: 'streak', value: 3, labelKey: 'req_streak_3' },
     ],
     rewards: [
-      { type: 'xp_bonus', value: 10, label: '+10% XP за дисциплину' },
-      { type: 'title', value: 'Страж Форта', label: 'Титул "Страж Форта"' },
+      { type: 'xp_bonus', value: 10, labelKey: 'xp_bonus_10' },
+      { type: 'title', value: 'fort_guard', labelKey: 'title_fort_guard' },
     ],
     connections: [
       { targetId: 'starter_village', bidirectional: true },
@@ -128,12 +123,12 @@ export const TERRITORIES: Territory[] = [
       { targetId: 'precision_workshop', bidirectional: true },
     ],
     skillBranch: 'discipline',
-    lore: 'Здесь тренируются самые стойкие. Каждый день — бой с собой.',
+    loreKey: 'discipline_fort',
   },
   {
     id: 'intellect_library',
-    name: 'Библиотека Знаний',
-    description: 'Хранилище мудрости. Учись, чтобы зарабатывать умнее.',
+    nameKey: 'intellect_library',
+    descriptionKey: 'intellect_library',
     icon: '📚',
     color: '#6366f1',
     bgGradient: 'from-indigo-900/40 to-indigo-800/20',
@@ -142,24 +137,24 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 1500,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'trade_outpost', label: 'Захватить Торговый Аванпост' },
-      { type: 'skill_branch', value: 'intellect', label: 'Интеллект: 2+ навыка' },
+      { type: 'territory', value: 'trade_outpost', labelKey: 'req_capture_trade_outpost' },
+      { type: 'skill_branch', value: 'intellect', labelKey: 'req_skill_intellect_2' },
     ],
     rewards: [
-      { type: 'xp_bonus', value: 15, label: '+15% XP за обучение' },
-      { type: 'skill_points', value: 1, label: '+1 очко навыка' },
+      { type: 'xp_bonus', value: 15, labelKey: 'xp_bonus_15' },
+      { type: 'skill_points', value: 1, labelKey: 'skill_point_1' },
     ],
     connections: [
       { targetId: 'trade_outpost', bidirectional: true },
       { targetId: 'crystal_citadel', bidirectional: true },
     ],
     skillBranch: 'intellect',
-    lore: 'Бесконечные полки книг. Знание — самая выгодная инвестиция.',
+    loreKey: 'intellect_library',
   },
   {
     id: 'willpower_peak',
-    name: 'Пик Силы Воли',
-    description: 'Горная вершина. Только сильнейшие духом достигают её.',
+    nameKey: 'willpower_peak',
+    descriptionKey: 'willpower_peak',
     icon: '⛰️',
     color: '#8b5cf6',
     bgGradient: 'from-violet-900/40 to-violet-800/20',
@@ -168,24 +163,24 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 1500,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'discipline_fort', label: 'Захватить Форт Дисциплины' },
-      { type: 'level', value: 5, label: 'Уровень 5+' },
+      { type: 'territory', value: 'discipline_fort', labelKey: 'req_capture_discipline_fort' },
+      { type: 'level', value: 5, labelKey: 'req_level_5' },
     ],
     rewards: [
-      { type: 'xp_bonus', value: 10, label: '+10% XP за streak' },
-      { type: 'passive_gold', value: 10, label: '+10 🪙/день пассивно' },
+      { type: 'xp_bonus', value: 10, labelKey: 'xp_bonus_10_streak' },
+      { type: 'passive_gold', value: 10, labelKey: 'passive_gold_10' },
     ],
     connections: [
       { targetId: 'discipline_fort', bidirectional: true },
       { targetId: 'crystal_citadel', bidirectional: true },
     ],
     skillBranch: 'willpower',
-    lore: 'Ветра здесь сбивают с ног, но вид с вершины стоит каждого шага.',
+    loreKey: 'willpower_peak',
   },
   {
     id: 'precision_workshop',
-    name: 'Мастерская Точности',
-    description: 'Кузница мастерства. Детали решают исход.',
+    nameKey: 'precision_workshop',
+    descriptionKey: 'precision_workshop',
     icon: '⚙️',
     color: '#06b6d4',
     bgGradient: 'from-cyan-900/40 to-cyan-800/20',
@@ -194,24 +189,24 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 1200,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'discipline_fort', label: 'Захватить Форт Дисциплины' },
-      { type: 'skill_branch', value: 'precision', label: 'Точность: 1+ навык' },
+      { type: 'territory', value: 'discipline_fort', labelKey: 'req_capture_discipline_fort' },
+      { type: 'skill_branch', value: 'precision', labelKey: 'req_skill_precision_1' },
     ],
     rewards: [
-      { type: 'xp_bonus', value: 8, label: '+8% XP за точные действия' },
-      { type: 'gold_bonus', value: 5, label: '+5% 🪙 бонус' },
+      { type: 'xp_bonus', value: 8, labelKey: 'xp_bonus_8' },
+      { type: 'gold_bonus', value: 5, labelKey: 'gold_bonus_5_pct' },
     ],
     connections: [
       { targetId: 'discipline_fort', bidirectional: true },
       { targetId: 'crystal_citadel', bidirectional: true },
     ],
     skillBranch: 'precision',
-    lore: 'Каждая шестерёнка на своём месте. Мастерство не терпит небрежности.',
+    loreKey: 'precision_workshop',
   },
   {
     id: 'shadow_market',
-    name: 'Теневой Рынок',
-    description: 'Скрытые сделки и секретные бонусы для посвящённых.',
+    nameKey: 'shadow_market',
+    descriptionKey: 'shadow_market',
     icon: '🌑',
     color: '#71717a',
     bgGradient: 'from-zinc-900/40 to-zinc-800/20',
@@ -220,25 +215,25 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 2000,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'trade_outpost', label: 'Захватить Торговый Аванпост' },
-      { type: 'territory', value: 'intellect_library', label: 'Захватить Библиотеку Знаний' },
-      { type: 'level', value: 7, label: 'Уровень 7+' },
+      { type: 'territory', value: 'trade_outpost', labelKey: 'req_capture_trade_outpost' },
+      { type: 'territory', value: 'intellect_library', labelKey: 'req_capture_intellect_library' },
+      { type: 'level', value: 7, labelKey: 'req_level_7' },
     ],
     rewards: [
-      { type: 'gold_bonus', value: 20, label: '+20% 🪙 за скрытые действия' },
-      { type: 'title', value: 'Теневой Торговец', label: 'Титул "Теневой Торговец"' },
+      { type: 'gold_bonus', value: 20, labelKey: 'gold_bonus_20_pct' },
+      { type: 'title', value: 'shadow_trader', labelKey: 'title_shadow_trader' },
     ],
     connections: [
       { targetId: 'trade_outpost', bidirectional: true },
       { targetId: 'crystal_citadel', bidirectional: true },
     ],
     skillBranch: 'defense',
-    lore: 'Не все пути к богатству освещены солнцем. Тени знают свои секреты.',
+    loreKey: 'shadow_market',
   },
   {
     id: 'crystal_citadel',
-    name: 'Кристальная Цитадель',
-    description: 'Финальная территория. Вершина мастерства и дохода.',
+    nameKey: 'crystal_citadel',
+    descriptionKey: 'crystal_citadel',
     icon: '💎',
     color: '#ec4899',
     bgGradient: 'from-pink-900/40 to-fuchsia-900/20',
@@ -247,16 +242,16 @@ export const TERRITORIES: Territory[] = [
     requiredXP: 5000,
     maxLevel: 5,
     requirements: [
-      { type: 'territory', value: 'intellect_library', label: 'Захватить Библиотеку Знаний' },
-      { type: 'territory', value: 'willpower_peak', label: 'Захватить Пик Силы Воли' },
-      { type: 'territory', value: 'precision_workshop', label: 'Захватить Мастерскую Точности' },
-      { type: 'territory', value: 'shadow_market', label: 'Захватить Теневой Рынок' },
-      { type: 'level', value: 10, label: 'Уровень 10+' },
+      { type: 'territory', value: 'intellect_library', labelKey: 'req_capture_intellect_library' },
+      { type: 'territory', value: 'willpower_peak', labelKey: 'req_capture_willpower_peak' },
+      { type: 'territory', value: 'precision_workshop', labelKey: 'req_capture_precision_workshop' },
+      { type: 'territory', value: 'shadow_market', labelKey: 'req_capture_shadow_market' },
+      { type: 'level', value: 10, labelKey: 'req_level_10' },
     ],
     rewards: [
-      { type: 'xp_bonus', value: 25, label: '+25% XP ко всему' },
-      { type: 'passive_gold', value: 25, label: '+25 🪙/день пассивно' },
-      { type: 'title', value: 'Повелитель Цитадели', label: 'Титул "Повелитель Цитадели"' },
+      { type: 'xp_bonus', value: 25, labelKey: 'xp_bonus_25' },
+      { type: 'passive_gold', value: 25, labelKey: 'passive_gold_25' },
+      { type: 'title', value: 'citadel_lord', labelKey: 'title_citadel_lord' },
     ],
     connections: [
       { targetId: 'intellect_library', bidirectional: true },
@@ -265,7 +260,7 @@ export const TERRITORIES: Territory[] = [
       { targetId: 'shadow_market', bidirectional: true },
     ],
     skillBranch: null,
-    lore: 'Цитадель сияет кристальным светом. Только достигший вершины во всём может войти.',
+    loreKey: 'crystal_citadel',
   },
 ];
 
@@ -283,3 +278,14 @@ export function getConnectedTerritories(id: string): Territory[] {
 export function calculateTerritoryXPForLevel(baseXP: number, level: number): number {
   return Math.floor(baseXP * Math.pow(1.5, level));
 }
+
+export const BIOME_CONFIG: Record<BiomeType, { accent: string; label: string }> = {
+  plains:   { accent: '#22c55e', label: 'Plains' },
+  forest:   { accent: '#16a34a', label: 'Forest' },
+  desert:   { accent: '#d97706', label: 'Desert' },
+  mountain: { accent: '#ef4444', label: 'Mountain' },
+  swamp:    { accent: '#71717a', label: 'Swamp' },
+  snow:     { accent: '#8b5cf6', label: 'Snow' },
+  magical:  { accent: '#6366f1', label: 'Magical' },
+  crystal:  { accent: '#ec4899', label: 'Crystal' },
+};

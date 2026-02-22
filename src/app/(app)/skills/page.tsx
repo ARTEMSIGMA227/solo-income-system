@@ -4,26 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { formatNumber } from '@/lib/utils';
-import { SKILL_BRANCHES, calculateEffects } from '@/lib/skill-tree';
 import type { SkillBranch, SkillEffectType } from '@/lib/skill-tree';
 import { useSkills } from '@/hooks/use-skills';
 import SkillBranchColumn from '@/components/skills/SkillBranchColumn';
 import { toast } from 'sonner';
-
-const EFFECT_LABELS: Record<SkillEffectType, string> = {
-  xp_bonus_percent: '% бонус XP',
-  gold_bonus_percent: '% бонус золота',
-  xp_bonus_flat: ' XP бонус',
-  gold_bonus_flat: ' 🪙 бонус',
-  streak_shield_days: ' дн. защиты серии',
-  penalty_reduction_percent: '% снижение штрафа',
-  daily_gold_passive: ' 🪙/день пассивно',
-  xp_multiplier_actions: '% XP множитель',
-  crit_chance_percent: '% шанс крита',
-  boss_damage_bonus: '% урон боссам',
-  mission_slot: ' доп. слот миссий',
-  shop_discount_percent: '% скидка в магазине',
-};
+import { useT } from '@/lib/i18n';
 
 const branchOrder: SkillBranch[] = [
   'communication',
@@ -42,6 +27,7 @@ export default function SkillsPage() {
   const [showEffects, setShowEffects] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const router = useRouter();
+  const { t } = useT();
 
   const {
     allocated,
@@ -82,16 +68,13 @@ export default function SkillsPage() {
   }, [router]);
 
   async function handleAllocate(skillId: string) {
-    const success = await allocatePoint(skillId);
-    if (success) {
-      // Small haptic-like visual feedback
-    }
+    await allocatePoint(skillId);
   }
 
   async function handleReset() {
     if (!confirmReset) {
       setConfirmReset(true);
-      toast('Нажми ещё раз для подтверждения сброса (500 🪙)', { icon: '⚠️' });
+      toast(t.skills.resetConfirmToast, { icon: '⚠️' });
       setTimeout(() => setConfirmReset(false), 5000);
       return;
     }
@@ -115,7 +98,7 @@ export default function SkillsPage() {
           fontSize: '24px',
         }}
       >
-        ⚔️ Загрузка навыков...
+        {t.skills.loading}
       </div>
     );
   }
@@ -138,10 +121,10 @@ export default function SkillsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: '20px', fontWeight: 800, color: '#a78bfa' }}>
-              ⚔️ Древо навыков
+              ⚔️ {t.skills.title}
             </div>
             <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-              Прокачивай навыки, становись сильнее
+              {t.skills.subtitle}
             </div>
           </div>
           <div
@@ -178,8 +161,10 @@ export default function SkillsPage() {
           }}
         >
           <div>
-            <div style={{ fontSize: '13px', color: '#94a3b8' }}>Очки навыков</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
+            <div style={{ fontSize: '13px', color: '#94a3b8' }}>{t.skills.points}</div>
+            <div
+              style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}
+            >
               <span
                 style={{
                   fontSize: '28px',
@@ -191,7 +176,7 @@ export default function SkillsPage() {
                 {availablePoints}
               </span>
               <span style={{ fontSize: '13px', color: '#64748b' }}>
-                / {totalPoints} (использовано {usedPoints})
+                / {totalPoints} ({t.skills.used} {usedPoints})
               </span>
             </div>
           </div>
@@ -211,7 +196,7 @@ export default function SkillsPage() {
               animation: 'skillPointsPulse 2s ease-in-out infinite',
             }}
           >
-            ✨ Есть нераспределённые очки! Выбери навык для прокачки
+            {t.skills.unallocatedHint}
           </div>
         )}
       </div>
@@ -236,7 +221,7 @@ export default function SkillsPage() {
             alignItems: 'center',
           }}
         >
-          <span>📊 Активные бонусы ({activeEffects.length})</span>
+          <span>{t.skills.activeEffects(activeEffects.length)}</span>
           <span style={{ fontSize: '11px' }}>{showEffects ? '▲' : '▼'}</span>
         </button>
       )}
@@ -264,7 +249,8 @@ export default function SkillsPage() {
                 }}
               >
                 +{value}
-                {EFFECT_LABELS[key as SkillEffectType]}
+                {t.skills.effectLabels[key as SkillEffectType] ||
+                  key}
               </div>
             ))}
           </div>
@@ -300,7 +286,7 @@ export default function SkillsPage() {
             transition: 'all 0.2s ease',
           }}
         >
-          {confirmReset ? '⚠️ Подтвердить сброс (500 🪙)' : '🔄 Сбросить навыки (500 🪙)'}
+          {confirmReset ? t.skills.resetConfirmButton : t.skills.resetButtonLabel}
         </button>
       )}
 

@@ -1,6 +1,13 @@
-// src/lib/challenges.ts
+import type { TranslationDictionary } from './i18n/types';
 
 export interface ChallengeTemplate {
+  titleKey: string;
+  descriptionKey: string;
+  xpReward: number;
+  targetCount: number;
+}
+
+export interface ChallengeResolved {
   title: string;
   description: string;
   xpReward: number;
@@ -8,19 +15,19 @@ export interface ChallengeTemplate {
 }
 
 const TEMPLATES: ChallengeTemplate[] = [
-  { title: '\ud83d\udcde 10 \u0437\u0432\u043e\u043d\u043a\u043e\u0432 \u0434\u043e 12:00', description: '\u0421\u0434\u0435\u043b\u0430\u0439 10 \u0445\u043e\u043b\u043e\u0434\u043d\u044b\u0445 \u0437\u0432\u043e\u043d\u043a\u043e\u0432 \u0434\u043e \u043e\u0431\u0435\u0434\u0430', xpReward: 100, targetCount: 10 },
-  { title: '\ud83d\udcb0 \u041f\u0435\u0440\u0432\u0430\u044f \u043f\u0440\u043e\u0434\u0430\u0436\u0430', description: '\u0417\u0430\u043a\u0440\u043e\u0439 \u0445\u043e\u0442\u044f \u0431\u044b 1 \u043f\u0440\u043e\u0434\u0430\u0436\u0443 \u0441\u0435\u0433\u043e\u0434\u043d\u044f', xpReward: 150, targetCount: 1 },
-  { title: '\ud83c\udfaf 5 \u043a\u0432\u0435\u0441\u0442\u043e\u0432', description: '\u0412\u044b\u043f\u043e\u043b\u043d\u0438 5 \u043b\u044e\u0431\u044b\u0445 \u043a\u0432\u0435\u0441\u0442\u043e\u0432', xpReward: 75, targetCount: 5 },
-  { title: '\u26a1 \u041c\u0430\u0440\u0430\u0444\u043e\u043d \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439', description: '\u0421\u0434\u0435\u043b\u0430\u0439 40 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u0437\u0430 \u0434\u0435\u043d\u044c', xpReward: 100, targetCount: 40 },
-  { title: '\ud83d\udd25 \u0411\u0435\u0437 \u043f\u0435\u0440\u0435\u0440\u044b\u0432\u043e\u0432', description: '\u0417\u0430\u0432\u0435\u0440\u0448\u0438 \u0444\u043e\u043a\u0443\u0441-\u0441\u0435\u0441\u0441\u0438\u044e \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e', xpReward: 80, targetCount: 1 },
-  { title: '\ud83d\udcbc 3 \u043a\u0430\u0441\u0430\u043d\u0438\u044f', description: '\u0421\u0434\u0435\u043b\u0430\u0439 3 \u043a\u0430\u0441\u0430\u043d\u0438\u044f \u0441 \u043a\u043b\u0438\u0435\u043d\u0442\u0430\u043c\u0438', xpReward: 60, targetCount: 3 },
-  { title: '\ud83c\udfc6 \u0414\u0432\u043e\u0439\u043d\u043e\u0439 \u0443\u0434\u0430\u0440', description: '\u0412\u044b\u043f\u043e\u043b\u043d\u0438 2 \u0441\u043b\u043e\u0436\u043d\u044b\u0445 \u043a\u0432\u0435\u0441\u0442\u0430', xpReward: 120, targetCount: 2 },
-  { title: '\ud83d\udcc8 \u041f\u0440\u043e\u0440\u044b\u0432', description: '\u0417\u0430\u0440\u0430\u0431\u043e\u0442\u0430\u0439 200+ XP \u0437\u0430 \u0434\u0435\u043d\u044c', xpReward: 100, targetCount: 200 },
-  { title: '\ud83e\udde0 \u0420\u0435\u0444\u043b\u0435\u043a\u0441\u0438\u044f', description: '\u0417\u0430\u043f\u043e\u043b\u043d\u0438 \u0434\u043d\u0435\u0432\u043d\u0443\u044e \u0440\u0435\u0444\u043b\u0435\u043a\u0441\u0438\u044e', xpReward: 50, targetCount: 1 },
-  { title: '\ud83d\udc80 \u0423\u0434\u0430\u0440 \u043f\u043e \u0431\u043e\u0441\u0441\u0443', description: '\u041d\u0430\u043d\u0435\u0441\u0438 \u0443\u0440\u043e\u043d \u043b\u044e\u0431\u043e\u043c\u0443 \u0431\u043e\u0441\u0441\u0443', xpReward: 80, targetCount: 1 },
+  { titleKey: 'calls_10', descriptionKey: 'calls_10', xpReward: 100, targetCount: 10 },
+  { titleKey: 'first_sale', descriptionKey: 'first_sale', xpReward: 150, targetCount: 1 },
+  { titleKey: 'quests_5', descriptionKey: 'quests_5', xpReward: 75, targetCount: 5 },
+  { titleKey: 'action_marathon', descriptionKey: 'action_marathon', xpReward: 100, targetCount: 40 },
+  { titleKey: 'no_breaks', descriptionKey: 'no_breaks', xpReward: 80, targetCount: 1 },
+  { titleKey: 'touches_3', descriptionKey: 'touches_3', xpReward: 60, targetCount: 3 },
+  { titleKey: 'double_hit', descriptionKey: 'double_hit', xpReward: 120, targetCount: 2 },
+  { titleKey: 'breakthrough', descriptionKey: 'breakthrough', xpReward: 100, targetCount: 200 },
+  { titleKey: 'reflection', descriptionKey: 'reflection', xpReward: 50, targetCount: 1 },
+  { titleKey: 'boss_hit', descriptionKey: 'boss_hit', xpReward: 80, targetCount: 1 },
 ];
 
-export function getDailyChallenge(userId: string, date: string): ChallengeTemplate {
+export function getDailyChallenge(userId: string, date: string, t: TranslationDictionary): ChallengeResolved {
   // Deterministic random based on date + userId
   let hash = 0;
   const seed = date + userId;
@@ -28,5 +35,12 @@ export function getDailyChallenge(userId: string, date: string): ChallengeTempla
     hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
   }
   const index = Math.abs(hash) % TEMPLATES.length;
-  return TEMPLATES[index];
+  const template = TEMPLATES[index];
+
+  return {
+    title: t.challengesLib.templates.title[template.titleKey] ?? template.titleKey,
+    description: t.challengesLib.templates.description[template.descriptionKey] ?? template.descriptionKey,
+    xpReward: template.xpReward,
+    targetCount: template.targetCount,
+  };
 }

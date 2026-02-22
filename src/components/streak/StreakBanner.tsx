@@ -1,15 +1,26 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useT } from '@/lib/i18n';
 
 interface StreakBannerProps {
   streak: number;
   bestStreak: number;
 }
 
+function pluralDays(n: number, day1: string, day234: string, day5plus: string): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return day5plus;
+  if (last > 1 && last < 5) return day234;
+  if (last === 1) return day1;
+  return day5plus;
+}
+
 export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
+  const { t, locale } = useT();
 
   useEffect(() => {
     if (streak < 2) return;
@@ -59,7 +70,6 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
       if (!ctx) return;
       ctx.clearRect(0, 0, rect.width, rect.height);
 
-      // Spawn rate based on streak
       const spawnRate = Math.min(streak, 10);
       for (let i = 0; i < spawnRate; i++) {
         if (Math.random() < 0.3) spawnParticle();
@@ -127,6 +137,13 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
     emoji = '🔥';
   }
 
+  const daysWord =
+    locale === 'ru'
+      ? pluralDays(streak, t.effects.streakDay1, t.effects.streakDay234, t.effects.streakDay5plus)
+      : streak === 1
+        ? t.effects.streakDay1
+        : t.effects.streakDay5plus;
+
   return (
     <div
       style={{
@@ -138,7 +155,6 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
         padding: '12px 16px',
       }}
     >
-      {/* Fire particles canvas */}
       {streak >= 2 && (
         <canvas
           ref={canvasRef}
@@ -152,23 +168,33 @@ export default function StreakBanner({ streak, bestStreak }: StreakBannerProps) 
         />
       )}
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span
             style={{
               fontSize: '20px',
-              animation: isHot ? 'streakFlame 0.5s ease-in-out infinite alternate' : undefined,
+              animation: isHot
+                ? 'streakFlame 0.5s ease-in-out infinite alternate'
+                : undefined,
             }}
           >
             {emoji}
           </span>
           <div>
             <div style={{ fontSize: '14px', fontWeight: 700, color: textColor }}>
-              Серия: {streak} {streak === 1 ? 'день' : streak < 5 ? 'дня' : 'дней'}
+              {t.effects.streakSeries}: {streak} {daysWord}
             </div>
             {bestStreak > streak && (
               <div style={{ fontSize: '11px', color: '#64748b' }}>
-                Рекорд: {bestStreak}
+                {t.effects.streakRecord}: {bestStreak}
               </div>
             )}
           </div>

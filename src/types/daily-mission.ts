@@ -49,22 +49,19 @@ export interface ClaimResult {
 
 export const DIFFICULTY_CONFIG: Record<
   MissionDifficulty,
-  { label: string; color: string; bgColor: string; borderColor: string }
+  { color: string; bgColor: string; borderColor: string }
 > = {
   easy: {
-    label: "Лёгкая",
     color: "text-emerald-400",
     bgColor: "bg-emerald-600/20",
     borderColor: "border-emerald-500/30",
   },
   medium: {
-    label: "Средняя",
     color: "text-yellow-400",
     bgColor: "bg-yellow-600/20",
     borderColor: "border-yellow-500/30",
   },
   hard: {
-    label: "Сложная",
     color: "text-red-400",
     bgColor: "bg-red-600/20",
     borderColor: "border-red-500/30",

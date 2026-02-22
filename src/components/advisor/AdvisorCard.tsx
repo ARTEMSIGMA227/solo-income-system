@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 
 interface AdvisorCardProps {
   greeting: string;
@@ -9,6 +10,7 @@ interface AdvisorCardProps {
 
 export function AdvisorCard({ greeting, advice }: AdvisorCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useT();
 
   if (advice.length === 0) return null;
 
@@ -34,10 +36,8 @@ export function AdvisorCard({ greeting, advice }: AdvisorCardProps) {
         }}
       >
         <span style={{ fontSize: "18px" }}>🤖</span>
-        <span
-          style={{ fontSize: "13px", fontWeight: 700, color: "#a78bfa" }}
-        >
-          AI-Советник
+        <span style={{ fontSize: "13px", fontWeight: 700, color: "#a78bfa" }}>
+          {t.advisor.title}
         </span>
       </div>
 
@@ -88,8 +88,8 @@ export function AdvisorCard({ greeting, advice }: AdvisorCardProps) {
           }}
         >
           {expanded
-            ? "Свернуть ▲"
-            : `Ещё ${advice.length - 2} советов ▼`}
+            ? t.advisor.collapse
+            : t.advisor.moreAdvice(advice.length - 2)}
         </button>
       )}
     </div>

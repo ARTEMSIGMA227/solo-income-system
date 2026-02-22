@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMyGuild, useLeaveGuild, useManageMember } from '@/hooks/useGuild';
+import { useT } from '@/lib/i18n';
 import GuildChat from './GuildChat';
 import GuildQuestsPanel from './GuildQuestsPanel';
 import GuildRequestsPanel from './GuildRequestsPanel';
@@ -13,6 +14,7 @@ import {
 type Tab = 'members' | 'chat' | 'quests' | 'requests';
 
 export default function GuildDashboard() {
+  const { t } = useT();
   const { data, isLoading } = useMyGuild();
   const leaveGuild = useLeaveGuild();
   const manageMember = useManageMember();
@@ -20,7 +22,7 @@ export default function GuildDashboard() {
   const [copied, setCopied] = useState(false);
 
   if (isLoading) {
-    return <div className="text-center text-gray-400 py-8">Загрузка...</div>;
+    return <div className="text-center text-gray-400 py-8">{t.guilds.loading}</div>;
   }
 
   if (!data?.guild || !data?.membership) return null;
@@ -38,8 +40,8 @@ export default function GuildDashboard() {
 
   const handleLeave = () => {
     const msg = isLeader
-      ? '⚠️ Вы лидер. Гильдия будет распущена! Продолжить?'
-      : 'Покинуть гильдию?';
+      ? t.guilds.dashboard.leaveLeaderWarning
+      : t.guilds.dashboard.leaveConfirm;
 
     if (confirm(msg)) {
       leaveGuild.mutate(undefined, {
@@ -49,7 +51,7 @@ export default function GuildDashboard() {
   };
 
   const handleKick = (memberId: string, name: string) => {
-    if (confirm(`Исключить ${name}?`)) {
+    if (confirm(t.guilds.dashboard.kickConfirm(name))) {
       manageMember.mutate({ member_id: memberId, action: 'kick' });
     }
   };
@@ -68,22 +70,22 @@ export default function GuildDashboard() {
 
   const roleLabel = (role: string) => {
     switch (role) {
-      case 'leader': return 'Лидер';
-      case 'officer': return 'Офицер';
-      default: return 'Участник';
+      case 'leader': return t.guilds.dashboard.roles.leader;
+      case 'officer': return t.guilds.dashboard.roles.officer;
+      default: return t.guilds.dashboard.roles.member;
     }
   };
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'members', label: 'Участники', icon: <Users className="w-4 h-4" /> },
-    { key: 'chat', label: 'Чат', icon: <MessageSquare className="w-4 h-4" /> },
-    { key: 'quests', label: 'Квесты', icon: <Swords className="w-4 h-4" /> },
-    ...(canManage ? [{ key: 'requests' as Tab, label: 'Заявки', icon: <ClipboardList className="w-4 h-4" /> }] : []),
+    { key: 'members', label: t.guilds.dashboard.tabs.members, icon: <Users className="w-4 h-4" /> },
+    { key: 'chat', label: t.guilds.dashboard.tabs.chat, icon: <MessageSquare className="w-4 h-4" /> },
+    { key: 'quests', label: t.guilds.dashboard.tabs.quests, icon: <Swords className="w-4 h-4" /> },
+    ...(canManage ? [{ key: 'requests' as Tab, label: t.guilds.dashboard.tabs.requests, icon: <ClipboardList className="w-4 h-4" /> }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      {/* Шапка гильдии */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-700 rounded-xl p-6">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
@@ -96,7 +98,7 @@ export default function GuildDashboard() {
                 <p className="text-gray-400 text-sm mt-1">{guild.description}</p>
               )}
               <div className="flex items-center gap-4 mt-2 text-sm">
-                <span className="text-blue-400">Ур. {guild.level}</span>
+                <span className="text-blue-400">{t.guilds.dashboard.level} {guild.level}</span>
                 <span className="text-yellow-400">{guild.total_xp} XP</span>
                 <span className="text-gray-400 flex items-center gap-1">
                   <Users className="w-3 h-3" />
@@ -110,7 +112,7 @@ export default function GuildDashboard() {
             <button
               onClick={handleCopyCode}
               className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 rounded-lg transition-colors"
-              title="Копировать код приглашения"
+              title={t.guilds.dashboard.copyInvite}
             >
               {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
               {guild.invite_code}
@@ -118,7 +120,7 @@ export default function GuildDashboard() {
             <button
               onClick={handleLeave}
               className="p-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors"
-              title="Покинуть гильдию"
+              title={t.guilds.dashboard.leaveGuild}
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -126,7 +128,7 @@ export default function GuildDashboard() {
         </div>
       </div>
 
-      {/* Табы */}
+      {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {tabs.map((tab) => (
           <button
@@ -144,7 +146,7 @@ export default function GuildDashboard() {
         ))}
       </div>
 
-      {/* Контент */}
+      {/* Content */}
       {activeTab === 'members' && (
         <div className="bg-gray-800/50 border border-gray-700 rounded-lg divide-y divide-gray-700">
           {guild.members.map((member) => (
@@ -153,7 +155,7 @@ export default function GuildDashboard() {
                 {roleIcon(member.role)}
                 <div>
                   <span className="text-white font-medium">
-                    {member.display_name ?? 'Охотник'}
+                    {member.display_name ?? t.common.hunter}
                   </span>
                   <div className="text-xs text-gray-500">
                     {roleLabel(member.role)} · {member.xp_contributed} XP
@@ -167,7 +169,7 @@ export default function GuildDashboard() {
                     <button
                       onClick={() => handlePromote(member.id, 'officer')}
                       className="p-1.5 text-blue-400 hover:bg-blue-900/30 rounded transition-colors"
-                      title="Повысить до офицера"
+                      title={t.guilds.dashboard.promoteToOfficer}
                     >
                       <ChevronUp className="w-4 h-4" />
                     </button>
@@ -175,15 +177,15 @@ export default function GuildDashboard() {
                     <button
                       onClick={() => handlePromote(member.id, 'member')}
                       className="p-1.5 text-orange-400 hover:bg-orange-900/30 rounded transition-colors"
-                      title="Понизить до участника"
+                      title={t.guilds.dashboard.demoteToMember}
                     >
                       <ChevronDown className="w-4 h-4" />
                     </button>
                   ) : null}
                   <button
-                    onClick={() => handleKick(member.id, member.display_name ?? 'Охотник')}
+                    onClick={() => handleKick(member.id, member.display_name ?? t.common.hunter)}
                     className="p-1.5 text-red-400 hover:bg-red-900/30 rounded transition-colors"
-                    title="Исключить"
+                    title={t.guilds.dashboard.kick}
                   >
                     <UserMinus className="w-4 h-4" />
                   </button>

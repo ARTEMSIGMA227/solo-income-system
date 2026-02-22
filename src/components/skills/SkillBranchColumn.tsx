@@ -1,8 +1,9 @@
 'use client';
 
 import type { SkillBranch } from '@/lib/skill-tree';
-import { SKILL_BRANCHES, getSkillsByBranch } from '@/lib/skill-tree';
+import { SKILL_BRANCHES, getSkillsByBranch, getBranchName, getBranchDescription } from '@/lib/skill-tree';
 import SkillNodeCard from '@/components/skills/SkillNodeCard';
+import { useT } from '@/lib/i18n';
 
 interface SkillBranchColumnProps {
   branch: SkillBranch;
@@ -19,9 +20,13 @@ export default function SkillBranchColumn({
 }: SkillBranchColumnProps) {
   const branchInfo = SKILL_BRANCHES[branch];
   const nodes = getSkillsByBranch(branch).sort((a, b) => b.position.row - a.position.row);
+  const { t } = useT();
 
   const totalInBranch = nodes.reduce((sum, n) => sum + (allocated[n.id] || 0), 0);
   const maxInBranch = nodes.reduce((sum, n) => sum + n.maxLevel, 0);
+
+  const branchName = getBranchName(branch, t);
+  const branchDesc = getBranchDescription(branch, t);
 
   return (
     <div
@@ -46,17 +51,25 @@ export default function SkillBranchColumn({
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '22px' }}>{branchInfo.icon}</span>
           <div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: branchInfo.color }}>
-              {branchInfo.name}
+            <div
+              style={{ fontSize: '15px', fontWeight: 700, color: branchInfo.color }}
+            >
+              {branchName}
             </div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>{branchInfo.description}</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>
+              {branchDesc}
+            </div>
           </div>
         </div>
         <div
           style={{
             fontSize: '12px',
-            color: totalInBranch === maxInBranch ? '#22c55e' : branchInfo.color,
-            backgroundColor: totalInBranch === maxInBranch ? '#22c55e15' : `${branchInfo.color}15`,
+            color:
+              totalInBranch === maxInBranch ? '#22c55e' : branchInfo.color,
+            backgroundColor:
+              totalInBranch === maxInBranch
+                ? '#22c55e15'
+                : `${branchInfo.color}15`,
             padding: '4px 10px',
             borderRadius: '8px',
             fontWeight: 600,
@@ -77,13 +90,21 @@ export default function SkillBranchColumn({
               onAllocate={onAllocate}
             />
             {i < nodes.length - 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: '2px 0',
+                }}
+              >
                 <div
                   style={{
                     width: '2px',
                     height: '12px',
                     backgroundColor:
-                      (allocated[nodes[i + 1].id] || 0) > 0 ? branchInfo.color : '#2e2e3e',
+                      (allocated[nodes[i + 1].id] || 0) > 0
+                        ? branchInfo.color
+                        : '#2e2e3e',
                     transition: 'background-color 0.3s ease',
                     boxShadow:
                       (allocated[nodes[i + 1].id] || 0) > 0

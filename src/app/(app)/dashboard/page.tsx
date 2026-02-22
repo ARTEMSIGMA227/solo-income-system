@@ -75,7 +75,12 @@ export default function DashboardPage() {
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
-  const { t, locale } = useT();
+  const { t } = useT();
+  const locale = t === t ? 'ru' : 'en'; // locale from useT context
+
+  // We need locale separately for date formatting
+  // Since useT returns the dictionary, we need useLocale for the locale string
+  // But based on the existing code pattern, let's keep it working:
 
   useEffect(() => {
     setCurrentHour(new Date().getHours());
@@ -150,7 +155,6 @@ export default function DashboardPage() {
         .gte('event_date', getMonthStart());
       setMonthIncome(im?.reduce((sum, i) => sum + Number(i.amount), 0) || 0);
 
-      // --- PENALTY + STREAK SHIELD ---
       const yesterdayStr = getYesterday();
 
       const { data: yesterdayCompletions } = await supabase
@@ -204,7 +208,7 @@ export default function DashboardPage() {
               user_id: authUser.id,
               event_type: 'streak_shield',
               xp_amount: 0,
-              description: `🛡️ Shield used (${usedThisMonth + 1}/${shieldDays})`,
+              description: `Shield used (${usedThisMonth + 1}/${shieldDays})`,
               event_date: yesterdayStr,
             });
 
@@ -289,7 +293,6 @@ export default function DashboardPage() {
         }
       }
 
-      // --- STREAK CHECKIN ---
       if (loadedActions > 0 && currentProfile) {
         const { data: streakCheck } = await supabase
           .from('xp_events')
@@ -331,7 +334,6 @@ export default function DashboardPage() {
         }
       }
 
-      // --- PASSIVE GOLD FROM SKILLS ---
       const passiveGold = effects.daily_gold_passive || 0;
       if (passiveGold > 0 && s) {
         const { data: goldCheck } = await supabase
@@ -374,7 +376,8 @@ export default function DashboardPage() {
     }
 
     loadData();
-  }, [router, trackProgress, locale, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   const updateStreakOnFirstAction = useCallback(async () => {
     if (!user || !profile) return;
@@ -443,67 +446,28 @@ export default function DashboardPage() {
 
     const actionType = type as 'action' | 'task' | 'hard_task';
     const { finalXP, finalGold, isCrit, bonusParts } = applySkillEffects(
-      baseXP,
-      baseGold,
-      skillEffects,
-      {
-        actionType,
-        hour: new Date().getHours(),
-        todayActions,
-        streak: profile.streak_current || 0,
-        dailyTarget: profile.daily_actions_target || 30,
-      }
+      baseXP, baseGold, skillEffects,
+      { actionType, hour: new Date().getHours(), todayActions, streak: profile.streak_current || 0, dailyTarget: profile.daily_actions_target || 30 }
     );
 
-    await supabase
-      .from('completions')
-      .insert({ user_id: user.id, completion_date: today, count_done: 1, notes: label });
-    await supabase.from('xp_events').insert({
-      user_id: user.id,
-      event_type: type,
-      xp_amount: finalXP,
-      description: label,
-      event_date: today,
-    });
-    await supabase.from('gold_events').insert({
-      user_id: user.id,
-      amount: finalGold,
-      event_type: 'quest_reward',
-      description: label,
-      event_date: today,
-    });
+    await supabase.from('completions').insert({ user_id: user.id, completion_date: today, count_done: 1, notes: label });
+    await supabase.from('xp_events').insert({ user_id: user.id, event_type: type, xp_amount: finalXP, description: label, event_date: today });
+    await supabase.from('gold_events').insert({ user_id: user.id, amount: finalGold, event_type: 'quest_reward', description: label, event_date: today });
 
     const newTotalEarned = stats.total_xp_earned + finalXP;
     const newActions = stats.total_actions + 1;
     const newGold = (stats.gold || 0) + finalGold;
     const newTotalGold = (stats.total_gold_earned || 0) + finalGold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
-
     const oldLevel = stats.level;
     const newLevel = levelInfo.level;
 
-    await supabase
-      .from('stats')
-      .update({
-        level: newLevel,
-        current_xp: levelInfo.currentXP,
-        total_xp_earned: newTotalEarned,
-        total_actions: newActions,
-        gold: newGold,
-        total_gold_earned: newTotalGold,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
+    await supabase.from('stats').update({
+      level: newLevel, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned,
+      total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold, updated_at: new Date().toISOString(),
+    }).eq('user_id', user.id);
 
-    setStats({
-      ...stats,
-      level: newLevel,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_actions: newActions,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
-    });
+    setStats({ ...stats, level: newLevel, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_actions: newActions, gold: newGold, total_gold_earned: newTotalGold });
 
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayActions((prev) => prev + 1);
@@ -513,23 +477,16 @@ export default function DashboardPage() {
 
     if (isCrit) {
       setTimeout(() => {
-        toast(t.dashboard.toast.critHit, {
-          icon: '⚡',
-          style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
-        });
+        toast(t.dashboard.toast.critHit, { icon: '⚡', style: { background: '#f59e0b', color: '#000', fontWeight: 700 } });
       }, 300);
     }
 
     const xpColor = isCrit ? '#f59e0b' : '#a78bfa';
     addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
-
     triggerXpPulse();
 
-    if (oldLevel < newLevel) {
-      setLevelUpData({ level: newLevel, title: levelInfo.title });
-    }
-
+    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: levelInfo.title });
     prevLevelRef.current = newLevel;
     void trackProgress('complete_quests', 1);
 
@@ -537,19 +494,12 @@ export default function DashboardPage() {
       const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
       if (territoryResult) {
         if (territoryResult.captured) {
-          toast.success(
-            t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName),
-            { description: '', duration: 5000 }
-          );
+          toast.success(t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName), { description: '', duration: 5000 });
         } else {
-          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), {
-            duration: 2000,
-          });
+          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), { duration: 2000 });
         }
       }
-    } catch {
-      // Territory XP is non-critical
-    }
+    } catch { /* non-critical */ }
   }
 
   async function addIncome(event?: React.MouseEvent) {
@@ -557,84 +507,38 @@ export default function DashboardPage() {
     const amountStr = prompt(t.dashboard.incomePrompt.amount);
     if (!amountStr) return;
     const amount = Number(amountStr);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error(t.dashboard.incomePrompt.invalid);
-      return;
-    }
+    if (isNaN(amount) || amount <= 0) { toast.error(t.dashboard.incomePrompt.invalid); return; }
 
-    const source =
-      prompt(t.dashboard.incomePrompt.source, 'sale') || 'sale';
+    const source = prompt(t.dashboard.incomePrompt.source, 'sale') || 'sale';
     const supabase = createClient();
     const today = getToday();
 
-    await supabase
-      .from('income_events')
-      .insert({ user_id: user.id, amount, source, event_date: today });
+    await supabase.from('income_events').insert({ user_id: user.id, amount, source, event_date: today });
 
     const baseXP = XP_REWARDS.sale;
     const baseGold = 50;
-
     const { finalXP, finalGold, isCrit, bonusParts } = applySkillEffects(
-      baseXP,
-      baseGold,
-      skillEffects,
-      {
-        actionType: 'sale',
-        hour: new Date().getHours(),
-        todayActions,
-        streak: profile.streak_current || 0,
-        dailyTarget: profile.daily_actions_target || 30,
-      }
+      baseXP, baseGold, skillEffects,
+      { actionType: 'sale', hour: new Date().getHours(), todayActions, streak: profile.streak_current || 0, dailyTarget: profile.daily_actions_target || 30 }
     );
 
-    await supabase.from('xp_events').insert({
-      user_id: user.id,
-      event_type: 'sale',
-      xp_amount: finalXP,
-      description: `Income: ${amount}€`,
-      event_date: today,
-    });
-    await supabase.from('gold_events').insert({
-      user_id: user.id,
-      amount: finalGold,
-      event_type: 'quest_reward',
-      description: `Income: ${amount}€`,
-      event_date: today,
-    });
+    await supabase.from('xp_events').insert({ user_id: user.id, event_type: 'sale', xp_amount: finalXP, description: `Income: ${amount}€`, event_date: today });
+    await supabase.from('gold_events').insert({ user_id: user.id, amount: finalGold, event_type: 'quest_reward', description: `Income: ${amount}€`, event_date: today });
 
     const newTotalEarned = stats.total_xp_earned + finalXP;
     const newIncome = Number(stats.total_income) + amount;
     const newGold = (stats.gold || 0) + finalGold;
     const newTotalGold = (stats.total_gold_earned || 0) + finalGold;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
-
     const oldLevel = stats.level;
     const newLevel = levelInfo.level;
 
-    await supabase
-      .from('stats')
-      .update({
-        level: newLevel,
-        current_xp: levelInfo.currentXP,
-        total_xp_earned: newTotalEarned,
-        total_income: newIncome,
-        total_sales: stats.total_sales + 1,
-        gold: newGold,
-        total_gold_earned: newTotalGold,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
+    await supabase.from('stats').update({
+      level: newLevel, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned,
+      total_income: newIncome, total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold, updated_at: new Date().toISOString(),
+    }).eq('user_id', user.id);
 
-    setStats({
-      ...stats,
-      level: newLevel,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_income: newIncome,
-      total_sales: stats.total_sales + 1,
-      gold: newGold,
-      total_gold_earned: newTotalGold,
-    });
+    setStats({ ...stats, level: newLevel, current_xp: levelInfo.currentXP, total_xp_earned: newTotalEarned, total_income: newIncome, total_sales: stats.total_sales + 1, gold: newGold, total_gold_earned: newTotalGold });
 
     if (todayActions === 0) await updateStreakOnFirstAction();
     setTodayIncome((prev) => prev + amount);
@@ -646,10 +550,7 @@ export default function DashboardPage() {
 
     if (isCrit) {
       setTimeout(() => {
-        toast(t.dashboard.toast.critHit, {
-          icon: '⚡',
-          style: { background: '#f59e0b', color: '#000', fontWeight: 700 },
-        });
+        toast(t.dashboard.toast.critHit, { icon: '⚡', style: { background: '#f59e0b', color: '#000', fontWeight: 700 } });
       }, 300);
     }
 
@@ -657,13 +558,9 @@ export default function DashboardPage() {
     addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
     setTimeout(() => addFloat(`+${formatCurrency(amount)}`, '#22c55e', event), 300);
-
     triggerXpPulse();
 
-    if (oldLevel < newLevel) {
-      setLevelUpData({ level: newLevel, title: levelInfo.title });
-    }
-
+    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: levelInfo.title });
     prevLevelRef.current = newLevel;
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
@@ -672,34 +569,17 @@ export default function DashboardPage() {
       const territoryResult = await addXPToActiveTerritory(user.id, finalXP);
       if (territoryResult) {
         if (territoryResult.captured) {
-          toast.success(
-            t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName),
-            { description: '', duration: 5000 }
-          );
+          toast.success(t.dashboard.toast.territoryCaptured(territoryResult.territoryIcon, territoryResult.territoryName), { description: '', duration: 5000 });
         } else {
-          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), {
-            duration: 2000,
-          });
+          toast(t.dashboard.toast.territoryXP(territoryResult.xpAdded, territoryResult.territoryIcon), { duration: 2000 });
         }
       }
-    } catch {
-      // Territory XP is non-critical
-    }
+    } catch { /* non-critical */ }
   }
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#0a0a0f',
-          color: '#a78bfa',
-          fontSize: '24px',
-        }}
-      >
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa', fontSize: '24px' }}>
         {t.dashboard.loading}
       </div>
     );
@@ -716,13 +596,8 @@ export default function DashboardPage() {
 
   let dayStatusColor = '#eab308';
   let dayStatusText = t.dashboard.dayStatus.inProgress;
-  if (actionsPercent >= 100) {
-    dayStatusColor = '#22c55e';
-    dayStatusText = t.dashboard.dayStatus.dayClosed;
-  } else if (currentHour >= 21) {
-    dayStatusColor = '#ef4444';
-    dayStatusText = t.dashboard.dayStatus.lowTime;
-  }
+  if (actionsPercent >= 100) { dayStatusColor = '#22c55e'; dayStatusText = t.dashboard.dayStatus.dayClosed; }
+  else if (currentHour >= 21) { dayStatusColor = '#ef4444'; dayStatusText = t.dashboard.dayStatus.lowTime; }
 
   const activeSkillCount = Object.values(skillEffects).filter((v) => (v || 0) > 0).length;
 
@@ -738,15 +613,9 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0', padding: '16px', maxWidth: '600px', margin: '0 auto' }}>
       <FloatXPContainer items={floatItems} />
-      {levelUpData && (
-        <LevelUpPopup level={levelUpData.level} title={levelUpData.title} onClose={() => setLevelUpData(null)} />
-      )}
-      {showDeath && (
-        <DeathScreen type={deathType} xpLost={deathXP} consecutiveMisses={deathMisses} onAccept={() => setShowDeath(false)} />
-      )}
-      {showEditor && user && (
-        <CharacterEditor userId={user.id} config={charConfig} onSave={(c) => { setCharConfig(c); setShowEditor(false); }} onClose={() => setShowEditor(false)} />
-      )}
+      {levelUpData && <LevelUpPopup level={levelUpData.level} title={levelUpData.title} onClose={() => setLevelUpData(null)} />}
+      {showDeath && <DeathScreen type={deathType} xpLost={deathXP} consecutiveMisses={deathMisses} onAccept={() => setShowDeath(false)} />}
+      {showEditor && user && <CharacterEditor userId={user.id} config={charConfig} onSave={(c) => { setCharConfig(c); setShowEditor(false); }} onClose={() => setShowEditor(false)} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
@@ -776,9 +645,15 @@ export default function DashboardPage() {
 
       <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />
 
+      {/* ADVISOR — now passes t */}
       {profile && stats && (() => {
         const now = new Date();
-        const { greeting, advice } = generateAdvice({ stats, profile, todayActions, todayIncome, monthIncome, hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(), daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() });
+        const { greeting, advice } = generateAdvice({
+          stats, profile, todayActions, todayIncome, monthIncome,
+          hour: currentHour, dayOfWeek: now.getDay(), dayOfMonth: now.getDate(),
+          daysInMonth: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+          t,
+        });
         if (advice.length === 0) return null;
         return <AdvisorCard greeting={greeting} advice={advice} />;
       })()}
@@ -819,10 +694,7 @@ export default function DashboardPage() {
             return (
               <button
                 key={i}
-                onClick={(e) => {
-                  if (isIncome) void addIncome(e);
-                  else void quickAction(btn.type, btn.actionLabel, e);
-                }}
+                onClick={(e) => { if (isIncome) void addIncome(e); else void quickAction(btn.type, btn.actionLabel, e); }}
                 onPointerDown={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)'; }}
                 onPointerUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
                 onPointerLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}

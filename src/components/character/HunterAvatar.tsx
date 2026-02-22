@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/i18n';
+import type { TranslationDictionary } from '@/lib/i18n';
 import type { CharacterConfig, LevelImages } from '@/types/database';
 
 interface HunterAvatarProps {
@@ -9,7 +11,6 @@ interface HunterAvatarProps {
   onEdit?: () => void;
 }
 
-// Дефолтные картинки (placeholder — замени на свои)
 const DEFAULT_IMAGES: Record<string, string> = {
   novice: '',
   hunter: '',
@@ -19,13 +20,15 @@ const DEFAULT_IMAGES: Record<string, string> = {
   monarch: '',
 };
 
-function getLevelTier(level: number): { key: keyof LevelImages; name: string; rank: string } {
-  if (level >= 40) return { key: 'monarch', name: 'Теневой Монарх', rank: 'SS' };
-  if (level >= 30) return { key: 'srank', name: 'S-ранг Охотник', rank: 'S' };
-  if (level >= 20) return { key: 'knight', name: 'Рыцарь', rank: 'A' };
-  if (level >= 12) return { key: 'warrior', name: 'Воин', rank: 'B' };
-  if (level >= 5) return { key: 'hunter', name: 'Охотник', rank: 'C' };
-  return { key: 'novice', name: 'Новичок', rank: 'E' };
+type TierKey = keyof LevelImages;
+
+function getLevelTier(level: number, t: TranslationDictionary): { key: TierKey; name: string; rank: string } {
+  if (level >= 40) return { key: 'monarch', name: t.character.tiers.monarch, rank: 'SS' };
+  if (level >= 30) return { key: 'srank', name: t.character.tiers.srank, rank: 'S' };
+  if (level >= 20) return { key: 'knight', name: t.character.tiers.knight, rank: 'A' };
+  if (level >= 12) return { key: 'warrior', name: t.character.tiers.warrior, rank: 'B' };
+  if (level >= 5) return { key: 'hunter', name: t.character.tiers.hunter, rank: 'C' };
+  return { key: 'novice', name: t.character.tiers.novice, rank: 'E' };
 }
 
 function getAuraStyle(level: number) {
@@ -55,32 +58,34 @@ function getAuraStyle(level: number) {
   };
 }
 
-function getEquipment(level: number) {
+function getEquipment(level: number, t: TranslationDictionary) {
+  const eq = t.character.equipment;
   const items: { name: string; icon: string }[] = [];
-  if (level >= 40) items.push({ name: 'Клинок Монарха', icon: '⚡' });
-  else if (level >= 30) items.push({ name: 'Теневой Меч', icon: '🗡️' });
-  else if (level >= 20) items.push({ name: 'Королевский Клинок', icon: '⚔️' });
-  else if (level >= 12) items.push({ name: 'Огненный Меч', icon: '🔥' });
-  else if (level >= 5) items.push({ name: 'Стальной Меч', icon: '🗡️' });
-  else if (level >= 3) items.push({ name: 'Кинжал', icon: '🔪' });
 
-  if (level >= 25) items.push({ name: 'Доспех Архитектора', icon: '🛡️' });
-  else if (level >= 16) items.push({ name: 'Латы', icon: '🦺' });
-  else if (level >= 8) items.push({ name: 'Кольчуга', icon: '🧥' });
+  if (level >= 40) items.push({ name: eq.monarch_blade, icon: '⚡' });
+  else if (level >= 30) items.push({ name: eq.shadow_sword, icon: '🗡️' });
+  else if (level >= 20) items.push({ name: eq.royal_blade, icon: '⚔️' });
+  else if (level >= 12) items.push({ name: eq.fire_sword, icon: '🔥' });
+  else if (level >= 5) items.push({ name: eq.steel_sword, icon: '🗡️' });
+  else if (level >= 3) items.push({ name: eq.dagger, icon: '🔪' });
 
-  if (level >= 30) items.push({ name: 'Корона Теней', icon: '👑' });
-  if (level >= 20) items.push({ name: 'Амулет Силы', icon: '📿' });
-  if (level >= 40) items.push({ name: 'Печать Магната', icon: '💎' });
+  if (level >= 25) items.push({ name: eq.architect_armor, icon: '🛡️' });
+  else if (level >= 16) items.push({ name: eq.plate_armor, icon: '🦺' });
+  else if (level >= 8) items.push({ name: eq.chainmail, icon: '🧥' });
+
+  if (level >= 30) items.push({ name: eq.shadow_crown, icon: '👑' });
+  if (level >= 20) items.push({ name: eq.power_amulet, icon: '📿' });
+  if (level >= 40) items.push({ name: eq.magnate_seal, icon: '💎' });
 
   return items;
 }
 
 export default function HunterAvatar({ level, title, config, onEdit }: HunterAvatarProps) {
-  const tier = getLevelTier(level);
+  const { t } = useT();
+  const tier = getLevelTier(level, t);
   const aura = getAuraStyle(level);
-  const equipment = getEquipment(level);
+  const equipment = getEquipment(level, t);
 
-  // Определяем какую картинку показать
   const levelImages = config?.level_images || {};
   const customImage = config?.use_custom_image && config?.custom_image_url;
   const tierImage = levelImages[tier.key] || DEFAULT_IMAGES[tier.key];
@@ -96,7 +101,6 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* Кнопка редактирования */}
       {onEdit && (
         <button onClick={onEdit} style={{
           position: 'absolute', top: '12px', right: '12px', zIndex: 5,
@@ -107,17 +111,15 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
         </button>
       )}
 
-      {/* Ранг */}
       <div style={{
         position: 'absolute', top: '12px', left: '12px', zIndex: 5,
         padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 800,
         backgroundColor: aura.color + '20', color: aura.color,
         border: `1px solid ${aura.color}40`,
       }}>
-        {tier.rank}-ранг
+        {tier.rank}-{t.character.rank}
       </div>
 
-      {/* Частицы */}
       {aura.particles.length > 0 && (
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -139,7 +141,6 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
         </div>
       )}
 
-      {/* Аура фон */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -149,7 +150,6 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
       }} />
 
       <div style={{ textAlign: 'center', position: 'relative', zIndex: 3 }}>
-        {/* Картинка персонажа */}
         {imageToShow ? (
           <div style={{
             width: '180px', height: '220px', margin: '0 auto 12px',
@@ -159,12 +159,11 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
           }}>
             <img
               src={imageToShow}
-              alt="Персонаж"
+              alt={tier.name}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>
         ) : (
-          /* Placeholder если нет картинки */
           <div style={{
             width: '180px', height: '220px', margin: '0 auto 12px',
             borderRadius: '16px', overflow: 'hidden',
@@ -178,12 +177,11 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
                level >= 12 ? '🔥' : level >= 5 ? '🏹' : level >= 3 ? '🗡️' : '💀'}
             </div>
             <div style={{ fontSize: '11px', color: '#475569' }}>
-              Нажми ✏️ чтобы добавить аватар
+              {t.character.clickToAdd}
             </div>
           </div>
         )}
 
-        {/* Титул */}
         <div style={{
           fontSize: '12px', color: aura.color,
           textTransform: 'uppercase', letterSpacing: '2px',
@@ -193,7 +191,6 @@ export default function HunterAvatar({ level, title, config, onEdit }: HunterAva
           {title}
         </div>
 
-        {/* Экипировка */}
         {equipment.length > 0 && (
           <div style={{
             display: 'flex', justifyContent: 'center',

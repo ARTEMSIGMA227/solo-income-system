@@ -1,7 +1,8 @@
 'use client';
 
+import { useT } from '@/lib/i18n';
 import type { SkillNode } from '@/lib/skill-tree';
-import { SKILL_BRANCHES, canAllocate } from '@/lib/skill-tree';
+import { SKILL_BRANCHES, canAllocate, getSkillName, getSkillDescription, getEffectDescription } from '@/lib/skill-tree';
 
 interface SkillNodeCardProps {
   node: SkillNode;
@@ -18,10 +19,14 @@ export default function SkillNodeCard({
   availablePoints,
   onAllocate,
 }: SkillNodeCardProps) {
+  const { t } = useT();
   const branch = SKILL_BRANCHES[node.branch];
   const isMaxed = currentLevel >= node.maxLevel;
   const isUnlocked = currentLevel > 0;
-  const check = canAllocate(node.id, allocated, availablePoints);
+  const check = canAllocate(node.id, allocated, availablePoints, t);
+
+  const skillName = getSkillName(node.id, t);
+  const skillDesc = getSkillDescription(node.id, t);
 
   let borderColor = '#1e1e2e';
   let bgColor = '#12121a';
@@ -78,7 +83,7 @@ export default function SkillNodeCard({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '20px' }}>{node.icon}</span>
             <span style={{ fontSize: '13px', fontWeight: 700, color: isUnlocked ? branch.color : '#94a3b8' }}>
-              {node.name}
+              {skillName}
             </span>
           </div>
           <div style={{ display: 'flex', gap: '3px' }}>
@@ -100,18 +105,29 @@ export default function SkillNodeCard({
         </div>
 
         <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '6px', lineHeight: 1.4 }}>
-          {node.description}
+          {skillDesc}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {node.effects.map((effect, i) => {
             const currentVal = currentLevel > 0 ? effect.value + effect.perLevel * (currentLevel - 1) : 0;
             const nextVal = currentLevel < node.maxLevel ? effect.value + effect.perLevel * currentLevel : currentVal;
+            const displayVal = currentLevel > 0 ? currentVal : nextVal;
+
+            const currentDesc = getEffectDescription(effect.descriptionKey, displayVal, t);
+
+            if (currentLevel > 0 && currentLevel < node.maxLevel) {
+              const nextDesc = getEffectDescription(effect.descriptionKey, nextVal, t);
+              return (
+                <div key={i} style={{ fontSize: '10px', color: isUnlocked ? branch.color : '#4a4a5a' }}>
+                  {currentDesc} → {nextVal}
+                </div>
+              );
+            }
+
             return (
               <div key={i} style={{ fontSize: '10px', color: isUnlocked ? branch.color : '#4a4a5a' }}>
-                {currentLevel > 0 && currentLevel < node.maxLevel
-                  ? `${effect.description.replace('{value}', String(currentVal))} → ${nextVal}`
-                  : effect.description.replace('{value}', String(currentLevel > 0 ? currentVal : nextVal))}
+                {currentDesc}
               </div>
             );
           })}
@@ -119,7 +135,7 @@ export default function SkillNodeCard({
 
         {!check.can && !isMaxed && check.reason && (
           <div style={{ fontSize: '9px', color: '#ef444480', marginTop: '4px' }}>
-            🔒 {check.reason}
+            {t.skillNodeCard.locked} {check.reason}
           </div>
         )}
 

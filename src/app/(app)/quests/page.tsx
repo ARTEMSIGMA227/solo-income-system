@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 import type { Quest, Completion, Stats } from '@/types/database';
 
 export default function QuestsPage() {
@@ -15,7 +16,6 @@ export default function QuestsPage() {
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Форма
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [formCategory, setFormCategory] = useState('other');
@@ -24,6 +24,7 @@ export default function QuestsPage() {
   const [formTarget, setFormTarget] = useState(1);
 
   const supabase = createClient();
+  const { t } = useT();
 
   function getToday() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -31,7 +32,9 @@ export default function QuestsPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
 
@@ -62,11 +65,12 @@ export default function QuestsPage() {
       setLoading(false);
     }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function getQuestProgress(quest: Quest): number {
     return completions
-      .filter(c => c.quest_id === quest.id)
+      .filter((c) => c.quest_id === quest.id)
       .reduce((sum, c) => sum + c.count_done, 0);
   }
 
@@ -76,7 +80,7 @@ export default function QuestsPage() {
     const current = getQuestProgress(quest);
 
     if (current >= quest.target_count) {
-      toast('Уже выполнено!');
+      toast(t.quests.alreadyDone);
       return;
     }
 
@@ -93,7 +97,7 @@ export default function QuestsPage() {
       .single();
 
     if (newCompletion) {
-      setCompletions(prev => [...prev, newCompletion]);
+      setCompletions((prev) => [...prev, newCompletion]);
     }
 
     const xp = quest.xp_reward;
@@ -109,13 +113,16 @@ export default function QuestsPage() {
     const newActions = stats.total_actions + 1;
     const levelInfo = getLevelInfo(newTotalEarned, stats.total_xp_lost);
 
-    await supabase.from('stats').update({
-      level: levelInfo.level,
-      current_xp: levelInfo.currentXP,
-      total_xp_earned: newTotalEarned,
-      total_actions: newActions,
-      updated_at: new Date().toISOString(),
-    }).eq('user_id', userId);
+    await supabase
+      .from('stats')
+      .update({
+        level: levelInfo.level,
+        current_xp: levelInfo.currentXP,
+        total_xp_earned: newTotalEarned,
+        total_actions: newActions,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
 
     setStats({
       ...stats,
@@ -152,12 +159,11 @@ export default function QuestsPage() {
 
   async function handleSaveQuest() {
     if (!userId || !formTitle.trim()) {
-      toast.error('Введи название квеста');
+      toast.error(t.quests.enterName);
       return;
     }
 
     if (editingQuest) {
-      // Редактирование
       const { data: updated } = await supabase
         .from('quests')
         .update({
@@ -173,11 +179,10 @@ export default function QuestsPage() {
         .single();
 
       if (updated) {
-        setQuests(prev => prev.map(q => q.id === editingQuest.id ? updated : q));
-        toast.success('Квест обновлён! ✏️');
+        setQuests((prev) => prev.map((q) => (q.id === editingQuest.id ? updated : q)));
+        toast.success(t.quests.questUpdated);
       }
     } else {
-      // Создание
       const { data: newQuest } = await supabase
         .from('quests')
         .insert({
@@ -194,8 +199,8 @@ export default function QuestsPage() {
         .single();
 
       if (newQuest) {
-        setQuests(prev => [...prev, newQuest]);
-        toast.success('Квест создан! ⚔️');
+        setQuests((prev) => [...prev, newQuest]);
+        toast.success(t.quests.questCreated);
       }
     }
 
@@ -204,54 +209,46 @@ export default function QuestsPage() {
   }
 
   async function deleteQuest(quest: Quest) {
-    const confirmed = confirm(`Удалить квест "${quest.title}"?`);
+    const confirmed = confirm(t.quests.deleteConfirm(quest.title));
     if (!confirmed) return;
 
     await supabase.from('quests').update({ is_active: false }).eq('id', quest.id);
-    setQuests(prev => prev.filter(q => q.id !== quest.id));
-    toast.success('Квест удалён');
+    setQuests((prev) => prev.filter((q) => q.id !== quest.id));
+    toast.success(t.quests.questDeleted);
   }
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', backgroundColor: '#0a0a0f', color: '#a78bfa',
-      }}>
-        ⏳ Загрузка квестов...
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#0a0a0f',
+          color: '#a78bfa',
+        }}
+      >
+        {t.quests.loading}
       </div>
     );
   }
 
-  const mandatory = quests.filter(q => q.quest_type === 'daily_mandatory');
-  const optional = quests.filter(q => q.quest_type !== 'daily_mandatory');
+  const mandatory = quests.filter((q) => q.quest_type === 'daily_mandatory');
+  const optional = quests.filter((q) => q.quest_type !== 'daily_mandatory');
 
   function getCategoryIcon(cat: string) {
     switch (cat) {
-      case 'income_action': return '📞';
-      case 'strategy': return '🧠';
-      case 'skill': return '📚';
-      case 'fitness': return '💪';
-      default: return '📌';
-    }
-  }
-
-  function getCategoryLabel(cat: string) {
-    switch (cat) {
-      case 'income_action': return 'Доход';
-      case 'strategy': return 'Стратегия';
-      case 'skill': return 'Навык';
-      case 'fitness': return 'Физика';
-      default: return 'Другое';
-    }
-  }
-
-  function getTypeLabel(type: string) {
-    switch (type) {
-      case 'daily_mandatory': return '🔴 Обязательный';
-      case 'daily_optional': return '🟡 Дополнительный';
-      case 'weekly': return '🔵 Недельный';
-      default: return '⚪ Свой';
+      case 'income_action':
+        return '📞';
+      case 'strategy':
+        return '🧠';
+      case 'skill':
+        return '📚';
+      case 'fitness':
+        return '💪';
+      default:
+        return '📌';
     }
   }
 
@@ -261,51 +258,79 @@ export default function QuestsPage() {
     const percent = Math.min(Math.round((progress / quest.target_count) * 100), 100);
 
     return (
-      <div key={quest.id} style={{
-        backgroundColor: isDone ? '#12201a' : '#12121a',
-        border: `1px solid ${isDone ? '#22c55e30' : '#1e1e2e'}`,
-        borderRadius: '12px',
-        padding: '14px',
-        marginBottom: '8px',
-      }}>
+      <div
+        key={quest.id}
+        style={{
+          backgroundColor: isDone ? '#12201a' : '#12121a',
+          border: `1px solid ${isDone ? '#22c55e30' : '#1e1e2e'}`,
+          borderRadius: '12px',
+          padding: '14px',
+          marginBottom: '8px',
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span>{getCategoryIcon(quest.category)}</span>
-              <span style={{
-                fontSize: '14px', fontWeight: 600,
-                textDecoration: isDone ? 'line-through' : 'none',
-                color: isDone ? '#22c55e' : '#e2e8f0',
-              }}>
+              <span
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  textDecoration: isDone ? 'line-through' : 'none',
+                  color: isDone ? '#22c55e' : '#e2e8f0',
+                }}
+              >
                 {quest.title}
               </span>
             </div>
 
             {quest.description && (
-              <div style={{ fontSize: '12px', color: '#475569', marginBottom: '6px', paddingLeft: '28px' }}>
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: '#475569',
+                  marginBottom: '6px',
+                  paddingLeft: '28px',
+                }}
+              >
                 {quest.description}
               </div>
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                flex: 1, height: '6px', backgroundColor: '#16161f',
-                borderRadius: '3px', overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${percent}%`, height: '100%', borderRadius: '3px',
-                  backgroundColor: isDone ? '#22c55e' : '#7c3aed',
-                  transition: 'width 0.3s',
-                }} />
+              <div
+                style={{
+                  flex: 1,
+                  height: '6px',
+                  backgroundColor: '#16161f',
+                  borderRadius: '3px',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${percent}%`,
+                    height: '100%',
+                    borderRadius: '3px',
+                    backgroundColor: isDone ? '#22c55e' : '#7c3aed',
+                    transition: 'width 0.3s',
+                  }}
+                />
               </div>
-              <span style={{ fontSize: '12px', color: '#94a3b8', minWidth: '50px', textAlign: 'right' }}>
+              <span
+                style={{
+                  fontSize: '12px',
+                  color: '#94a3b8',
+                  minWidth: '50px',
+                  textAlign: 'right',
+                }}
+              >
                 {progress}/{quest.target_count}
               </span>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '6px', marginLeft: '12px', flexShrink: 0 }}>
-            {/* Кнопка выполнить */}
             <button
               onClick={() => doQuest(quest)}
               disabled={isDone}
@@ -313,33 +338,41 @@ export default function QuestsPage() {
                 padding: '8px 12px',
                 backgroundColor: isDone ? '#16161f' : '#7c3aed',
                 color: isDone ? '#475569' : '#fff',
-                border: 'none', borderRadius: '8px',
+                border: 'none',
+                borderRadius: '8px',
                 cursor: isDone ? 'not-allowed' : 'pointer',
-                fontSize: '12px', fontWeight: 600,
+                fontSize: '12px',
+                fontWeight: 600,
               }}
             >
               {isDone ? '✓' : `+${quest.xp_reward}`}
             </button>
 
-            {/* Кнопка редактировать */}
             <button
               onClick={() => openEditForm(quest)}
               style={{
-                padding: '8px', backgroundColor: '#16161f',
-                border: '1px solid #1e1e2e', borderRadius: '8px',
-                color: '#94a3b8', cursor: 'pointer', fontSize: '12px',
+                padding: '8px',
+                backgroundColor: '#16161f',
+                border: '1px solid #1e1e2e',
+                borderRadius: '8px',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                fontSize: '12px',
               }}
             >
               ✏️
             </button>
 
-            {/* Кнопка удалить */}
             <button
               onClick={() => deleteQuest(quest)}
               style={{
-                padding: '8px', backgroundColor: '#16161f',
-                border: '1px solid #ef444420', borderRadius: '8px',
-                color: '#ef4444', cursor: 'pointer', fontSize: '12px',
+                padding: '8px',
+                backgroundColor: '#16161f',
+                border: '1px solid #ef444420',
+                borderRadius: '8px',
+                color: '#ef4444',
+                cursor: 'pointer',
+                fontSize: '12px',
               }}
             >
               🗑️
@@ -350,182 +383,303 @@ export default function QuestsPage() {
     );
   }
 
+  const questTypeOptions = [
+    { value: 'daily_mandatory', label: t.quests.types.daily_mandatory || '🔴 Mandatory' },
+    { value: 'daily_optional', label: t.quests.types.daily_optional || '🟡 Optional' },
+    { value: 'weekly', label: t.quests.types.weekly || '🔵 Weekly' },
+    { value: 'custom', label: t.quests.types.custom || '⚪ Custom' },
+  ];
+
+  const categoryOptions = [
+    { value: 'income_action', label: t.quests.categories.income_action || '📞 Income' },
+    { value: 'strategy', label: t.quests.categories.strategy || '🧠 Strategy' },
+    { value: 'skill', label: t.quests.categories.skill || '📚 Skill' },
+    { value: 'fitness', label: t.quests.categories.fitness || '💪 Fitness' },
+    { value: 'other', label: t.quests.categories.other || '📌 Other' },
+  ];
+
   return (
-    <div style={{
-      minHeight: '100vh', backgroundColor: '#0a0a0f', color: '#e2e8f0',
-      padding: '16px', maxWidth: '600px', margin: '0 auto',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>📋 Квесты дня</h1>
-        <button onClick={openAddForm} style={{
-          padding: '8px 16px', backgroundColor: '#7c3aed',
-          color: '#fff', border: 'none', borderRadius: '8px',
-          cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-        }}>
-          + Новый
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#0a0a0f',
+        color: '#e2e8f0',
+        padding: '16px',
+        maxWidth: '600px',
+        margin: '0 auto',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '16px',
+        }}
+      >
+        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>📋 {t.quests.title}</h1>
+        <button
+          onClick={openAddForm}
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#7c3aed',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          {t.quests.newQuest}
         </button>
       </div>
 
-      {/* Обязательные */}
       {mandatory.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
-          <div style={{
-            fontSize: '13px', fontWeight: 600, color: '#ef4444',
-            textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px',
-          }}>
-            🔴 Обязательные
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#ef4444',
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+              marginBottom: '8px',
+            }}
+          >
+            {t.quests.mandatory}
           </div>
           {mandatory.map(renderQuest)}
         </div>
       )}
 
-      {/* Дополнительные */}
       {optional.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
-          <div style={{
-            fontSize: '13px', fontWeight: 600, color: '#94a3b8',
-            textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px',
-          }}>
-            Дополнительные
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#94a3b8',
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+              marginBottom: '8px',
+            }}
+          >
+            {t.quests.optional}
           </div>
           {optional.map(renderQuest)}
         </div>
       )}
 
       {quests.length === 0 && (
-        <div style={{
-          backgroundColor: '#12121a', border: '1px solid #1e1e2e',
-          borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#475569',
-        }}>
-          Нет квестов. Нажми "+ Новый" чтобы создать.
+        <div
+          style={{
+            backgroundColor: '#12121a',
+            border: '1px solid #1e1e2e',
+            borderRadius: '12px',
+            padding: '40px',
+            textAlign: 'center',
+            color: '#475569',
+          }}
+        >
+          {t.quests.emptyState}
         </div>
       )}
 
-      {/* Модалка добавления/редактирования */}
       {showAddForm && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '16px',
-        }}>
-          <div style={{
-            backgroundColor: '#0a0a0f', borderRadius: '20px', border: '1px solid #1e1e2e',
-            padding: '24px', width: '100%', maxWidth: '450px', maxHeight: '85vh',
-            overflowY: 'auto',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#0a0a0f',
+              borderRadius: '20px',
+              border: '1px solid #1e1e2e',
+              padding: '24px',
+              width: '100%',
+              maxWidth: '450px',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px',
+              }}
+            >
               <h2 style={{ fontSize: '20px', fontWeight: 700 }}>
-                {editingQuest ? '✏️ Редактировать' : '➕ Новый квест'}
+                {editingQuest ? t.quests.editTitle : t.quests.addTitle}
               </h2>
-              <button onClick={() => { setShowAddForm(false); setEditingQuest(null); }} style={{
-                width: '32px', height: '32px', backgroundColor: '#16161f',
-                border: '1px solid #1e1e2e', borderRadius: '8px',
-                color: '#94a3b8', cursor: 'pointer', fontSize: '16px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>✕</button>
+              <button
+                onClick={() => {
+                  setShowAddForm(false);
+                  setEditingQuest(null);
+                }}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: '#16161f',
+                  border: '1px solid #1e1e2e',
+                  borderRadius: '8px',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                ✕
+              </button>
             </div>
 
-            {/* Название */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                Название
+              <label
+                style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}
+              >
+                {t.quests.form.name}
               </label>
               <input
                 type="text"
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="Например: 50 холодных звонков"
+                placeholder={t.quests.form.namePlaceholder}
                 style={{
-                  width: '100%', padding: '12px', backgroundColor: '#16161f',
-                  border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
-                  fontSize: '14px', outline: 'none', boxSizing: 'border-box',
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#16161f',
+                  border: '1px solid #1e1e2e',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
-            {/* Описание */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                Описание (необязательно)
+              <label
+                style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}
+              >
+                {t.quests.form.description}
               </label>
               <input
                 type="text"
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="Детали квеста..."
+                placeholder={t.quests.form.descriptionPlaceholder}
                 style={{
-                  width: '100%', padding: '12px', backgroundColor: '#16161f',
-                  border: '1px solid #1e1e2e', borderRadius: '8px', color: '#e2e8f0',
-                  fontSize: '14px', outline: 'none', boxSizing: 'border-box',
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#16161f',
+                  border: '1px solid #1e1e2e',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
-            {/* Тип */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                Тип квеста
+              <label
+                style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}
+              >
+                {t.quests.form.questType}
               </label>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[
-                  { value: 'daily_mandatory', label: '🔴 Обязат.' },
-                  { value: 'daily_optional', label: '🟡 Доп.' },
-                  { value: 'weekly', label: '🔵 Недельный' },
-                  { value: 'custom', label: '⚪ Свой' },
-                ].map(t => (
-                  <button key={t.value} onClick={() => setFormType(t.value)} style={{
-                    padding: '8px 12px', borderRadius: '8px',
-                    backgroundColor: formType === t.value ? '#7c3aed20' : '#16161f',
-                    border: `1px solid ${formType === t.value ? '#7c3aed' : '#1e1e2e'}`,
-                    color: '#e2e8f0', cursor: 'pointer', fontSize: '12px',
-                  }}>
-                    {t.label}
+                {questTypeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFormType(opt.value)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: formType === opt.value ? '#7c3aed20' : '#16161f',
+                      border: `1px solid ${formType === opt.value ? '#7c3aed' : '#1e1e2e'}`,
+                      color: '#e2e8f0',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {opt.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Категория */}
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                Категория
+              <label
+                style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}
+              >
+                {t.quests.form.category}
               </label>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[
-                  { value: 'income_action', label: '📞 Доход' },
-                  { value: 'strategy', label: '🧠 Стратегия' },
-                  { value: 'skill', label: '📚 Навык' },
-                  { value: 'fitness', label: '💪 Физика' },
-                  { value: 'other', label: '📌 Другое' },
-                ].map(c => (
-                  <button key={c.value} onClick={() => setFormCategory(c.value)} style={{
-                    padding: '8px 12px', borderRadius: '8px',
-                    backgroundColor: formCategory === c.value ? '#7c3aed20' : '#16161f',
-                    border: `1px solid ${formCategory === c.value ? '#7c3aed' : '#1e1e2e'}`,
-                    color: '#e2e8f0', cursor: 'pointer', fontSize: '12px',
-                  }}>
-                    {c.label}
+                {categoryOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFormCategory(opt.value)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: formCategory === opt.value ? '#7c3aed20' : '#16161f',
+                      border: `1px solid ${formCategory === opt.value ? '#7c3aed' : '#1e1e2e'}`,
+                      color: '#e2e8f0',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                    }}
+                  >
+                    {opt.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* XP и Target */}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                  XP за выполнение
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    color: '#94a3b8',
+                    marginBottom: '6px',
+                  }}
+                >
+                  {t.quests.form.xpReward}
                 </label>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {[5, 10, 25, 50, 100].map(xp => (
-                    <button key={xp} onClick={() => setFormXP(xp)} style={{
-                      padding: '8px 12px', borderRadius: '8px',
-                      backgroundColor: formXP === xp ? '#7c3aed' : '#16161f',
-                      border: `1px solid ${formXP === xp ? '#7c3aed' : '#1e1e2e'}`,
-                      color: formXP === xp ? '#fff' : '#e2e8f0',
-                      cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-                    }}>
+                  {[5, 10, 25, 50, 100].map((xp) => (
+                    <button
+                      key={xp}
+                      onClick={() => setFormXP(xp)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: formXP === xp ? '#7c3aed' : '#16161f',
+                        border: `1px solid ${formXP === xp ? '#7c3aed' : '#1e1e2e'}`,
+                        color: formXP === xp ? '#fff' : '#e2e8f0',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
                       {xp}
                     </button>
                   ))}
@@ -534,33 +688,74 @@ export default function QuestsPage() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}>
-                Сколько раз нужно выполнить
+              <label
+                style={{ display: 'block', fontSize: '13px', color: '#94a3b8', marginBottom: '6px' }}
+              >
+                {t.quests.form.targetCount}
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <button onClick={() => setFormTarget(Math.max(1, formTarget - 1))} style={{
-                  width: '40px', height: '40px', backgroundColor: '#16161f',
-                  border: '1px solid #1e1e2e', borderRadius: '8px',
-                  color: '#e2e8f0', cursor: 'pointer', fontSize: '20px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>-</button>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: '#a78bfa', minWidth: '40px', textAlign: 'center' }}>
+                <button
+                  onClick={() => setFormTarget(Math.max(1, formTarget - 1))}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    backgroundColor: '#16161f',
+                    border: '1px solid #1e1e2e',
+                    borderRadius: '8px',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  -
+                </button>
+                <span
+                  style={{
+                    fontSize: '24px',
+                    fontWeight: 700,
+                    color: '#a78bfa',
+                    minWidth: '40px',
+                    textAlign: 'center',
+                  }}
+                >
                   {formTarget}
                 </span>
-                <button onClick={() => setFormTarget(formTarget + 1)} style={{
-                  width: '40px', height: '40px', backgroundColor: '#16161f',
-                  border: '1px solid #1e1e2e', borderRadius: '8px',
-                  color: '#e2e8f0', cursor: 'pointer', fontSize: '20px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>+</button>
+                <button
+                  onClick={() => setFormTarget(formTarget + 1)}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    backgroundColor: '#16161f',
+                    border: '1px solid #1e1e2e',
+                    borderRadius: '8px',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  +
+                </button>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  {[1, 5, 10, 30, 50].map(n => (
-                    <button key={n} onClick={() => setFormTarget(n)} style={{
-                      padding: '6px 10px', borderRadius: '6px',
-                      backgroundColor: formTarget === n ? '#7c3aed20' : '#16161f',
-                      border: `1px solid ${formTarget === n ? '#7c3aed' : '#1e1e2e'}`,
-                      color: '#94a3b8', cursor: 'pointer', fontSize: '11px',
-                    }}>
+                  {[1, 5, 10, 30, 50].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setFormTarget(n)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: formTarget === n ? '#7c3aed20' : '#16161f',
+                        border: `1px solid ${formTarget === n ? '#7c3aed' : '#1e1e2e'}`,
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                      }}
+                    >
                       {n}
                     </button>
                   ))}
@@ -568,28 +763,42 @@ export default function QuestsPage() {
               </div>
             </div>
 
-            {/* Итого */}
-            <div style={{
-              padding: '12px', backgroundColor: '#16161f', borderRadius: '8px',
-              marginBottom: '20px', textAlign: 'center',
-            }}>
-              <span style={{ color: '#94a3b8', fontSize: '13px' }}>Итого за квест: </span>
+            <div
+              style={{
+                padding: '12px',
+                backgroundColor: '#16161f',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                textAlign: 'center',
+              }}
+            >
+              <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                {t.quests.form.totalForQuest}{' '}
+              </span>
               <span style={{ color: '#a78bfa', fontSize: '16px', fontWeight: 700 }}>
                 {formXP * formTarget} XP
               </span>
               <span style={{ color: '#475569', fontSize: '12px' }}>
-                {' '}({formTarget} × {formXP})
+                {' '}
+                ({formTarget} × {formXP})
               </span>
             </div>
 
-            {/* Кнопка сохранить */}
-            <button onClick={handleSaveQuest} style={{
-              width: '100%', padding: '14px',
-              backgroundColor: '#7c3aed', color: '#fff',
-              border: 'none', borderRadius: '10px',
-              fontSize: '16px', fontWeight: 600, cursor: 'pointer',
-            }}>
-              {editingQuest ? '✅ Сохранить изменения' : '⚔️ Создать квест'}
+            <button
+              onClick={handleSaveQuest}
+              style={{
+                width: '100%',
+                padding: '14px',
+                backgroundColor: '#7c3aed',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {editingQuest ? t.quests.saveChanges : t.quests.createQuest}
             </button>
           </div>
         </div>

@@ -1,7 +1,9 @@
+import type { TranslationDictionary } from './i18n/types';
+
 export interface AchievementDef {
   key: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   icon: string;
   category: 'actions' | 'income' | 'streak' | 'level' | 'special';
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
@@ -34,155 +36,163 @@ function getRarityColor(rarity: string): string {
   }
 }
 
-function getRarityLabel(rarity: string): string {
+function getRarityLabel(rarity: string, t: TranslationDictionary): string {
   switch (rarity) {
-    case 'common': return 'Обычная';
-    case 'rare': return 'Редкая';
-    case 'epic': return 'Эпическая';
-    case 'legendary': return 'Легендарная';
+    case 'common': return t.achievementsLib.rarityLabels.common;
+    case 'rare': return t.achievementsLib.rarityLabels.rare;
+    case 'epic': return t.achievementsLib.rarityLabels.epic;
+    case 'legendary': return t.achievementsLib.rarityLabels.legendary;
     default: return '';
   }
 }
 
-export { getRarityColor, getRarityLabel };
+function getAchievementName(key: string, t: TranslationDictionary): string {
+  return t.achievementsLib.names[key] ?? key;
+}
+
+function getAchievementDescription(key: string, t: TranslationDictionary): string {
+  return t.achievementsLib.descriptions[key] ?? key;
+}
+
+export { getRarityColor, getRarityLabel, getAchievementName, getAchievementDescription };
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  // === ДЕЙСТВИЯ ===
+  // === ACTIONS ===
   {
-    key: 'first_blood', name: 'Первая кровь', description: 'Сделай первое действие',
+    key: 'first_blood', nameKey: 'first_blood', descriptionKey: 'first_blood',
     icon: '🗡️', category: 'actions', rarity: 'common', goldReward: 10, xpReward: 25,
     check: (s) => s.totalActions >= 1,
   },
   {
-    key: 'actions_100', name: 'Сотня', description: '100 действий всего',
+    key: 'actions_100', nameKey: 'actions_100', descriptionKey: 'actions_100',
     icon: '💯', category: 'actions', rarity: 'common', goldReward: 50, xpReward: 100,
     check: (s) => s.totalActions >= 100,
   },
   {
-    key: 'actions_500', name: 'Неудержимый', description: '500 действий всего',
+    key: 'actions_500', nameKey: 'actions_500', descriptionKey: 'actions_500',
     icon: '🔥', category: 'actions', rarity: 'rare', goldReward: 150, xpReward: 300,
     check: (s) => s.totalActions >= 500,
   },
   {
-    key: 'actions_1000', name: 'Машина', description: '1000 действий всего',
+    key: 'actions_1000', nameKey: 'actions_1000', descriptionKey: 'actions_1000',
     icon: '⚙️', category: 'actions', rarity: 'epic', goldReward: 500, xpReward: 750,
     check: (s) => s.totalActions >= 1000,
   },
   {
-    key: 'actions_5000', name: 'Легенда действий', description: '5000 действий всего',
+    key: 'actions_5000', nameKey: 'actions_5000', descriptionKey: 'actions_5000',
     icon: '🌟', category: 'actions', rarity: 'legendary', goldReward: 2000, xpReward: 2500,
     check: (s) => s.totalActions >= 5000,
   },
   {
-    key: 'daily_50', name: 'Перевыполнение', description: '50 действий за 1 день',
+    key: 'daily_50', nameKey: 'daily_50', descriptionKey: 'daily_50',
     icon: '⚡', category: 'actions', rarity: 'rare', goldReward: 100, xpReward: 200,
     check: (s) => s.todayActions >= 50,
   },
   {
-    key: 'daily_100', name: 'Берсерк', description: '100 действий за 1 день',
+    key: 'daily_100', nameKey: 'daily_100', descriptionKey: 'daily_100',
     icon: '💀', category: 'actions', rarity: 'epic', goldReward: 300, xpReward: 500,
     check: (s) => s.todayActions >= 100,
   },
 
-  // === ДОХОД ===
+  // === INCOME ===
   {
-    key: 'income_10k', name: 'Первые деньги', description: 'Заработай 10 000 ₽',
+    key: 'income_10k', nameKey: 'income_10k', descriptionKey: 'income_10k',
     icon: '💵', category: 'income', rarity: 'common', goldReward: 50, xpReward: 100,
     check: (s) => s.totalIncome >= 10000,
   },
   {
-    key: 'income_50k', name: 'На пути к цели', description: 'Заработай 50 000 ₽',
+    key: 'income_50k', nameKey: 'income_50k', descriptionKey: 'income_50k',
     icon: '💰', category: 'income', rarity: 'rare', goldReward: 200, xpReward: 400,
     check: (s) => s.totalIncome >= 50000,
   },
   {
-    key: 'income_150k', name: 'Цель достигнута!', description: 'Заработай 150 000 ₽',
+    key: 'income_150k', nameKey: 'income_150k', descriptionKey: 'income_150k',
     icon: '🏆', category: 'income', rarity: 'epic', goldReward: 1000, xpReward: 1500,
     check: (s) => s.totalIncome >= 150000,
   },
   {
-    key: 'income_500k', name: 'Полмиллиона', description: 'Заработай 500 000 ₽',
+    key: 'income_500k', nameKey: 'income_500k', descriptionKey: 'income_500k',
     icon: '👑', category: 'income', rarity: 'legendary', goldReward: 3000, xpReward: 5000,
     check: (s) => s.totalIncome >= 500000,
   },
   {
-    key: 'income_1m', name: 'Миллионер', description: 'Заработай 1 000 000 ₽',
+    key: 'income_1m', nameKey: 'income_1m', descriptionKey: 'income_1m',
     icon: '🌟', category: 'income', rarity: 'legendary', goldReward: 10000, xpReward: 10000,
     check: (s) => s.totalIncome >= 1000000,
   },
   {
-    key: 'sales_5', name: 'Продавец', description: '5 продаж',
+    key: 'sales_5', nameKey: 'sales_5', descriptionKey: 'sales_5',
     icon: '🤝', category: 'income', rarity: 'common', goldReward: 50, xpReward: 100,
     check: (s) => s.totalSales >= 5,
   },
   {
-    key: 'sales_25', name: 'Мастер продаж', description: '25 продаж',
+    key: 'sales_25', nameKey: 'sales_25', descriptionKey: 'sales_25',
     icon: '💎', category: 'income', rarity: 'rare', goldReward: 300, xpReward: 500,
     check: (s) => s.totalSales >= 25,
   },
   {
-    key: 'sales_100', name: 'Акула бизнеса', description: '100 продаж',
+    key: 'sales_100', nameKey: 'sales_100', descriptionKey: 'sales_100',
     icon: '🦈', category: 'income', rarity: 'epic', goldReward: 1000, xpReward: 2000,
     check: (s) => s.totalSales >= 100,
   },
 
   // === STREAK ===
   {
-    key: 'streak_3', name: 'Разогрев', description: '3 дня подряд без пропусков',
+    key: 'streak_3', nameKey: 'streak_3', descriptionKey: 'streak_3',
     icon: '🔥', category: 'streak', rarity: 'common', goldReward: 30, xpReward: 50,
     check: (s) => s.streakBest >= 3,
   },
   {
-    key: 'streak_7', name: 'Неделя силы', description: '7 дней подряд',
+    key: 'streak_7', nameKey: 'streak_7', descriptionKey: 'streak_7',
     icon: '💪', category: 'streak', rarity: 'rare', goldReward: 100, xpReward: 200,
     check: (s) => s.streakBest >= 7,
   },
   {
-    key: 'streak_14', name: 'Две недели огня', description: '14 дней подряд',
+    key: 'streak_14', nameKey: 'streak_14', descriptionKey: 'streak_14',
     icon: '🔥', category: 'streak', rarity: 'epic', goldReward: 300, xpReward: 500,
     check: (s) => s.streakBest >= 14,
   },
   {
-    key: 'streak_30', name: 'Месяц дисциплины', description: '30 дней подряд',
+    key: 'streak_30', nameKey: 'streak_30', descriptionKey: 'streak_30',
     icon: '⚡', category: 'streak', rarity: 'legendary', goldReward: 1000, xpReward: 2000,
     check: (s) => s.streakBest >= 30,
   },
 
-  // === УРОВЕНЬ ===
+  // === LEVEL ===
   {
-    key: 'level_5', name: 'Охотник', description: 'Достигни 5 уровня',
+    key: 'level_5', nameKey: 'level_5', descriptionKey: 'level_5',
     icon: '🏹', category: 'level', rarity: 'common', goldReward: 50, xpReward: 0,
     check: (s) => s.level >= 5,
   },
   {
-    key: 'level_10', name: 'Воин', description: 'Достигни 10 уровня',
+    key: 'level_10', nameKey: 'level_10', descriptionKey: 'level_10',
     icon: '⚔️', category: 'level', rarity: 'rare', goldReward: 200, xpReward: 0,
     check: (s) => s.level >= 10,
   },
   {
-    key: 'level_20', name: 'Рыцарь', description: 'Достигни 20 уровня',
+    key: 'level_20', nameKey: 'level_20', descriptionKey: 'level_20',
     icon: '🛡️', category: 'level', rarity: 'epic', goldReward: 500, xpReward: 0,
     check: (s) => s.level >= 20,
   },
   {
-    key: 'level_30', name: 'S-ранг', description: 'Достигни 30 уровня',
+    key: 'level_30', nameKey: 'level_30', descriptionKey: 'level_30',
     icon: '⚡', category: 'level', rarity: 'legendary', goldReward: 2000, xpReward: 0,
     check: (s) => s.level >= 30,
   },
 
   // === SPECIAL ===
   {
-    key: 'focus_first', name: 'Первый фокус', description: 'Заверши первый фокус-блок',
+    key: 'focus_first', nameKey: 'focus_first', descriptionKey: 'focus_first',
     icon: '🎯', category: 'special', rarity: 'common', goldReward: 25, xpReward: 50,
     check: (s) => s.sessionsToday >= 1,
   },
   {
-    key: 'gold_1000', name: 'Золотой мешок', description: 'Заработай 1000 Gold',
+    key: 'gold_1000', nameKey: 'gold_1000', descriptionKey: 'gold_1000',
     icon: '🪙', category: 'special', rarity: 'rare', goldReward: 100, xpReward: 100,
     check: (s) => s.totalGoldEarned >= 1000,
   },
   {
-    key: 'xp_10000', name: 'Прокачанный', description: 'Заработай 10 000 XP',
+    key: 'xp_10000', nameKey: 'xp_10000', descriptionKey: 'xp_10000',
     icon: '✨', category: 'special', rarity: 'epic', goldReward: 500, xpReward: 500,
     check: (s) => s.totalXpEarned >= 10000,
   },

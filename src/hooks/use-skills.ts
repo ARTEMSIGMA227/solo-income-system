@@ -8,9 +8,11 @@ import {
   calculateEffects,
   getSkillPointsForLevel,
   getUsedPoints,
+  getSkillName,
 } from '@/lib/skill-tree';
 import type { SkillEffectType } from '@/lib/skill-tree';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 interface UseSkillsResult {
   allocated: Record<string, number>;
@@ -26,6 +28,7 @@ interface UseSkillsResult {
 export function useSkills(userId: string | undefined, level: number): UseSkillsResult {
   const [allocated, setAllocated] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const { t } = useT();
 
   useEffect(() => {
     if (!userId) return;
@@ -59,7 +62,7 @@ export function useSkills(userId: string | undefined, level: number): UseSkillsR
     async (skillId: string): Promise<boolean> => {
       if (!userId) return false;
 
-      const check = canAllocate(skillId, allocated, availablePoints);
+      const check = canAllocate(skillId, allocated, availablePoints, t);
       if (!check.can) {
         toast.error(check.reason);
         return false;
@@ -77,21 +80,22 @@ export function useSkills(userId: string | undefined, level: number): UseSkillsR
       );
 
       if (error) {
-        toast.error('Ошибка сохранения');
+        toast.error(t.common.error);
         return false;
       }
 
+      const skillName = getSkillName(skillId, t);
       setAllocated((prev) => ({ ...prev, [skillId]: newLevel }));
-      toast.success(`${node.icon} ${node.name} → Lv.${newLevel}`);
+      toast.success(`${node.icon} ${skillName} → Lv.${newLevel}`);
       return true;
     },
-    [userId, allocated, availablePoints]
+    [userId, allocated, availablePoints, t]
   );
 
   const resetSkills = useCallback(async (): Promise<boolean> => {
     if (!userId) return false;
     if (usedPoints === 0) {
-      toast.error('Нечего сбрасывать');
+      toast.error(t.skills.resetNoGold);
       return false;
     }
 
@@ -105,7 +109,7 @@ export function useSkills(userId: string | undefined, level: number): UseSkillsR
       .single();
 
     if (!statsData || (statsData.gold || 0) < RESET_COST) {
-      toast.error(`Нужно ${RESET_COST} 🪙 для сброса`);
+      toast.error(t.skills.resetNoGold);
       return false;
     }
 
@@ -115,7 +119,7 @@ export function useSkills(userId: string | undefined, level: number): UseSkillsR
       .eq('user_id', userId);
 
     if (delError) {
-      toast.error('Ошибка сброса');
+      toast.error(t.common.error);
       return false;
     }
 
@@ -136,14 +140,14 @@ export function useSkills(userId: string | undefined, level: number): UseSkillsR
       user_id: userId,
       amount: -RESET_COST,
       event_type: 'skill_reset',
-      description: 'Сброс навыков',
+      description: t.skills.resetSuccess,
       event_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' }),
     });
 
     setAllocated({});
-    toast.success(`Навыки сброшены! -${RESET_COST} 🪙`);
+    toast.success(`${t.skills.resetSuccess} -${RESET_COST} 🪙`);
     return true;
-  }, [userId, usedPoints]);
+  }, [userId, usedPoints, t]);
 
   return {
     allocated,

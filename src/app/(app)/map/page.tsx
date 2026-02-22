@@ -3,9 +3,11 @@
 import { useMap } from '@/hooks/use-map';
 import { MapView } from '@/components/map/MapView';
 import { calculateTerritoryXPForLevel } from '@/lib/map-data';
+import { useT } from '@/lib/i18n';
 
 export default function MapPage() {
   const mapHook = useMap();
+  const { t } = useT();
   const {
     isLoading,
     error,
@@ -14,6 +16,12 @@ export default function MapPage() {
     activeTerritory,
     activeProgress,
   } = mapHook;
+
+  // Resolve territory name from i18n
+  const activeTerritoryName = activeTerritory
+    ? t.map.territories_names[activeTerritory.id as keyof typeof t.map.territories_names] ||
+      activeTerritory.nameKey
+    : '';
 
   if (isLoading) {
     return (
@@ -44,7 +52,7 @@ export default function MapPage() {
               fontFamily: 'serif',
             }}
           >
-            Разворачиваем карту...
+            {t.map.loading}
           </p>
         </div>
       </div>
@@ -62,9 +70,7 @@ export default function MapPage() {
         }}
       >
         <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '14px', color: '#ef4444' }}>
-            Ошибка загрузки карты
-          </p>
+          <p style={{ fontSize: '14px', color: '#ef4444' }}>{t.map.errorLoading}</p>
           <p style={{ fontSize: '12px', color: '#71717a', marginTop: '4px' }}>
             {error.message}
           </p>
@@ -83,11 +89,11 @@ export default function MapPage() {
             (activeProgress.current_xp /
               calculateTerritoryXPForLevel(
                 activeProgress.required_xp,
-                activeProgress.level
+                activeProgress.level,
               )) *
-              100
+              100,
           ),
-          100
+          100,
         )
       : 0;
 
@@ -114,7 +120,7 @@ export default function MapPage() {
               letterSpacing: '0.02em',
             }}
           >
-            Карта Территорий
+            {t.map.title}
           </h1>
         </div>
         <p
@@ -125,11 +131,11 @@ export default function MapPage() {
             fontFamily: 'serif',
           }}
         >
-          Захватывай территории, получай бонусы и открывай новые земли
+          {t.map.subtitle}
         </p>
       </div>
 
-      {/* Stats bar — parchment cards */}
+      {/* Stats bar */}
       <div
         style={{
           display: 'grid',
@@ -142,26 +148,27 @@ export default function MapPage() {
           {
             icon: '👑',
             value: capturedCount,
-            label: 'Захвачено',
+            label: t.map.stats.captured,
             accent: '#8b6914',
           },
           {
             icon: '🔒',
             value: totalCount - capturedCount,
-            label: 'Осталось',
+            label: t.map.stats.remaining,
             accent: '#7a6c58',
           },
           {
             icon: '⚔️',
             value: `${progressPercent}%`,
-            label: 'Прогресс',
+            label: t.map.stats.progress,
             accent: '#5a8a30',
           },
         ].map((stat) => (
           <div
             key={stat.label}
             style={{
-              background: 'linear-gradient(145deg, rgba(200,180,140,0.1), rgba(160,140,100,0.05))',
+              background:
+                'linear-gradient(145deg, rgba(200,180,140,0.1), rgba(160,140,100,0.05))',
               border: '1px solid rgba(140, 120, 80, 0.15)',
               borderRadius: '8px',
               padding: '10px',
@@ -193,11 +200,12 @@ export default function MapPage() {
         ))}
       </div>
 
-      {/* Active territory banner — scroll style */}
+      {/* Active territory banner */}
       {activeTerritory && activeProgress && (
         <div
           style={{
-            background: 'linear-gradient(135deg, rgba(139,105,20,0.1), rgba(120,90,50,0.06))',
+            background:
+              'linear-gradient(135deg, rgba(139,105,20,0.1), rgba(120,90,50,0.06))',
             border: '1px solid rgba(139, 105, 20, 0.2)',
             borderRadius: '8px',
             padding: '12px',
@@ -211,12 +219,8 @@ export default function MapPage() {
               justifyContent: 'space-between',
             }}
           >
-            <div
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <span style={{ fontSize: '20px' }}>
-                {activeTerritory.icon}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '20px' }}>{activeTerritory.icon}</span>
               <div>
                 <p
                   style={{
@@ -227,7 +231,7 @@ export default function MapPage() {
                     fontFamily: 'serif',
                   }}
                 >
-                  {activeTerritory.name}
+                  {activeTerritoryName}
                 </p>
                 <p
                   style={{
@@ -240,7 +244,7 @@ export default function MapPage() {
                   Lv.{activeProgress.level} · {activeProgress.current_xp}/
                   {calculateTerritoryXPForLevel(
                     activeProgress.required_xp,
-                    activeProgress.level
+                    activeProgress.level,
                   )}{' '}
                   XP
                 </p>
@@ -254,7 +258,7 @@ export default function MapPage() {
                 fontFamily: 'serif',
               }}
             >
-              ⚔️ Активна
+              {t.map.active}
             </span>
           </div>
           <div
@@ -294,10 +298,9 @@ export default function MapPage() {
           fontStyle: 'italic',
         }}
       >
-        ✦ 20% XP от действий идёт в прогресс активной территории ✦
+        {t.map.xpTip}
       </p>
 
-      {/* CSS animations */}
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }

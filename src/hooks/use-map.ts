@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/client';
 import {
   TERRITORIES,
   getTerritoryById,
-  calculateTerritoryXPForLevel,
   type TerritoryStatus,
 } from '@/lib/map-data';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 export interface TerritoryProgress {
   id: string;
@@ -31,10 +31,23 @@ interface ProfileMapData {
   streak_current: number;
 }
 
-interface SkillAllocationRow {
+interface SkillRow {
   skill_id: string;
-  allocated_points: number;
-  branch_id: string;
+  level: number;
+}
+
+// Extract branch from skill_id: "comm_persuasion" -> "communication"
+function getBranchFromSkillId(skillId: string): string {
+  const prefix = skillId.split('_')[0];
+  const branchMap: Record<string, string> = {
+    comm: 'communication',
+    int: 'intellect',
+    disc: 'discipline',
+    prec: 'precision',
+    will: 'willpower',
+    def: 'defense',
+  };
+  return branchMap[prefix] ?? prefix;
 }
 
 async function fetchMapData() {
@@ -45,8 +58,7 @@ async function fetchMapData() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  // Загружаем level из stats, остальное из profiles
-  const [progressRes, profileRes, statsRes, skillsRes] = await Promise.all([
+  const [progressRes, profileRes, statsRes] = await Promise.all([
     supabase.from('territory_progress').select('*').eq('user_id', user.id),
     supabase
       .from('profiles')
@@ -58,26 +70,38 @@ async function fetchMapData() {
       .select('level')
       .eq('user_id', user.id)
       .single(),
-    supabase
-      .from('skill_allocations')
-      .select('skill_id, allocated_points, branch_id')
-      .eq('user_id', user.id)
-      .gt('allocated_points', 0),
   ]);
 
   if (profileRes.error) throw profileRes.error;
 
+  // Fetch skill_allocations safely — table may not exist yet
+  let skillsData: SkillRow[] = [];
+  try {
+    const skillsRes = await supabase
+      .from('skill_allocations')
+      .select('skill_id, level')
+      .eq('user_id', user.id)
+      .gt('level', 0);
+
+    if (!skillsRes.error && skillsRes.data) {
+      skillsData = skillsRes.data as SkillRow[];
+    }
+  } catch {
+    // Table doesn't exist or query failed — silently continue with empty skills
+  }
+
   const profile: ProfileMapData = {
     id: profileRes.data.id as string,
     level: (statsRes.data?.level as number) ?? 1,
-    active_territory_id: (profileRes.data.active_territory_id as string | null) ?? null,
+    active_territory_id:
+      (profileRes.data.active_territory_id as string | null) ?? null,
     streak_current: (profileRes.data.streak_current as number) ?? 0,
   };
 
   return {
     progress: (progressRes.data ?? []) as TerritoryProgress[],
     profile,
-    skills: (skillsRes.data ?? []) as SkillAllocationRow[],
+    skills: skillsData,
   };
 }
 
@@ -85,7 +109,7 @@ function evaluateRequirements(
   territoryId: string,
   capturedIds: Set<string>,
   profile: ProfileMapData,
-  skillsByBranch: Map<string, number>
+  skillsByBranch: Map<string, number>,
 ): boolean {
   const territory = getTerritoryById(territoryId);
   if (!territory) return false;
@@ -111,27 +135,35 @@ function evaluateRequirements(
 export function useMap() {
   const queryClient = useQueryClient();
   const supabase = createClient();
+  const { t } = useT();
 
   const query = useQuery({
     queryKey: ['map-data'],
     queryFn: fetchMapData,
     staleTime: 30_000,
+    retry: (failureCount, error) => {
+      if (error instanceof Error && error.message.includes('400')) return false;
+      return failureCount < 2;
+    },
   });
 
   const capturedIds = new Set(
     (query.data?.progress ?? [])
       .filter((p) => p.status === 'captured')
-      .map((p) => p.territory_id)
+      .map((p) => p.territory_id),
   );
 
   const skillsByBranch = new Map<string, number>();
   (query.data?.skills ?? []).forEach((s) => {
-    const current = skillsByBranch.get(s.branch_id) ?? 0;
-    skillsByBranch.set(s.branch_id, current + 1);
+    const branch = getBranchFromSkillId(s.skill_id);
+    const current = skillsByBranch.get(branch) ?? 0;
+    skillsByBranch.set(branch, current + 1);
   });
 
   function getStatus(territoryId: string): TerritoryStatus {
-    const progress = query.data?.progress.find((p) => p.territory_id === territoryId);
+    const progress = query.data?.progress.find(
+      (p) => p.territory_id === territoryId,
+    );
     if (progress) return progress.status;
 
     if (!query.data?.profile) return 'locked';
@@ -139,20 +171,18 @@ export function useMap() {
     const territory = getTerritoryById(territoryId);
     if (!territory) return 'locked';
 
-    // Стартовая территория без требований — доступна
     if (territory.requirements.length === 0) return 'available';
 
     const met = evaluateRequirements(
       territoryId,
       capturedIds,
       query.data.profile,
-      skillsByBranch
+      skillsByBranch,
     );
     if (met) return 'available';
 
-    // Если хотя бы один prereq-territory захвачен — видно в тумане
     const anyPrereqCaptured = territory.requirements.some(
-      (r) => r.type === 'territory' && capturedIds.has(r.value as string)
+      (r) => r.type === 'territory' && capturedIds.has(r.value as string),
     );
     if (anyPrereqCaptured) return 'foggy';
 
@@ -178,18 +208,22 @@ export function useMap() {
         throw new Error('Territory not available');
       }
 
-      const existing = query.data?.progress.find((p) => p.territory_id === territoryId);
+      const existing = query.data?.progress.find(
+        (p) => p.territory_id === territoryId,
+      );
 
       if (!existing) {
-        const { error: insertError } = await supabase.from('territory_progress').insert({
-          user_id: user.id,
-          territory_id: territoryId,
-          current_xp: 0,
-          required_xp: territory.requiredXP,
-          status: 'in_progress' as const,
-          level: 0,
-          activated_at: new Date().toISOString(),
-        });
+        const { error: insertError } = await supabase
+          .from('territory_progress')
+          .insert({
+            user_id: user.id,
+            territory_id: territoryId,
+            current_xp: 0,
+            required_xp: territory.requiredXP,
+            status: 'in_progress' as const,
+            level: 0,
+            activated_at: new Date().toISOString(),
+          });
         if (insertError) throw insertError;
       } else if (existing.status === 'available') {
         const { error: updateError } = await supabase
@@ -213,14 +247,19 @@ export function useMap() {
     },
     onSuccess: (territoryId) => {
       const territory = getTerritoryById(territoryId);
-      toast.success(`${territory?.icon} ${territory?.name} активирована!`, {
-        description: 'XP от действий теперь идёт в прогресс этой территории.',
+      const territoryName = territory
+        ? t.map.territories_names[
+            territory.nameKey as keyof typeof t.map.territories_names
+          ] || territory.nameKey
+        : '';
+      toast.success(`${territory?.icon} ${territoryName} — ${t.map.active}`, {
+        description: t.map.xpTip,
       });
       void queryClient.invalidateQueries({ queryKey: ['map-data'] });
       void queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
     onError: (err: Error) => {
-      toast.error('Ошибка активации территории', { description: err.message });
+      toast.error(t.map.errorLoading, { description: err.message });
     },
   });
 

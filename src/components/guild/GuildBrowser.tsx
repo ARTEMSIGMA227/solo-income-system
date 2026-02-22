@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { usePublicGuilds, useJoinGuild } from '@/hooks/useGuild';
+import { useT } from '@/lib/i18n';
 import { Users, Shield, Search, UserPlus } from 'lucide-react';
 
 export default function GuildBrowser() {
+  const { t } = useT();
   const [search, setSearch] = useState('');
   const { data: guilds, isLoading } = usePublicGuilds(search);
   const joinGuild = useJoinGuild();
@@ -15,9 +17,9 @@ export default function GuildBrowser() {
       {
         onSuccess: (data) => {
           if (data.joined) {
-            alert('✅ Вы вступили в гильдию!');
+            alert(t.guilds.browser.joinSuccess);
           } else if (data.request_sent) {
-            alert('📩 Заявка отправлена');
+            alert(t.guilds.browser.requestSent);
           }
         },
         onError: (err) => alert(err.message),
@@ -31,7 +33,7 @@ export default function GuildBrowser() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           type="text"
-          placeholder="Поиск гильдий..."
+          placeholder={t.guilds.browser.searchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -39,9 +41,9 @@ export default function GuildBrowser() {
       </div>
 
       {isLoading ? (
-        <div className="text-center text-gray-400 py-8">Загрузка...</div>
+        <div className="text-center text-gray-400 py-8">{t.guilds.loading}</div>
       ) : !guilds?.length ? (
-        <div className="text-center text-gray-400 py-8">Гильдии не найдены</div>
+        <div className="text-center text-gray-400 py-8">{t.guilds.browser.notFound}</div>
       ) : (
         <div className="space-y-3">
           {guilds.map((guild) => (
@@ -60,7 +62,7 @@ export default function GuildBrowser() {
                       <Users className="w-3 h-3" />
                       {guild.member_count}/{guild.max_members}
                     </span>
-                    <span>Ур. {guild.level}</span>
+                    <span>{t.guilds.dashboard.level} {guild.level}</span>
                     <span>{guild.total_xp} XP</span>
                   </div>
                   {guild.description && (
@@ -74,7 +76,7 @@ export default function GuildBrowser() {
                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
               >
                 <UserPlus className="w-4 h-4" />
-                {guild.member_count >= guild.max_members ? 'Полная' : 'Вступить'}
+                {guild.member_count >= guild.max_members ? t.guilds.browser.full : t.guilds.join}
               </button>
             </div>
           ))}

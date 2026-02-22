@@ -7,6 +7,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useT } from "@/lib/i18n";
 import { XPBar } from "@/components/ui/xp-bar";
 import { ClassBadge } from "@/components/ui/class-badge";
+import { LanguageToggle } from "@/components/ui/language-toggle";
 import {
   LayoutDashboard,
   Swords,
@@ -23,6 +24,8 @@ import {
   Trophy,
   GitBranch,
   Map,
+  Medal,
+  Bot,
 } from "lucide-react";
 
 const NAV_ITEMS_CONFIG: Array<{
@@ -40,6 +43,8 @@ const NAV_ITEMS_CONFIG: Array<{
   { href: "/bosses", labelKey: "bosses", icon: Skull, mobileBottom: false },
   { href: "/guilds", labelKey: "guilds", icon: Users, mobileBottom: false },
   { href: "/achievements", labelKey: "achievements", icon: Trophy, mobileBottom: false },
+  { href: "/leaderboard", labelKey: "leaderboard", icon: Medal, mobileBottom: false },
+  { href: "/advisor", labelKey: "advisor", icon: Bot, mobileBottom: false },
   { href: "/analytics", labelKey: "analytics", icon: BarChart3, mobileBottom: false },
   { href: "/settings", labelKey: "settings", icon: Settings, mobileBottom: false },
 ];
@@ -73,11 +78,14 @@ function Sidebar({ pathname }: { pathname: string }) {
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-white/10 bg-gray-950 lg:flex">
-      <div className="flex h-16 items-center gap-2 border-b border-white/10 px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-xs font-black text-white">
-          S
+      <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600 text-xs font-black text-white">
+            S
+          </div>
+          <span className="text-sm font-bold tracking-tight text-white">Solo Income</span>
         </div>
-        <span className="text-sm font-bold tracking-tight text-white">Solo Income</span>
+        <LanguageToggle compact />
       </div>
 
       <div className="border-b border-white/10 px-5 py-4">
@@ -160,6 +168,7 @@ function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <span className="flex-1 truncate text-sm font-semibold text-white">
           {current?.label || "Solo Income"}
         </span>
+        <LanguageToggle compact />
         <ClassBadge compact />
       </div>
       <div className="px-4 pb-2">
@@ -207,14 +216,17 @@ function MobileSidebarOverlay({
       <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-gray-950 shadow-2xl">
         <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
           <span className="text-sm font-bold text-white">{t.nav.menu}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white"
-            aria-label={t.nav.closeMenu}
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <LanguageToggle compact />
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white"
+              aria-label={t.nav.closeMenu}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="border-b border-white/10 px-4 py-4">
