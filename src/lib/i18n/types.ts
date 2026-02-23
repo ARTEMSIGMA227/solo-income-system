@@ -592,6 +592,12 @@ export interface TranslationDictionary {
     resetProgress: string;
     theme: string;
   };
+  
+  streakBanner: {
+    currentStreak: string;
+    notStarted: string;
+    atRiskWarning: string;
+  };
 
   effects: {
     levelUp: string;
@@ -604,12 +610,6 @@ export interface TranslationDictionary {
     streakDay1: string;
     streakDay234: string;
     streakDay5plus: string;
-  };
-
-  streakBanner: {
-    currentStreak: string;
-    notStarted: string;
-    atRiskWarning: string;
   };
 
   death: {
@@ -655,6 +655,8 @@ export interface TranslationDictionary {
       medium: string;
       hard: string;
     };
+    missionTitles: Record<string, string>;
+    missionDescriptions: Record<string, string>;
   };
 
   dailyChallenge: {

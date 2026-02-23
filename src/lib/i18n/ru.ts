@@ -51,7 +51,7 @@ export const ru: TranslationDictionary = {
   },
 
   nav: {
-    dashboard: 'Главная',
+    dashboard: 'Дашборд',
     quests: 'Квесты',
     skills: 'Навыки',
     focus: 'Фокус',
@@ -727,6 +727,12 @@ export const ru: TranslationDictionary = {
     resetProgress: 'Сбросить прогресс',
     theme: 'Тема',
   },
+  
+  streakBanner: {
+    currentStreak: 'Текущая серия',
+    notStarted: 'Серия не начата',
+    atRiskWarning: '⚠️ Выполни действие чтобы сохранить серию!',
+  },
 
   effects: {
     levelUp: 'Level Up!',
@@ -739,12 +745,6 @@ export const ru: TranslationDictionary = {
     streakDay1: 'день',
     streakDay234: 'дня',
     streakDay5plus: 'дней',
-  },
-
-  streakBanner: {
-    currentStreak: 'Текущая серия',
-    notStarted: 'Серия не начата',
-    atRiskWarning: '⚠️ Выполни действие чтобы сохранить серию!',
   },
 
   death: {
@@ -789,6 +789,46 @@ export const ru: TranslationDictionary = {
       easy: 'Лёгкая',
       medium: 'Средняя',
       hard: 'Сложная',
+    },
+    missionTitles: {
+      easy_login: 'Я здесь!',
+      easy_quest_1: 'Первый шаг',
+      easy_quest_2: 'Двойной удар',
+      easy_focus_10: 'Быстрый фокус',
+      easy_focus_15: 'Разминка ума',
+      easy_income_500: 'Капля в море',
+      med_quest_3: 'Тройная угроза',
+      med_quest_5: 'Пятёрка за день',
+      med_focus_30: 'Глубокий фокус',
+      med_focus_45: 'Марафон ума',
+      med_income_2000: 'Деловой подход',
+      med_boss_100: 'Охотник на боссов',
+      hard_quest_7: 'Машина квестов',
+      hard_quest_10: 'Десятка дня',
+      hard_focus_60: 'Час силы',
+      hard_focus_90: 'Ультра-фокус',
+      hard_income_5000: 'Большой куш',
+      hard_boss_300: 'Убийца боссов',
+    },
+    missionDescriptions: {
+      easy_login: 'Войди в систему (streak ≥ 1)',
+      easy_quest_1: 'Выполни 1 квест',
+      easy_quest_2: 'Выполни 2 квеста',
+      easy_focus_10: 'Проведи 10 минут в фокусе',
+      easy_focus_15: 'Проведи 15 минут в фокусе',
+      easy_income_500: 'Заработай 500 ₽',
+      med_quest_3: 'Выполни 3 квеста',
+      med_quest_5: 'Выполни 5 квестов',
+      med_focus_30: 'Проведи 30 минут в фокусе',
+      med_focus_45: 'Проведи 45 минут в фокусе',
+      med_income_2000: 'Заработай 2 000 ₽',
+      med_boss_100: 'Нанеси 100 урона боссу',
+      hard_quest_7: 'Выполни 7 квестов',
+      hard_quest_10: 'Выполни 10 квестов',
+      hard_focus_60: 'Проведи 60 минут в фокусе',
+      hard_focus_90: 'Проведи 90 минут в фокусе',
+      hard_income_5000: 'Заработай 5 000 ₽',
+      hard_boss_300: 'Нанеси 300 урона боссу',
     },
   },
 

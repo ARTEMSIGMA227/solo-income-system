@@ -111,7 +111,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-semibold text-white">{mission.title}</h4>
+            <h4 className="text-sm font-semibold text-white">{t.dailyMissions.missionTitles[mission.slug] ?? mission.title}</h4>
             <span
               className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${diffCfg.bgColor} ${diffCfg.color}`}
             >
@@ -119,7 +119,7 @@ function MissionRow({ entry }: { entry: UserDailyMission }) {
             </span>
           </div>
 
-          <p className="mt-0.5 text-xs text-gray-400">{mission.description}</p>
+          <p className="mt-0.5 text-xs text-gray-400">{t.dailyMissions.missionDescriptions[mission.slug] ?? mission.description}</p>
 
           <div className="mt-2 flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
