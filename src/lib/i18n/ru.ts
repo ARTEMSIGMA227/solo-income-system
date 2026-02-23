@@ -572,6 +572,10 @@ export const ru: TranslationDictionary = {
       reject: 'Отклонить',
       hunterLabel: (id) => `Охотник #${id}`,
     },
+    chat: {
+      empty: 'Сообщений пока нет. Начните общение!',
+      placeholder: 'Введите сообщение...',
+    },
   },
 
   achievements: {
@@ -735,6 +739,12 @@ export const ru: TranslationDictionary = {
     streakDay1: 'день',
     streakDay234: 'дня',
     streakDay5plus: 'дней',
+  },
+
+    streakBanner: {
+    currentStreak: 'Текущая серия',
+    notStarted: 'Серия не начата',
+    atRiskWarning: '⚠️ Сделай действие сегодня, чтобы сохранить серию!',
   },
 
   death: {
