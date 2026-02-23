@@ -77,8 +77,7 @@ export default function DashboardPage() {
   const prevLevelRef = useRef<number | null>(null);
   const { t, locale } = useT();
 
-  // locale is provided by useT() — used for date formatting
-
+  // Locale-dependent date formatting — re-runs when locale changes
   useEffect(() => {
     setCurrentHour(new Date().getHours());
     setTodayDate(
@@ -88,7 +87,9 @@ export default function DashboardPage() {
         month: 'long',
       })
     );
+  }, [locale]);
 
+  useEffect(() => {
     const supabase = createClient();
 
     async function loadData() {
@@ -637,7 +638,7 @@ export default function DashboardPage() {
       <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner userId={user?.id ?? ''} />
+        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
       </div>
 
       <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />
