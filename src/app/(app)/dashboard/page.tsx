@@ -638,7 +638,7 @@ export default function DashboardPage() {
       <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
+        <StreakBanner userId={user?.id ?? ''} />
       </div>
 
       <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />
