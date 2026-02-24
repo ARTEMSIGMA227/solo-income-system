@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { exportAnalyticsPdf } from '@/lib/export-pdf';
 import { useT } from '@/lib/i18n';
 import {
@@ -29,7 +29,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [incomeBySource, setIncomeBySource] = useState<{ name: string; value: number }[]>([]);
-  const { t, locale } = useT();
+  const { t, locale, currency, formatCurrency: fmtCurrency } = useT();
 
   useEffect(() => {
     const supabase = createClient();
@@ -154,32 +154,32 @@ export default function AnalyticsPage() {
       const avgWeekActions = Math.round(totalWeekActions / 7);
 
       if (avgWeekActions < 30) {
-        newTips.push('⚠️ ' + t.analytics.tips.lowActions);
+        newTips.push('\u26a0\ufe0f ' + t.analytics.tips.lowActions);
       } else {
-        newTips.push('✅ ' + t.analytics.tips.goodPace);
+        newTips.push('\u2705 ' + t.analytics.tips.goodPace);
       }
 
       if (mIncome < 75000 && daysInMonth > 15) {
-        newTips.push('🔴 ' + t.analytics.tips.lowIncome);
+        newTips.push('\ud83d\udd34 ' + t.analytics.tips.lowIncome);
       } else if (mIncome >= 150000) {
-        newTips.push('🏆 ' + t.analytics.tips.goalReached);
+        newTips.push('\ud83c\udfc6 ' + t.analytics.tips.goalReached);
       }
 
       const zeroDays = days.filter((d) => d.actions === 0).length;
       if (zeroDays >= 2) {
-        newTips.push('💀 ' + zeroDays + ' ' + t.analytics.tips.zeroDays);
+        newTips.push('\ud83d\udca2 ' + zeroDays + ' ' + t.analytics.tips.zeroDays);
       }
 
       const weekIncome = days.reduce((s, d) => s + d.income, 0);
       if (weekIncome === 0 && totalWeekActions > 50) {
-        newTips.push('🤔 ' + t.analytics.tips.noConversion);
+        newTips.push('\ud83e\udd14 ' + t.analytics.tips.noConversion);
       }
 
       const trend = days[6].actions - days[0].actions;
       if (trend > 10) {
-        newTips.push('📈 ' + t.analytics.tips.upTrend);
+        newTips.push('\ud83d\udcc8 ' + t.analytics.tips.upTrend);
       } else if (trend < -10) {
-        newTips.push('📉 ' + t.analytics.tips.downTrend);
+        newTips.push('\ud83d\udcc9 ' + t.analytics.tips.downTrend);
       }
 
       if (mIncome > 0 && daysInMonth > 3) {
@@ -189,23 +189,23 @@ export default function AnalyticsPage() {
         const forecast = mIncome + dailyRate * daysLeft;
         if (forecast >= 150000) {
           newTips.push(
-            '📊 ' +
+            '\ud83d\udcca ' +
               t.analytics.tips.forecast +
               ': ' +
-              formatCurrency(Math.round(forecast)) +
+              fmtCurrency(Math.round(forecast)) +
               ' ' +
               t.analytics.tips.onTrack,
           );
         } else {
           newTips.push(
-            '📊 ' +
+            '\ud83d\udcca ' +
               t.analytics.tips.forecast +
               ': ' +
-              formatCurrency(Math.round(forecast)) +
+              fmtCurrency(Math.round(forecast)) +
               '. ' +
               t.analytics.tips.needSpeed +
               ' ' +
-              formatCurrency(
+              fmtCurrency(
                 Math.round((150000 - mIncome) / Math.max(daysLeft, 1)),
               ) +
               t.analytics.tips.perDay,
@@ -291,6 +291,8 @@ export default function AnalyticsPage() {
           xp: e.xp_amount,
           description: e.description || '',
         })),
+        locale,
+        currency,
       });
     } catch (err) {
       console.error('PDF export failed:', err);
@@ -310,7 +312,7 @@ export default function AnalyticsPage() {
           color: '#a78bfa',
         }}
       >
-        ⏳ {t.analytics.loading}
+        \u23f3 {t.analytics.loading}
       </div>
     );
   }
@@ -352,7 +354,7 @@ export default function AnalyticsPage() {
           marginBottom: '16px',
         }}
       >
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>📈 {t.analytics.title}</h1>
+        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>{t.analytics.title}</h1>
         <button
           onClick={handleExportPdf}
           disabled={pdfLoading}
@@ -368,14 +370,14 @@ export default function AnalyticsPage() {
             opacity: pdfLoading ? 0.6 : 1,
           }}
         >
-          {pdfLoading ? '⏳ ' + t.analytics.exporting : '📄 ' + t.analytics.exportPdf}
+          {pdfLoading ? '\u23f3 ' + t.analytics.exporting : '\ud83d\udcc4 ' + t.analytics.exportPdf}
         </button>
       </div>
 
       {/* Monthly summary */}
       <div style={cardStyle}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          📅 {t.analytics.thisMonth}
+          {t.analytics.thisMonth}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
           <div
@@ -388,7 +390,7 @@ export default function AnalyticsPage() {
           >
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t.analytics.income}</div>
             <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>
-              {formatCurrency(monthIncome)}
+              {fmtCurrency(monthIncome)}
             </div>
           </div>
           <div
@@ -453,7 +455,7 @@ export default function AnalyticsPage() {
               {t.analytics.avgIncome}
             </div>
             <div style={{ fontSize: '16px', fontWeight: 700 }}>
-              {formatCurrency(avgDailyIncome)}
+              {fmtCurrency(avgDailyIncome)}
             </div>
           </div>
         </div>
@@ -462,7 +464,7 @@ export default function AnalyticsPage() {
       {/* Actions chart */}
       <div style={cardStyle}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          📊 {t.analytics.weekActions}
+          {t.analytics.weekActions}
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={weekData}>
@@ -490,7 +492,7 @@ export default function AnalyticsPage() {
       {/* XP chart */}
       <div style={cardStyle}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          ⚡ {t.analytics.weekXP}
+          {t.analytics.weekXP}
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={weekData}>
@@ -526,7 +528,7 @@ export default function AnalyticsPage() {
       {/* Income chart */}
       <div style={cardStyle}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          💰 {t.analytics.weekIncome}
+          {t.analytics.weekIncome}
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={weekData}>
@@ -542,7 +544,7 @@ export default function AnalyticsPage() {
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              formatter={(value) => formatCurrency(Number(value ?? 0))}
+              formatter={(value) => fmtCurrency(Number(value ?? 0))}
             />
             <Line
               type="monotone"
@@ -561,7 +563,7 @@ export default function AnalyticsPage() {
       {incomeBySource.length > 0 && (
         <div style={cardStyle}>
           <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-            🎯 {t.analytics.bySource}
+            {t.analytics.bySource}
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
@@ -583,7 +585,7 @@ export default function AnalyticsPage() {
               </Pie>
               <Tooltip
                 contentStyle={tooltipStyle}
-                formatter={(value) => formatCurrency(Number(value ?? 0))}
+                formatter={(value) => fmtCurrency(Number(value ?? 0))}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -593,7 +595,7 @@ export default function AnalyticsPage() {
       {/* Tips */}
       <div style={cardStyle}>
         <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>
-          🧠 {t.analytics.analysis}
+          {t.analytics.analysis}
         </div>
         {tips.map((tip, i) => (
           <div

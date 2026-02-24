@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
-import { formatNumber, formatCurrency } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 
 type SortKey = 'xp' | 'streak' | 'actions' | 'income';
@@ -27,7 +27,7 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortKey>('xp');
-  const { t } = useT();
+  const { t, formatCurrency: fmtCurrency } = useT();
 
   useEffect(() => {
     const supabase = createClient();
@@ -74,7 +74,7 @@ export default function LeaderboardPage() {
       case 'actions':
         return formatNumber(row.total_actions ?? 0);
       case 'income':
-        return formatCurrency(Number(row.total_income) || 0);
+        return fmtCurrency(Number(row.total_income) || 0);
     }
   }
 
@@ -303,7 +303,7 @@ export default function LeaderboardPage() {
                 🎯 {formatNumber(row.total_actions ?? 0)}
               </div>
               <div style={{ fontSize: '11px', color: '#475569' }}>
-                💰 {formatCurrency(Number(row.total_income) || 0)}
+                💰 {fmtCurrency(Number(row.total_income) || 0)}
               </div>
               <div style={{ fontSize: '11px', color: '#475569' }}>
                 💼 {row.total_sales ?? 0} {t.leaderboard.sales}

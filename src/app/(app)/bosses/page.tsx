@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
@@ -25,7 +25,7 @@ export default function BossesPage() {
   const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>(
     {},
   );
-  const { t } = useT();
+  const { t, formatCurrency: fmtCurrency } = useT();
 
   // Resolve boss title via i18n — try by boss_type key map, then fallback to DB
   function getBossTitle(boss: Boss): string {
@@ -159,7 +159,7 @@ export default function BossesPage() {
   }
 
   function formatMetricValue(metric: string, value: number) {
-    if (metric === 'income') return formatCurrency(value);
+    if (metric === 'income') return fmtCurrency(value);
     return formatNumber(value);
   }
 

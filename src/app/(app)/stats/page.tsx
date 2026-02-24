@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
 import { xpToNextLevel, PERKS, TITLES } from '@/lib/constants';
-import { formatNumber, formatCurrency } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import type { Stats, PerkUnlock } from '@/types/database';
 import ActivityCalendar from './ActivityCalendar';
 
 export default function StatsPage() {
+  const { formatCurrency: fmtCurrency } = useT();
   const [stats, setStats] = useState<Stats | null>(null);
   const [perks, setPerks] = useState<PerkUnlock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,7 @@ export default function StatsPage() {
             { label: 'Действия', value: formatNumber(stats?.total_actions || 0), color: '#3b82f6' },
             { label: 'Продажи', value: String(stats?.total_sales || 0), color: '#22c55e' },
             { label: 'Клиенты', value: String(stats?.total_clients || 0), color: '#f59e0b' },
-            { label: 'Доход', value: formatCurrency(Number(stats?.total_income || 0)), color: '#22c55e' },
+            { label: 'Доход', value: fmtCurrency(Number(stats?.total_income || 0)), color: '#22c55e' },
           ].map((stat, i) => (
             <div key={i} style={{ backgroundColor: '#16161f', borderRadius: '8px', padding: '12px' }}>
               <div style={{ fontSize: '11px', color: '#94a3b8' }}>{stat.label}</div>
