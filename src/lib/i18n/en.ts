@@ -64,6 +64,7 @@ export const en: TranslationDictionary = {
     settings: 'Settings',
     leaderboard: 'Leaderboard',
     advisor: 'Advisor',
+    stats: 'Stats',
     more: 'More',
     menu: 'Menu',
     openMenu: 'Open menu',
@@ -728,7 +729,21 @@ export const en: TranslationDictionary = {
     theme: 'Theme',
   },
 
-  streakBanner: {
+  titles: {
+    nameless: 'Nameless',
+    incomeRecruit: 'Income Recruit',
+    eRank: 'E-Rank Hunter',
+    dRank: 'D-Rank Hunter',
+    cRank: 'C-Rank Hunter',
+    bRank: 'B-Rank Hunter',
+    aRank: 'A-Rank Hunter',
+    incomeArchitect: 'Income Architect',
+    sRank: 'S-Rank Hunter',
+    magnate: 'Magnate',
+    shadowMonarch: 'Shadow Monarch',
+  },
+
+    streakBanner: {
     currentStreak: 'Current streak',
     notStarted: 'Streak not started',
     atRiskWarning: '⚠️ Complete an action to keep your streak!',

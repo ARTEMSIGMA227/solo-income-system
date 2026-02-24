@@ -484,7 +484,7 @@ export default function DashboardPage() {
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
     triggerXpPulse();
 
-    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: levelInfo.title });
+    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
     prevLevelRef.current = newLevel;
     void trackProgress('complete_quests', 1);
 
@@ -558,7 +558,7 @@ export default function DashboardPage() {
     setTimeout(() => addFloat(`+${fmtCurrency(amount)}`, '#22c55e', event), 300);
     triggerXpPulse();
 
-    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: levelInfo.title });
+    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
     prevLevelRef.current = newLevel;
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
@@ -585,7 +585,7 @@ export default function DashboardPage() {
 
   const levelInfo = stats
     ? getLevelInfo(stats.total_xp_earned, stats.total_xp_lost)
-    : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Unnamed', titleIcon: '👤', totalXPEarned: 0 };
+    : { level: 1, currentXP: 0, xpToNext: 750, progressPercent: 0, title: 'Unnamed', titleKey: 'nameless', titleIcon: '👤', totalXPEarned: 0 };
 
   const actionsTarget = profile?.daily_actions_target || 30;
   const actionsPercent = Math.min(Math.round((todayActions / actionsTarget) * 100), 100);
@@ -635,7 +635,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
+      <HunterAvatar level={levelInfo.level} title={(t.titles[levelInfo.titleKey] || levelInfo.title)} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
         <StreakBanner userId={user?.id ?? ''} />

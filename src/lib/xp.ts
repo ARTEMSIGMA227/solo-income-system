@@ -7,6 +7,7 @@ export interface LevelInfo {
   progressPercent: number;
   totalXPEarned: number;
   title: string;
+  titleKey: string;
   titleIcon: string;
 }
 
@@ -16,14 +17,12 @@ export function calculateLevelFromTotalXP(netXP: number): {
 } {
   let level = 1;
   let remaining = Math.max(netXP, 0);
-
   while (true) {
     const needed = xpToNextLevel(level);
     if (remaining < needed) break;
     remaining -= needed;
     level++;
   }
-
   return { level, remainingXP: remaining };
 }
 
@@ -41,6 +40,7 @@ export function getLevelInfo(totalEarned: number, totalLost: number): LevelInfo 
     progressPercent,
     totalXPEarned: totalEarned,
     title: titleInfo.title,
+    titleKey: titleInfo.titleKey,
     titleIcon: titleInfo.icon,
   };
 }
@@ -65,6 +65,5 @@ export function calculatePenalty(consecutiveMisses: number): {
     consecutiveMisses >= PENALTIES.consecutive_misses_threshold
       ? PENALTIES.streak_break_levels
       : 0;
-
   return { xpPenalty, levelPenalty };
 }

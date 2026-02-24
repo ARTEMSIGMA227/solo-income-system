@@ -27,6 +27,7 @@ import {
   Map,
   Medal,
   Bot,
+  Activity,
 } from "lucide-react";
 
 const NAV_ITEMS_CONFIG: Array<{
@@ -46,6 +47,7 @@ const NAV_ITEMS_CONFIG: Array<{
   { href: "/achievements", labelKey: "achievements", icon: Trophy, mobileBottom: false },
   { href: "/leaderboard", labelKey: "leaderboard", icon: Medal, mobileBottom: false },
   { href: "/advisor", labelKey: "advisor", icon: Bot, mobileBottom: false },
+  { href: "/stats", labelKey: "stats", icon: Activity, mobileBottom: false },
   { href: "/analytics", labelKey: "analytics", icon: BarChart3, mobileBottom: false },
   { href: "/settings", labelKey: "settings", icon: Settings, mobileBottom: false },
 ];

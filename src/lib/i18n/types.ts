@@ -64,6 +64,7 @@ export interface TranslationDictionary {
     settings: string;
     leaderboard: string;
     advisor: string;
+    stats: string;
     more: string;
     menu: string;
     openMenu: string;
@@ -593,7 +594,9 @@ export interface TranslationDictionary {
     theme: string;
   };
   
-  streakBanner: {
+  titles: Record<string, string>;
+
+    streakBanner: {
     currentStreak: string;
     notStarted: string;
     atRiskWarning: string;

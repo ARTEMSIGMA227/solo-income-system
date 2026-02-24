@@ -64,6 +64,7 @@ export const ru: TranslationDictionary = {
     settings: 'Настройки',
     leaderboard: 'Лидеры',
     advisor: 'Советник',
+    stats: 'Статы',
     more: 'Ещё',
     menu: 'Меню',
     openMenu: 'Открыть меню',
@@ -728,6 +729,20 @@ export const ru: TranslationDictionary = {
     theme: 'Тема',
   },
   
+  titles: {
+    nameless: 'Безымянный',
+    incomeRecruit: 'Рекрут дохода',
+    eRank: 'Охотник E-ранга',
+    dRank: 'Охотник D-ранга',
+    cRank: 'Охотник C-ранга',
+    bRank: 'Охотник B-ранга',
+    aRank: 'Охотник A-ранга',
+    incomeArchitect: 'Архитектор дохода',
+    sRank: 'S-ранг Охотник',
+    magnate: 'Магнат',
+    shadowMonarch: 'Теневой Монарх',
+  },
+
   streakBanner: {
     currentStreak: 'Текущая серия',
     notStarted: 'Серия не начата',

@@ -32,18 +32,18 @@ export function xpForLevel(targetLevel: number): number {
   return total;
 }
 
-export const TITLES: { minLevel: number; title: string; icon: string }[] = [
-  { minLevel: 1, title: 'Безымянный', icon: '💀' },
-  { minLevel: 3, title: 'Рекрут дохода', icon: '🗡️' },
-  { minLevel: 5, title: 'Охотник E-ранга', icon: '🏹' },
-  { minLevel: 8, title: 'Охотник D-ранга', icon: '⚔️' },
-  { minLevel: 12, title: 'Охотник C-ранга', icon: '🔥' },
-  { minLevel: 16, title: 'Охотник B-ранга', icon: '💎' },
-  { minLevel: 20, title: 'Охотник A-ранга', icon: '👑' },
-  { minLevel: 25, title: 'Архитектор дохода', icon: '🏛️' },
-  { minLevel: 30, title: 'S-ранг Охотник', icon: '⚡' },
-  { minLevel: 40, title: 'Магнат', icon: '🌟' },
-  { minLevel: 50, title: 'Теневой Монарх', icon: '👁️' },
+export const TITLES: { minLevel: number; title: string; titleKey: string; icon: string }[] = [
+  { minLevel: 1, title: 'Безымянный', titleKey: 'nameless', icon: '👢' },
+  { minLevel: 3, title: 'Рекрут дохода', titleKey: 'incomeRecruit', icon: '🗡️' },
+  { minLevel: 5, title: 'Охотник E-ранга', titleKey: 'eRank', icon: '🏹' },
+  { minLevel: 8, title: 'Охотник D-ранга', titleKey: 'dRank', icon: '⚔️' },
+  { minLevel: 12, title: 'Охотник C-ранга', titleKey: 'cRank', icon: '🔥' },
+  { minLevel: 16, title: 'Охотник B-ранга', titleKey: 'bRank', icon: '👊' },
+  { minLevel: 20, title: 'Охотник A-ранга', titleKey: 'aRank', icon: '👑' },
+  { minLevel: 25, title: 'Архитектор дохода', titleKey: 'incomeArchitect', icon: '🏛️' },
+  { minLevel: 30, title: 'S-ранг Охотник', titleKey: 'sRank', icon: '⚡' },
+  { minLevel: 40, title: 'Магнат', titleKey: 'magnate', icon: '🌟' },
+  { minLevel: 50, title: 'Теневой Монарх', titleKey: 'shadowMonarch', icon: '👁️' },
 ];
 
 export function getTitleForLevel(level: number) {
