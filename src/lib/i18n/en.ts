@@ -572,10 +572,6 @@ export const en: TranslationDictionary = {
       reject: 'Reject',
       hunterLabel: (id) => `Hunter #${id}`,
     },
-    chat: {
-      empty: 'No messages yet. Start the conversation!',
-      placeholder: 'Write a message...',
-    },
   },
 
   achievements: {
@@ -741,13 +737,6 @@ export const en: TranslationDictionary = {
     streakDay5plus: 'days',
   },
 
-  // ✅ ADDED: required by TranslationDictionary + used in StreakBanner.tsx
-  streakBanner: {
-    currentStreak: 'Current streak',
-    notStarted: 'Streak not started',
-    atRiskWarning: '⚠️ Do an action today to keep your streak!',
-  },
-
   death: {
     missTitle: 'DAY MISSED',
     levelDownTitle: 'LEVEL LOST',
@@ -791,46 +780,6 @@ export const en: TranslationDictionary = {
       medium: 'Medium',
       hard: 'Hard',
     },
-    missionTitles: {
-      easy_login: 'I\'m here!',
-      easy_quest_1: 'First step',
-      easy_quest_2: 'Double strike',
-      easy_focus_10: 'Quick focus',
-      easy_focus_15: 'Warm-up',
-      easy_income_500: 'Drop in the ocean',
-      med_quest_3: 'Triple threat',
-      med_quest_5: 'Five a day',
-      med_focus_30: 'Deep focus',
-      med_focus_45: 'Mind marathon',
-      med_income_2000: 'Business move',
-      med_boss_100: 'Boss hunter',
-      hard_quest_7: 'Quest machine',
-      hard_quest_10: 'Daily ten',
-      hard_focus_60: 'Power hour',
-      hard_focus_90: 'Ultra focus',
-      hard_income_5000: 'Big score',
-      hard_boss_300: 'Boss slayer',
-    },
-    missionDescriptions: {
-      easy_login: 'Log in to the system (streak ≥ 1)',
-      easy_quest_1: 'Complete 1 quest',
-      easy_quest_2: 'Complete 2 quests',
-      easy_focus_10: 'Spend 10 minutes in focus',
-      easy_focus_15: 'Spend 15 minutes in focus',
-      easy_income_500: 'Earn $500',
-      med_quest_3: 'Complete 3 quests',
-      med_quest_5: 'Complete 5 quests',
-      med_focus_30: 'Spend 30 minutes in focus',
-      med_focus_45: 'Spend 45 minutes in focus',
-      med_income_2000: 'Earn $2,000',
-      med_boss_100: 'Deal 100 damage to a boss',
-      hard_quest_7: 'Complete 7 quests',
-      hard_quest_10: 'Complete 10 quests',
-      hard_focus_60: 'Spend 60 minutes in focus',
-      hard_focus_90: 'Spend 90 minutes in focus',
-      hard_income_5000: 'Earn $5,000',
-      hard_boss_300: 'Deal 300 damage to a boss',
-    },
   },
 
   dailyChallenge: {
@@ -842,7 +791,7 @@ export const en: TranslationDictionary = {
   },
 
   advisor: {
-    title: '🤖 AI Advisor',
+    title: 'AI Advisor',
     collapse: 'Collapse ▲',
     moreAdvice: (count) => `${count} more tips ▼`,
   },

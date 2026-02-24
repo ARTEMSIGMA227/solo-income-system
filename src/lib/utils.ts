@@ -9,10 +9,18 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat('ru-RU').format(num);
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('ru-RU', {
+/**
+ * @deprecated Use formatCurrency from useT() context instead for currency-aware formatting.
+ * This function is kept for backward compatibility — defaults to RUB.
+ */
+export function formatCurrency(
+  amount: number,
+  currency: 'RUB' | 'USD' = 'RUB',
+  locale: string = 'ru-RU',
+): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'RUB',
+    currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount);

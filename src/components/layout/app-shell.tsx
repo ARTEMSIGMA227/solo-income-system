@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n";
 import { XPBar } from "@/components/ui/xp-bar";
 import { ClassBadge } from "@/components/ui/class-badge";
 import { LanguageToggle } from "@/components/ui/language-toggle";
+import { CurrencyToggle } from "@/components/ui/currency-toggle";
 import {
   LayoutDashboard,
   Swords,
@@ -85,7 +86,10 @@ function Sidebar({ pathname }: { pathname: string }) {
           </div>
           <span className="text-sm font-bold tracking-tight text-white">Solo Income</span>
         </div>
-        <LanguageToggle compact />
+        <div className="flex items-center gap-1">
+          <CurrencyToggle compact />
+          <LanguageToggle compact />
+        </div>
       </div>
 
       <div className="border-b border-white/10 px-5 py-4">
@@ -168,6 +172,7 @@ function MobileHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <span className="flex-1 truncate text-sm font-semibold text-white">
           {current?.label || "Solo Income"}
         </span>
+        <CurrencyToggle compact />
         <LanguageToggle compact />
         <ClassBadge compact />
       </div>
@@ -217,6 +222,7 @@ function MobileSidebarOverlay({
         <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
           <span className="text-sm font-bold text-white">{t.nav.menu}</span>
           <div className="flex items-center gap-2">
+            <CurrencyToggle compact />
             <LanguageToggle compact />
             <button
               type="button"

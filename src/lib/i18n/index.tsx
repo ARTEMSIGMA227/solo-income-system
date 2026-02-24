@@ -1,5 +1,4 @@
 'use client';
-
 import {
   createContext,
   useContext,
@@ -13,6 +12,7 @@ import { en } from './en';
 import type { Locale, TranslationDictionary } from './types';
 
 export type { Locale, TranslationDictionary };
+export type Currency = 'RUB' | 'USD';
 
 const dictionaries: Record<Locale, TranslationDictionary> = { ru, en };
 
@@ -20,15 +20,30 @@ interface LanguageContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: TranslationDictionary;
+  currency: Currency;
+  setCurrency: (currency: Currency) => void;
+  formatCurrency: (amount: number) => string;
 }
+
+const defaultFormatCurrency = (amount: number) =>
+  new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 
 const LanguageContext = createContext<LanguageContextValue>({
   locale: 'ru',
   setLocale: () => {},
   t: ru,
+  currency: 'RUB',
+  setCurrency: () => {},
+  formatCurrency: defaultFormatCurrency,
 });
 
 const STORAGE_KEY = 'sis-locale';
+const CURRENCY_KEY = 'sis-currency';
 
 function getInitialLocale(): Locale {
   if (typeof window === 'undefined') return 'ru';
@@ -38,7 +53,6 @@ function getInitialLocale(): Locale {
   } catch {
     // SSR or localStorage unavailable
   }
-  // Detect browser language
   if (typeof navigator !== 'undefined') {
     const browserLang = navigator.language?.slice(0, 2);
     if (browserLang === 'en') return 'en';
@@ -46,12 +60,35 @@ function getInitialLocale(): Locale {
   return 'ru';
 }
 
+function getInitialCurrency(): Currency {
+  if (typeof window === 'undefined') return 'RUB';
+  try {
+    const stored = localStorage.getItem(CURRENCY_KEY);
+    if (stored === 'RUB' || stored === 'USD') return stored;
+  } catch {
+    // SSR or localStorage unavailable
+  }
+  return 'RUB';
+}
+
+function buildFormatCurrency(locale: Locale, currency: Currency) {
+  return (amount: number) =>
+    new Intl.NumberFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('ru');
+  const [currency, setCurrencyState] = useState<Currency>('RUB');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setLocaleState(getInitialLocale());
+    setCurrencyState(getInitialCurrency());
     setMounted(true);
   }, []);
 
@@ -62,19 +99,33 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-    // Update <html lang="">
     if (typeof document !== 'undefined') {
       document.documentElement.lang = newLocale;
     }
   }, []);
 
-  const t = dictionaries[locale];
+  const setCurrency = useCallback((newCurrency: Currency) => {
+    setCurrencyState(newCurrency);
+    try {
+      localStorage.setItem(CURRENCY_KEY, newCurrency);
+    } catch {
+      // ignore
+    }
+  }, []);
 
-  // Prevent hydration mismatch: render with default locale until mounted
+  const t = dictionaries[locale];
+  const fmt = buildFormatCurrency(
+    mounted ? locale : 'ru',
+    mounted ? currency : 'RUB',
+  );
+
   const value: LanguageContextValue = {
     locale: mounted ? locale : 'ru',
     setLocale,
     t: mounted ? t : ru,
+    currency: mounted ? currency : 'RUB',
+    setCurrency,
+    formatCurrency: fmt,
   };
 
   return (

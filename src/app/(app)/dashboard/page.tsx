@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { XP_REWARDS } from '@/lib/constants';
 import { toast } from 'sonner';
 import HunterAvatar from '@/components/character/HunterAvatar';
@@ -75,9 +75,9 @@ export default function DashboardPage() {
   const { items: floatItems, addFloat } = useFloatXP();
   const [levelUpData, setLevelUpData] = useState<{ level: number; title: string } | null>(null);
   const prevLevelRef = useRef<number | null>(null);
-  const { t, locale } = useT();
+  const { t, locale, formatCurrency: fmtCurrency } = useT();
 
-  // Locale-dependent date formatting — re-runs when locale changes
+  // Locale-dependent date formatting
   useEffect(() => {
     setCurrentHour(new Date().getHours());
     setTodayDate(
@@ -544,7 +544,7 @@ export default function DashboardPage() {
     setTodayActions((prev) => prev + 1);
 
     const bonusText = bonusParts.length > 0 ? ` (${bonusParts.join(', ')})` : '';
-    toast.success(t.dashboard.toast.incomeAdded(formatCurrency(amount), finalXP, finalGold) + bonusText);
+    toast.success(t.dashboard.toast.incomeAdded(fmtCurrency(amount), finalXP, finalGold) + bonusText);
 
     if (isCrit) {
       setTimeout(() => {
@@ -555,7 +555,7 @@ export default function DashboardPage() {
     const xpColor = isCrit ? '#f59e0b' : '#a78bfa';
     addFloat(`+${finalXP} XP${isCrit ? ' ⚡' : ''}`, xpColor, event);
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
-    setTimeout(() => addFloat(`+${formatCurrency(amount)}`, '#22c55e', event), 300);
+    setTimeout(() => addFloat(`+${fmtCurrency(amount)}`, '#22c55e', event), 300);
     triggerXpPulse();
 
     if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: levelInfo.title });
@@ -638,7 +638,7 @@ export default function DashboardPage() {
       <HunterAvatar level={levelInfo.level} title={levelInfo.title} config={charConfig} onEdit={() => setShowEditor(true)} />
 
       <div style={{ marginTop: '12px' }}>
-        <StreakBanner userId={user?.id ?? ''} />
+        <StreakBanner streak={profile?.streak_current || 0} bestStreak={profile?.streak_best || 0} />
       </div>
 
       <XPBar level={levelInfo.level} currentXP={levelInfo.currentXP} xpToNext={levelInfo.xpToNext} progressPercent={levelInfo.progressPercent} pulsing={xpPulsing} />
@@ -672,11 +672,11 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t.dashboard.todayIncome}</div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{formatCurrency(todayIncome)}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#22c55e' }}>{fmtCurrency(todayIncome)}</div>
           </div>
           <div style={{ flex: 1, backgroundColor: '#16161f', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>{t.dashboard.monthIncome} ({monthPercent}%)</div>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(monthIncome)}</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#a78bfa' }}>{fmtCurrency(monthIncome)}</div>
           </div>
         </div>
       </div>

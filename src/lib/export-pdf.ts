@@ -13,38 +13,129 @@ interface PdfExportData {
   streakBest: number;
   quests: { title: string; xp: number; completions: number }[];
   recentEvents: { date: string; type: string; xp: number; description: string }[];
+  locale?: 'ru' | 'en';
+  currency?: 'RUB' | 'USD';
 }
 
-function formatDate(): string {
-  return new Date().toLocaleDateString('ru-RU', {
+function formatDate(locale: 'ru' | 'en'): string {
+  return new Date().toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
 }
 
-function formatMoney(n: number): string {
-  return n.toLocaleString('ru-RU') + ' \u20BD';
+function formatMoney(n: number, locale: 'ru' | 'en', currency: 'RUB' | 'USD'): string {
+  return new Intl.NumberFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
-function eventTypeLabel(type: string): string {
-  const map: Record<string, string> = {
-    task: '\u041A\u0432\u0435\u0441\u0442',
-    hard_task: '\u0421\u043B\u043E\u0436\u043D\u044B\u0439',
-    action: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435',
-    sale: '\u041F\u0440\u043E\u0434\u0430\u0436\u0430',
-    streak_checkin: '\u0421\u0435\u0440\u0438\u044F',
-    perk_bonus: '\u041F\u0435\u0440\u043A',
-    boss_damage: '\u0411\u043E\u0441\u0441',
-    shop_purchase: '\u041C\u0430\u0433\u0430\u0437\u0438\u043D',
-    penalty: '\u0428\u0442\u0440\u0430\u0444',
-  };
-  return map[type] || type;
+interface Labels {
+  reportTitle: string;
+  levelLabel: string;
+  streakLabel: string;
+  bestLabel: string;
+  daysLabel: string;
+  keyMetrics: string;
+  metric: string;
+  value: string;
+  totalXp: string;
+  totalIncome: string;
+  totalActions: string;
+  totalSales: string;
+  totalClients: string;
+  quests: string;
+  quest: string;
+  xp: string;
+  completions: string;
+  recentEvents: string;
+  date: string;
+  type: string;
+  description: string;
+  eventTypes: Record<string, string>;
 }
+
+const labelsRu: Labels = {
+  reportTitle: 'Аналитический отчёт',
+  levelLabel: 'Уровень',
+  streakLabel: 'Серия',
+  bestLabel: 'лучшая',
+  daysLabel: 'дн.',
+  keyMetrics: 'Ключевые метрики',
+  metric: 'Метрика',
+  value: 'Значение',
+  totalXp: 'Общий XP',
+  totalIncome: 'Общий доход',
+  totalActions: 'Всего действий',
+  totalSales: 'Всего продаж',
+  totalClients: 'Всего клиентов',
+  quests: 'Квесты',
+  quest: 'Квест',
+  xp: 'XP',
+  completions: 'Выполнения',
+  recentEvents: 'Последние события (30)',
+  date: 'Дата',
+  type: 'Тип',
+  description: 'Описание',
+  eventTypes: {
+    task: 'Квест',
+    hard_task: 'Сложный',
+    action: 'Действие',
+    sale: 'Продажа',
+    streak_checkin: 'Серия',
+    perk_bonus: 'Перк',
+    boss_damage: 'Босс',
+    shop_purchase: 'Магазин',
+    penalty: 'Штраф',
+  },
+};
+
+const labelsEn: Labels = {
+  reportTitle: 'Analytics Report',
+  levelLabel: 'Level',
+  streakLabel: 'Streak',
+  bestLabel: 'best',
+  daysLabel: 'd.',
+  keyMetrics: 'Key Metrics',
+  metric: 'Metric',
+  value: 'Value',
+  totalXp: 'Total XP',
+  totalIncome: 'Total Income',
+  totalActions: 'Total Actions',
+  totalSales: 'Total Sales',
+  totalClients: 'Total Clients',
+  quests: 'Quests',
+  quest: 'Quest',
+  xp: 'XP',
+  completions: 'Completions',
+  recentEvents: 'Recent Events (30)',
+  date: 'Date',
+  type: 'Type',
+  description: 'Description',
+  eventTypes: {
+    task: 'Quest',
+    hard_task: 'Hard',
+    action: 'Action',
+    sale: 'Sale',
+    streak_checkin: 'Streak',
+    perk_bonus: 'Perk',
+    boss_damage: 'Boss',
+    shop_purchase: 'Shop',
+    penalty: 'Penalty',
+  },
+};
 
 export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   const { default: jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
+
+  const locale = data.locale ?? 'ru';
+  const currency = data.currency ?? 'RUB';
+  const L = locale === 'ru' ? labelsRu : labelsEn;
 
   const doc = new jsPDF();
 
@@ -72,7 +163,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
   doc.text('SOLO INCOME SYSTEM', 14, 18);
 
   doc.setFontSize(10);
-  doc.text('\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u043E\u0442\u0447\u0451\u0442 | ' + formatDate(), 14, 27);
+  doc.text(L.reportTitle + ' | ' + formatDate(locale), 14, 27);
 
   // ===== PLAYER CARD =====
   doc.setFillColor(18, 18, 26);
@@ -84,28 +175,28 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
 
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(10);
-  doc.text('\u0423\u0440\u043E\u0432\u0435\u043D\u044C ' + String(data.level), 22, 63);
+  doc.text(L.levelLabel + ' ' + String(data.level), 22, 63);
 
   doc.setTextColor(34, 197, 94);
   doc.text(
-    '\u0421\u0435\u0440\u0438\u044F: ' + String(data.streakCurrent) + ' \u0434\u043D. (\u043B\u0443\u0447\u0448\u0430\u044F: ' + String(data.streakBest) + ')',
+    L.streakLabel + ': ' + String(data.streakCurrent) + ' ' + L.daysLabel + ' (' + L.bestLabel + ': ' + String(data.streakBest) + ')',
     pageW - 22, 54, { align: 'right' },
   );
 
   // ===== STATS TABLE =====
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(14);
-  doc.text('\u041A\u043B\u044E\u0447\u0435\u0432\u044B\u0435 \u043C\u0435\u0442\u0440\u0438\u043A\u0438', 14, 82);
+  doc.text(L.keyMetrics, 14, 82);
 
   autoTable(doc, {
     startY: 86,
-    head: [['\u041C\u0435\u0442\u0440\u0438\u043A\u0430', '\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435']],
+    head: [[L.metric, L.value]],
     body: [
-      ['\u041E\u0431\u0449\u0438\u0439 XP', String(data.totalXp)],
-      ['\u041E\u0431\u0449\u0438\u0439 \u0434\u043E\u0445\u043E\u0434', formatMoney(data.totalIncome)],
-      ['\u0412\u0441\u0435\u0433\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439', String(data.totalActions)],
-      ['\u0412\u0441\u0435\u0433\u043E \u043F\u0440\u043E\u0434\u0430\u0436', String(data.totalSales)],
-      ['\u0412\u0441\u0435\u0433\u043E \u043A\u043B\u0438\u0435\u043D\u0442\u043E\u0432', String(data.totalClients)],
+      [L.totalXp, String(data.totalXp)],
+      [L.totalIncome, formatMoney(data.totalIncome, locale, currency)],
+      [L.totalActions, String(data.totalActions)],
+      [L.totalSales, String(data.totalSales)],
+      [L.totalClients, String(data.totalClients)],
     ],
     theme: 'grid',
     headStyles: {
@@ -137,11 +228,11 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     doc.setFont('Roboto', 'normal');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.text('\u041A\u0432\u0435\u0441\u0442\u044B', 14, afterStats);
+    doc.text(L.quests, 14, afterStats);
 
     autoTable(doc, {
       startY: afterStats + 4,
-      head: [['\u041A\u0432\u0435\u0441\u0442', 'XP', '\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F']],
+      head: [[L.quest, L.xp, L.completions]],
       body: data.quests.map((q) => [
         q.title.length > 30 ? q.title.substring(0, 30) + '...' : q.title,
         String(q.xp),
@@ -180,14 +271,14 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     doc.setFont('Roboto', 'normal');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
-    doc.text('\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F (30)', 14, startY);
+    doc.text(L.recentEvents, 14, startY);
 
     autoTable(doc, {
       startY: startY + 4,
-      head: [['\u0414\u0430\u0442\u0430', '\u0422\u0438\u043F', 'XP', '\u041E\u043F\u0438\u0441\u0430\u043D\u0438\u0435']],
+      head: [[L.date, L.type, L.xp, L.description]],
       body: data.recentEvents.map((e) => [
         e.date,
-        eventTypeLabel(e.type),
+        L.eventTypes[e.type] || e.type,
         (e.xp >= 0 ? '+' : '') + String(e.xp),
         e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
       ]),
@@ -234,7 +325,7 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(8);
     doc.text(
-      'Solo Income System | ' + formatDate() + ' | ' + String(i) + '/' + String(pageCount),
+      'Solo Income System | ' + formatDate(locale) + ' | ' + String(i) + '/' + String(pageCount),
       pageW / 2, pageH - 5, { align: 'center' },
     );
   }
