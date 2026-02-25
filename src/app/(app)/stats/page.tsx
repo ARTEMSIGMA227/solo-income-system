@@ -6,24 +6,23 @@ import { useT } from '@/lib/i18n';
 import { exportStatsPdf } from '@/lib/export-pdf';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart,
+  ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, Minus, DollarSign,
   Activity, Calendar, Target, ArrowUpRight, ArrowDownRight,
-  Loader2, FileDown, Flame,
+  Loader2, FileDown, Flame, Zap,
 } from 'lucide-react';
+import ActivityCalendar from './ActivityCalendar';
 
 type Period = 'week' | 'month' | 'quarter' | 'year' | 'all';
 
-interface Transaction {
-  id: string;
-  amount: number;
-  type: 'income' | 'expense';
-  category: string;
-  description: string;
-  date: string;
-  created_at: string;
+interface IncomeRow { amount: number; source: string; event_date: string }
+interface CompletionRow { completion_date: string; count_done: number }
+interface XPRow { event_date: string; xp_amount: number; event_type: string }
+interface StatsRow {
+  level: number; total_xp_earned: number; total_xp_lost: number;
+  total_income: number; total_actions: number; total_sales: number; total_clients: number;
 }
 
 interface CategoryStat {
@@ -43,14 +42,18 @@ export default function StatsPage() {
   const { t, locale, currency, formatCurrency } = useT();
   const supabase = createClient();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [incomeEvents, setIncomeEvents] = useState<IncomeRow[]>([]);
+  const [completions, setCompletions] = useState<CompletionRow[]>([]);
+  const [xpEvents, setXPEvents] = useState<XPRow[]>([]);
+  const [stats, setStats] = useState<StatsRow | null>(null);
+  const [streakCurrent, setStreakCurrent] = useState(0);
+  const [streakBest, setStreakBest] = useState(0);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('month');
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfLangOpen, setPdfLangOpen] = useState(false);
   const pdfRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (pdfRef.current && !pdfRef.current.contains(e.target as Node)) {
@@ -61,193 +64,180 @@ export default function StatsPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Load transactions
   useEffect(() => {
-    loadTransactions();
+    loadData();
   }, []);
 
-  async function loadTransactions() {
+  async function loadData() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date', { ascending: true });
+      const [
+        { data: incData },
+        { data: compData },
+        { data: xpData },
+        { data: statsData },
+        { data: profileData },
+      ] = await Promise.all([
+        supabase.from('income_events').select('amount, source, event_date')
+          .eq('user_id', user.id).order('event_date', { ascending: true }),
+        supabase.from('completions').select('completion_date, count_done')
+          .eq('user_id', user.id).order('completion_date', { ascending: true }),
+        supabase.from('xp_events').select('event_date, xp_amount, event_type')
+          .eq('user_id', user.id).order('event_date', { ascending: true }),
+        supabase.from('stats').select('level, total_xp_earned, total_xp_lost, total_income, total_actions, total_sales, total_clients')
+          .eq('user_id', user.id).single(),
+        supabase.from('profiles').select('streak_current, streak_best')
+          .eq('id', user.id).single(),
+      ]);
 
-      if (error) throw error;
-      setTransactions(data || []);
+      setIncomeEvents((incData || []).map(r => ({ ...r, amount: Number(r.amount) })));
+      setCompletions(compData || []);
+      setXPEvents(xpData || []);
+      setStats(statsData);
+      setStreakCurrent(profileData?.streak_current || 0);
+      setStreakBest(profileData?.streak_best || 0);
     } catch (err) {
-      console.error('Error loading transactions:', err);
+      console.error('Error loading stats:', err);
     } finally {
       setLoading(false);
     }
   }
 
-  // Filter transactions by period
-  const filteredTransactions = useMemo(() => {
-    if (period === 'all') return transactions;
-
+  // Filter by period
+  function filterByDate<T extends { event_date?: string; completion_date?: string }>(items: T[]): T[] {
+    if (period === 'all') return items;
     const now = new Date();
     let startDate: Date;
-
     switch (period) {
-      case 'week':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarter':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case 'year':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-      default:
-        return transactions;
+      case 'week': startDate = new Date(now.getTime() - 7 * 86400000); break;
+      case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+      case 'quarter': startDate = new Date(now.getTime() - 90 * 86400000); break;
+      case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
+      default: return items;
     }
-
-    return transactions.filter(tx => new Date(tx.date) >= startDate);
-  }, [transactions, period]);
-
-  // Previous period transactions for comparison
-  const prevPeriodTransactions = useMemo(() => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
-
-    switch (period) {
-      case 'week':
-        endDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        startDate = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        endDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        break;
-      case 'quarter':
-        endDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-        break;
-      case 'year':
-        endDate = new Date(now.getFullYear(), 0, 1);
-        startDate = new Date(now.getFullYear() - 1, 0, 1);
-        break;
-      default:
-        return [];
-    }
-
-    return transactions.filter(tx => {
-      const d = new Date(tx.date);
-      return d >= startDate && d < endDate;
+    return items.filter(item => {
+      const d = new Date((item.event_date || item.completion_date) as string);
+      return d >= startDate;
     });
-  }, [transactions, period]);
+  }
 
-  // Compute overview stats
+  const filteredIncome = useMemo(() => filterByDate(incomeEvents), [incomeEvents, period]);
+  const filteredCompletions = useMemo(() => filterByDate(completions), [completions, period]);
+  const filteredXP = useMemo(() => filterByDate(xpEvents), [xpEvents, period]);
+
+  // Overview
   const overview = useMemo(() => {
-    const income = filteredTransactions
-      .filter(tx => tx.type === 'income')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-    const expenses = filteredTransactions
-      .filter(tx => tx.type === 'expense')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-    const netProfit = income - expenses;
-    const count = filteredTransactions.length;
-    const avgTransaction = count > 0
-      ? filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0) / count
-      : 0;
-    const profitMargin = income > 0 ? (netProfit / income) * 100 : 0;
+    const totalIncome = filteredIncome.reduce((s, r) => s + r.amount, 0);
+    const totalActions = filteredCompletions.reduce((s, r) => s + r.count_done, 0);
+    const totalXP = filteredXP.filter(r => r.xp_amount > 0).reduce((s, r) => s + r.xp_amount, 0);
+    const lostXP = filteredXP.filter(r => r.xp_amount < 0).reduce((s, r) => s + Math.abs(r.xp_amount), 0);
+    const activeDays = new Set([
+      ...filteredCompletions.map(c => c.completion_date),
+      ...filteredXP.map(x => x.event_date),
+    ]).size;
+    const avgDailyIncome = activeDays > 0 ? totalIncome / activeDays : 0;
 
-    const prevIncome = prevPeriodTransactions
-      .filter(tx => tx.type === 'income')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-    const prevExpenses = prevPeriodTransactions
-      .filter(tx => tx.type === 'expense')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-    const prevProfit = prevIncome - prevExpenses;
+    return { totalIncome, totalActions, totalXP, lostXP, activeDays, avgDailyIncome };
+  }, [filteredIncome, filteredCompletions, filteredXP]);
 
-    const incomeChange = prevIncome > 0
-      ? ((income - prevIncome) / prevIncome) * 100
-      : income > 0 ? 100 : 0;
-    const expensesChange = prevExpenses > 0
-      ? ((expenses - prevExpenses) / prevExpenses) * 100
-      : expenses > 0 ? 100 : 0;
-    const profitChange = prevProfit !== 0
-      ? ((netProfit - prevProfit) / Math.abs(prevProfit)) * 100
-      : netProfit > 0 ? 100 : 0;
-
-    return {
-      income, expenses, netProfit, count, avgTransaction, profitMargin,
-      incomeChange, expensesChange, profitChange,
-    };
-  }, [filteredTransactions, prevPeriodTransactions]);
-
-  // Category stats
-  const incomeByCategory = useMemo(() => {
-    return getCategoryStats(filteredTransactions.filter(tx => tx.type === 'income'));
-  }, [filteredTransactions]);
-
-  const expensesByCategory = useMemo(() => {
-    return getCategoryStats(filteredTransactions.filter(tx => tx.type === 'expense'));
-  }, [filteredTransactions]);
-
-  function getCategoryStats(txs: Transaction[]): CategoryStat[] {
+  // Income by source
+  const incomeBySource = useMemo(() => {
     const map = new Map<string, { amount: number; count: number }>();
-    const total = txs.reduce((sum, tx) => sum + tx.amount, 0);
-
-    txs.forEach(tx => {
-      const existing = map.get(tx.category) || { amount: 0, count: 0 };
-      existing.amount += tx.amount;
+    const total = filteredIncome.reduce((s, r) => s + r.amount, 0);
+    filteredIncome.forEach(r => {
+      const src = r.source || 'other';
+      const existing = map.get(src) || { amount: 0, count: 0 };
+      existing.amount += r.amount;
       existing.count += 1;
-      map.set(tx.category, existing);
+      map.set(src, existing);
     });
-
     return Array.from(map.entries())
       .map(([category, { amount, count }]) => ({
-        category,
-        amount,
-        count,
+        category: t.analytics?.sources?.[category as keyof typeof t.analytics.sources] || category,
+        amount, count,
         percent: total > 0 ? (amount / total) * 100 : 0,
       }))
       .sort((a, b) => b.amount - a.amount);
-  }
+  }, [filteredIncome, t]);
 
-  // Daily trend chart data
+  // XP by type
+  const xpByType = useMemo(() => {
+    const map = new Map<string, { amount: number; count: number }>();
+    const positiveXP = filteredXP.filter(r => r.xp_amount > 0);
+    const total = positiveXP.reduce((s, r) => s + r.xp_amount, 0);
+    positiveXP.forEach(r => {
+      const existing = map.get(r.event_type) || { amount: 0, count: 0 };
+      existing.amount += r.xp_amount;
+      existing.count += 1;
+      map.set(r.event_type, existing);
+    });
+    return Array.from(map.entries())
+      .map(([category, { amount, count }]) => ({
+        category, amount, count,
+        percent: total > 0 ? (amount / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [filteredXP]);
+
+  // Daily trend
   const dailyTrendData = useMemo(() => {
-    const map = new Map<string, { date: string; income: number; expenses: number }>();
+    const map = new Map<string, { date: string; income: number; actions: number; xp: number }>();
+    const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
 
-    filteredTransactions.forEach(tx => {
-      const dateKey = tx.date.slice(0, 10);
-      const existing = map.get(dateKey) || { date: dateKey, income: 0, expenses: 0 };
-      if (tx.type === 'income') existing.income += tx.amount;
-      else existing.expenses += tx.amount;
-      map.set(dateKey, existing);
+    filteredIncome.forEach(r => {
+      const d = r.event_date;
+      const existing = map.get(d) || { date: d, income: 0, actions: 0, xp: 0 };
+      existing.income += r.amount;
+      map.set(d, existing);
+    });
+
+    filteredCompletions.forEach(r => {
+      const d = r.completion_date;
+      const existing = map.get(d) || { date: d, income: 0, actions: 0, xp: 0 };
+      existing.actions += r.count_done;
+      map.set(d, existing);
+    });
+
+    filteredXP.forEach(r => {
+      const d = r.event_date;
+      const existing = map.get(d) || { date: d, income: 0, actions: 0, xp: 0 };
+      if (r.xp_amount > 0) existing.xp += r.xp_amount;
+      map.set(d, existing);
     });
 
     return Array.from(map.values())
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(d => ({
         ...d,
-        profit: d.income - d.expenses,
-        dateLabel: new Date(d.date).toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
-          month: 'short', day: 'numeric',
-        }),
+        dateLabel: new Date(d.date).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' }),
       }));
-  }, [filteredTransactions, locale]);
+  }, [filteredIncome, filteredCompletions, filteredXP, locale]);
 
-  // Monthly comparison data
+  // Monthly comparison
   const monthlyData = useMemo(() => {
-    const map = new Map<string, { month: string; income: number; expenses: number }>();
+    const map = new Map<string, { month: string; income: number; actions: number; xp: number }>();
+    const dateLocale = locale === 'ru' ? 'ru-RU' : 'en-US';
 
-    transactions.forEach(tx => {
-      const d = new Date(tx.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const existing = map.get(key) || { month: key, income: 0, expenses: 0 };
-      if (tx.type === 'income') existing.income += tx.amount;
-      else existing.expenses += tx.amount;
+    incomeEvents.forEach(r => {
+      const key = r.event_date.slice(0, 7);
+      const existing = map.get(key) || { month: key, income: 0, actions: 0, xp: 0 };
+      existing.income += r.amount;
+      map.set(key, existing);
+    });
+
+    completions.forEach(r => {
+      const key = r.completion_date.slice(0, 7);
+      const existing = map.get(key) || { month: key, income: 0, actions: 0, xp: 0 };
+      existing.actions += r.count_done;
+      map.set(key, existing);
+    });
+
+    xpEvents.forEach(r => {
+      const key = r.event_date.slice(0, 7);
+      const existing = map.get(key) || { month: key, income: 0, actions: 0, xp: 0 };
+      if (r.xp_amount > 0) existing.xp += r.xp_amount;
       map.set(key, existing);
     });
 
@@ -256,56 +246,9 @@ export default function StatsPage() {
       .slice(-12)
       .map(d => ({
         ...d,
-        profit: d.income - d.expenses,
-        label: new Date(d.month + '-01').toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
-          month: 'short', year: '2-digit',
-        }),
+        label: new Date(d.month + '-01').toLocaleDateString(dateLocale, { month: 'short', year: '2-digit' }),
       }));
-  }, [transactions, locale]);
-
-  // Activity streaks
-  const streakInfo = useMemo(() => {
-    const activeDays = new Set(transactions.map(tx => tx.date.slice(0, 10)));
-    const sortedDays = Array.from(activeDays).sort();
-
-    if (sortedDays.length === 0) return { current: 0, longest: 0, total: 0 };
-
-    let current = 0;
-    let longest = 0;
-    let streak = 1;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-
-    if (activeDays.has(today) || activeDays.has(yesterday)) {
-      const startFrom = activeDays.has(today) ? today : yesterday;
-      current = 1;
-      let checkDate = new Date(startFrom);
-      while (true) {
-        checkDate = new Date(checkDate.getTime() - 86400000);
-        if (activeDays.has(checkDate.toISOString().slice(0, 10))) {
-          current++;
-        } else {
-          break;
-        }
-      }
-    }
-
-    for (let i = 1; i < sortedDays.length; i++) {
-      const prev = new Date(sortedDays[i - 1]);
-      const curr = new Date(sortedDays[i]);
-      const diff = (curr.getTime() - prev.getTime()) / 86400000;
-      if (diff === 1) {
-        streak++;
-      } else {
-        longest = Math.max(longest, streak);
-        streak = 1;
-      }
-    }
-    longest = Math.max(longest, streak);
-
-    return { current, longest, total: sortedDays.length };
-  }, [transactions]);
+  }, [incomeEvents, completions, xpEvents, locale]);
 
   // PDF Export
   async function handleExportPdf(pdfLocale: 'ru' | 'en') {
@@ -313,11 +256,7 @@ export default function StatsPage() {
     setPdfLangOpen(false);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', user?.id ?? '')
-        .single();
+      const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user?.id ?? '').single();
 
       const periodLabels: Record<string, Record<Period, string>> = {
         ru: { week: 'Неделя', month: 'Месяц', quarter: 'Квартал', year: 'Год', all: 'Всё время' },
@@ -327,10 +266,17 @@ export default function StatsPage() {
       await exportStatsPdf({
         displayName: profile?.display_name || 'Hunter',
         period: periodLabels[pdfLocale][period],
-        overview,
-        incomeByCategory: incomeByCategory.map(c => ({ category: c.category, amount: c.amount, percent: c.percent })),
-        expensesByCategory: expensesByCategory.map(c => ({ category: c.category, amount: c.amount, percent: c.percent })),
-        streaks: streakInfo,
+        overview: {
+          income: overview.totalIncome,
+          expenses: 0,
+          netProfit: overview.totalIncome,
+          count: overview.totalActions,
+          avgTransaction: overview.avgDailyIncome,
+          profitMargin: 0,
+        },
+        incomeByCategory: incomeBySource.map(c => ({ category: c.category, amount: c.amount, percent: c.percent })),
+        expensesByCategory: [],
+        streaks: { current: streakCurrent, longest: streakBest, total: overview.activeDays },
         locale: pdfLocale,
         currency,
       });
@@ -344,20 +290,6 @@ export default function StatsPage() {
     if (value > 2) return <ArrowUpRight className="w-4 h-4 text-green-400" />;
     if (value < -2) return <ArrowDownRight className="w-4 h-4 text-red-400" />;
     return <Minus className="w-4 h-4 text-gray-400" />;
-  }
-
-  function ChangeLabel({ value, inverse = false }: { value: number; inverse?: boolean }) {
-    const isPositive = inverse ? value < 0 : value > 0;
-    const color = Math.abs(value) < 2
-      ? 'text-gray-400'
-      : isPositive ? 'text-green-400' : 'text-red-400';
-
-    return (
-      <span className={`text-xs ${color} flex items-center gap-1`}>
-        <TrendIcon value={inverse ? -value : value} />
-        {value > 0 ? '+' : ''}{value.toFixed(1)}%
-      </span>
-    );
   }
 
   const periodButtons: { key: Period; label: string }[] = [
@@ -390,42 +322,30 @@ export default function StatsPage() {
           </h1>
           <p className="text-gray-400 text-sm mt-1">{t.stats.subtitle}</p>
         </div>
-
-        {/* PDF Export with language selector */}
         <div ref={pdfRef} className="relative">
           <button
             onClick={() => setPdfLangOpen(!pdfLangOpen)}
             disabled={pdfLoading}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {pdfLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FileDown className="w-4 h-4" />
-            )}
+            {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
             {t.stats.exportPdf || 'PDF'}
           </button>
-
           {pdfLangOpen && (
             <div className="absolute right-0 top-full mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden min-w-40">
-              <button
-                onClick={() => handleExportPdf('ru')}
-                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left hover:bg-gray-700 transition-colors text-white"
-              >
-                <span className="text-base">🇷🇺</span>
-                {locale === 'ru' ? 'Русский PDF' : 'Russian PDF'}
+              <button onClick={() => handleExportPdf('ru')} className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left hover:bg-gray-700 text-white">
+                <span className="text-base">🇷🇺</span> {locale === 'ru' ? 'Русский PDF' : 'Russian PDF'}
               </button>
-              <button
-                onClick={() => handleExportPdf('en')}
-                className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left hover:bg-gray-700 transition-colors text-white"
-              >
-                <span className="text-base">🇺🇸</span>
-                {locale === 'ru' ? 'English PDF' : 'English PDF'}
+              <button onClick={() => handleExportPdf('en')} className="flex items-center gap-3 w-full px-4 py-3 text-sm text-left hover:bg-gray-700 text-white">
+                <span className="text-base">🇺🇸</span> English PDF
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Activity Calendar */}
+      <ActivityCalendar />
 
       {/* Period Selector */}
       <div className="flex flex-wrap gap-2">
@@ -447,47 +367,44 @@ export default function StatsPage() {
       {/* Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <OverviewCard
-          icon={<TrendingUp className="w-5 h-5 text-green-400" />}
+          icon={<DollarSign className="w-5 h-5 text-green-400" />}
           label={t.stats.overview.totalIncome}
-          value={formatCurrency(overview.income)}
-          change={period !== 'all' ? <ChangeLabel value={overview.incomeChange} /> : undefined}
+          value={formatCurrency(overview.totalIncome)}
           color="green"
         />
         <OverviewCard
-          icon={<TrendingDown className="w-5 h-5 text-red-400" />}
-          label={t.stats.overview.totalExpenses}
-          value={formatCurrency(overview.expenses)}
-          change={period !== 'all' ? <ChangeLabel value={overview.expensesChange} inverse /> : undefined}
-          color="red"
-        />
-        <OverviewCard
-          icon={<DollarSign className="w-5 h-5 text-purple-400" />}
-          label={t.stats.overview.netProfit}
-          value={formatCurrency(overview.netProfit)}
-          change={period !== 'all' ? <ChangeLabel value={overview.profitChange} /> : undefined}
-          color={overview.netProfit >= 0 ? 'purple' : 'red'}
-        />
-        <OverviewCard
-          icon={<Activity className="w-5 h-5 text-blue-400" />}
-          label={t.stats.overview.transactionCount}
-          value={overview.count.toString()}
+          icon={<Target className="w-5 h-5 text-blue-400" />}
+          label={t.stats.overview.transactionCount || (locale === 'ru' ? 'Действия' : 'Actions')}
+          value={String(overview.totalActions)}
           color="blue"
         />
         <OverviewCard
-          icon={<Target className="w-5 h-5 text-amber-400" />}
-          label={t.stats.overview.avgTransaction}
-          value={formatCurrency(overview.avgTransaction)}
-          color="amber"
+          icon={<Zap className="w-5 h-5 text-purple-400" />}
+          label={locale === 'ru' ? 'Заработано XP' : 'XP Earned'}
+          value={String(overview.totalXP)}
+          color="purple"
+        />
+        <OverviewCard
+          icon={<TrendingDown className="w-5 h-5 text-red-400" />}
+          label={locale === 'ru' ? 'Потеряно XP' : 'XP Lost'}
+          value={String(overview.lostXP)}
+          color="red"
         />
         <OverviewCard
           icon={<Calendar className="w-5 h-5 text-cyan-400" />}
-          label={t.stats.overview.profitMargin}
-          value={`${overview.profitMargin.toFixed(1)}%`}
+          label={locale === 'ru' ? 'Активных дней' : 'Active Days'}
+          value={String(overview.activeDays)}
           color="cyan"
+        />
+        <OverviewCard
+          icon={<TrendingUp className="w-5 h-5 text-amber-400" />}
+          label={locale === 'ru' ? 'Ср. доход/день' : 'Avg Income/Day'}
+          value={formatCurrency(Math.round(overview.avgDailyIncome))}
+          color="amber"
         />
       </div>
 
-      {/* Activity Streaks */}
+      {/* Streaks */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-4 flex items-center gap-4">
           <div className="p-3 bg-orange-500/20 rounded-xl">
@@ -496,7 +413,7 @@ export default function StatsPage() {
           <div>
             <p className="text-sm text-gray-400">{t.stats.streaks.currentStreak}</p>
             <p className="text-2xl font-bold text-white">
-              {streakInfo.current} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
+              {streakCurrent} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
             </p>
           </div>
         </div>
@@ -507,7 +424,7 @@ export default function StatsPage() {
           <div>
             <p className="text-sm text-gray-400">{t.stats.streaks.longestStreak}</p>
             <p className="text-2xl font-bold text-white">
-              {streakInfo.longest} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
+              {streakBest} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
             </p>
           </div>
         </div>
@@ -518,14 +435,15 @@ export default function StatsPage() {
           <div>
             <p className="text-sm text-gray-400">{t.stats.streaks.totalActiveDays}</p>
             <p className="text-2xl font-bold text-white">
-              {streakInfo.total} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
+              {overview.activeDays} <span className="text-sm text-gray-400">{t.stats.streaks.days}</span>
             </p>
           </div>
         </div>
       </div>
 
-      {/* Charts Row 1: Daily Trend + Income vs Expenses */}
+      {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Daily Trend */}
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-4">{t.stats.charts.dailyTrend}</h3>
           {dailyTrendData.length > 0 ? (
@@ -536,41 +454,30 @@ export default function StatsPage() {
                     <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="gradExpenses" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                  <linearGradient id="gradXP" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="dateLabel" stroke="#9CA3AF" fontSize={12} />
-                <YAxis stroke="#9CA3AF" fontSize={12} tickFormatter={(v) => formatCurrency(v)} />
+                <YAxis stroke="#9CA3AF" fontSize={12} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1F2937', border: '1px solid #374151',
-                    borderRadius: '8px', color: '#fff',
-                  }}
+                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
                   formatter={(value, name) => [
-                    formatCurrency(Number(value ?? 0)),
-                    name === 'income' ? t.stats.charts.income
-                      : name === 'expenses' ? t.stats.charts.expenses
-                      : t.stats.charts.profit,
+                    name === 'income' ? formatCurrency(Number(value ?? 0)) : String(value ?? 0),
+                    name === 'income' ? (locale === 'ru' ? 'Доход' : 'Income')
+                      : name === 'actions' ? (locale === 'ru' ? 'Действия' : 'Actions')
+                      : 'XP',
                   ]}
                 />
-                <Area
-                  type="monotone" dataKey="income" stroke="#10B981"
-                  fill="url(#gradIncome)" name="income"
-                />
-                <Area
-                  type="monotone" dataKey="expenses" stroke="#EF4444"
-                  fill="url(#gradExpenses)" name="expenses"
-                />
-                <Legend
-                  formatter={(value) =>
-                    value === 'income' ? t.stats.charts.income
-                    : value === 'expenses' ? t.stats.charts.expenses
-                    : t.stats.charts.profit
-                  }
-                />
+                <Area type="monotone" dataKey="income" stroke="#10B981" fill="url(#gradIncome)" name="income" />
+                <Area type="monotone" dataKey="xp" stroke="#8B5CF6" fill="url(#gradXP)" name="xp" />
+                <Legend formatter={(value) =>
+                  value === 'income' ? (locale === 'ru' ? 'Доход' : 'Income')
+                  : value === 'xp' ? 'XP'
+                  : (locale === 'ru' ? 'Действия' : 'Actions')
+                } />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -578,6 +485,7 @@ export default function StatsPage() {
           )}
         </div>
 
+        {/* Monthly Comparison */}
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-4">{t.stats.charts.monthlyComparison}</h3>
           {monthlyData.length > 0 ? (
@@ -585,28 +493,24 @@ export default function StatsPage() {
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="label" stroke="#9CA3AF" fontSize={12} />
-                <YAxis stroke="#9CA3AF" fontSize={12} tickFormatter={(v) => formatCurrency(v)} />
+                <YAxis stroke="#9CA3AF" fontSize={12} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1F2937', border: '1px solid #374151',
-                    borderRadius: '8px', color: '#fff',
-                  }}
+                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
                   formatter={(value, name) => [
-                    formatCurrency(Number(value ?? 0)),
-                    name === 'income' ? t.stats.charts.income
-                      : name === 'expenses' ? t.stats.charts.expenses
-                      : t.stats.charts.profit,
+                    name === 'income' ? formatCurrency(Number(value ?? 0)) : String(value ?? 0),
+                    name === 'income' ? (locale === 'ru' ? 'Доход' : 'Income')
+                      : name === 'actions' ? (locale === 'ru' ? 'Действия' : 'Actions')
+                      : 'XP',
                   ]}
                 />
-                <Legend
-                  formatter={(value) =>
-                    value === 'income' ? t.stats.charts.income
-                    : value === 'expenses' ? t.stats.charts.expenses
-                    : t.stats.charts.profit
-                  }
-                />
+                <Legend formatter={(value) =>
+                  value === 'income' ? (locale === 'ru' ? 'Доход' : 'Income')
+                  : value === 'actions' ? (locale === 'ru' ? 'Действия' : 'Actions')
+                  : 'XP'
+                } />
                 <Bar dataKey="income" fill="#10B981" radius={[4, 4, 0, 0]} name="income" />
-                <Bar dataKey="expenses" fill="#EF4444" radius={[4, 4, 0, 0]} name="expenses" />
+                <Bar dataKey="actions" fill="#3B82F6" radius={[4, 4, 0, 0]} name="actions" />
+                <Bar dataKey="xp" fill="#8B5CF6" radius={[4, 4, 0, 0]} name="xp" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -615,78 +519,48 @@ export default function StatsPage() {
         </div>
       </div>
 
-      {/* Charts Row 2: Pie Charts */}
+      {/* Pie Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Income by Source */}
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
-          <h3 className="text-lg font-semibold mb-4">{t.stats.charts.incomeByCategory}</h3>
-          {incomeByCategory.length > 0 ? (
+          <h3 className="text-lg font-semibold mb-4">{locale === 'ru' ? 'Доход по источникам' : 'Income by Source'}</h3>
+          {incomeBySource.length > 0 ? (
             <div className="flex flex-col items-center">
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={incomeByCategory}
-                    cx="50%" cy="50%"
-                    innerRadius={60} outerRadius={100}
-                    dataKey="amount"
-                    nameKey="category"
-                    paddingAngle={2}
-                  >
-                    {incomeByCategory.map((_, idx) => (
-                      <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                    ))}
+                  <Pie data={incomeBySource} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="amount" nameKey="category" paddingAngle={2}>
+                    {incomeBySource.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1F2937', border: '1px solid #374151',
-                      borderRadius: '8px', color: '#fff',
-                    }}
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
                     formatter={(value) => formatCurrency(Number(value ?? 0))}
                   />
                 </PieChart>
               </ResponsiveContainer>
-              <CategoryLegend
-                categories={incomeByCategory}
-                formatCurrency={formatCurrency}
-                labels={{ category: t.stats.categories.category, amount: t.stats.categories.amount, percent: t.stats.categories.percent }}
-              />
+              <CategoryLegend categories={incomeBySource} formatCurrency={formatCurrency} />
             </div>
           ) : (
             <EmptyState message={t.stats.categories.noData} />
           )}
         </div>
 
+        {/* XP by Type */}
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
-          <h3 className="text-lg font-semibold mb-4">{t.stats.charts.expensesByCategory}</h3>
-          {expensesByCategory.length > 0 ? (
+          <h3 className="text-lg font-semibold mb-4">{locale === 'ru' ? 'XP по типам' : 'XP by Type'}</h3>
+          {xpByType.length > 0 ? (
             <div className="flex flex-col items-center">
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={expensesByCategory}
-                    cx="50%" cy="50%"
-                    innerRadius={60} outerRadius={100}
-                    dataKey="amount"
-                    nameKey="category"
-                    paddingAngle={2}
-                  >
-                    {expensesByCategory.map((_, idx) => (
-                      <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                    ))}
+                  <Pie data={xpByType} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="amount" nameKey="category" paddingAngle={2}>
+                    {xpByType.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1F2937', border: '1px solid #374151',
-                      borderRadius: '8px', color: '#fff',
-                    }}
-                    formatter={(value) => formatCurrency(Number(value ?? 0))}
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                    formatter={(value) => String(value) + ' XP'}
                   />
                 </PieChart>
               </ResponsiveContainer>
-              <CategoryLegend
-                categories={expensesByCategory}
-                formatCurrency={formatCurrency}
-                labels={{ category: t.stats.categories.category, amount: t.stats.categories.amount, percent: t.stats.categories.percent }}
-              />
+              <CategoryLegend categories={xpByType} formatCurrency={(n) => n + ' XP'} />
             </div>
           ) : (
             <EmptyState message={t.stats.categories.noData} />
@@ -694,100 +568,69 @@ export default function StatsPage() {
         </div>
       </div>
 
-      {/* Top Sources / Expenses Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Top Sources */}
+      {incomeBySource.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-400" />
             {t.stats.topSources.title}
           </h3>
-          {incomeByCategory.length > 0 ? (
-            <div className="space-y-3">
-              {incomeByCategory.slice(0, 5).map((cat, idx) => (
-                <div key={cat.category} className="flex items-center gap-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
-                    style={{ backgroundColor: `${COLORS[idx % COLORS.length]}20`, color: COLORS[idx % COLORS.length] }}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{cat.category}</p>
-                    <div className="w-full bg-gray-700 rounded-full h-1.5 mt-1">
-                      <div
-                        className="h-1.5 rounded-full transition-all"
-                        style={{
-                          width: `${cat.percent}%`,
-                          backgroundColor: COLORS[idx % COLORS.length],
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-white">{formatCurrency(cat.amount)}</p>
-                    <p className="text-xs text-gray-400">{cat.percent.toFixed(1)}%</p>
+          <div className="space-y-3">
+            {incomeBySource.slice(0, 5).map((cat, idx) => (
+              <div key={cat.category} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                  style={{ backgroundColor: `${COLORS[idx % COLORS.length]}20`, color: COLORS[idx % COLORS.length] }}>
+                  {idx + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{cat.category}</p>
+                  <div className="w-full bg-gray-700 rounded-full h-1.5 mt-1">
+                    <div className="h-1.5 rounded-full transition-all"
+                      style={{ width: `${cat.percent}%`, backgroundColor: COLORS[idx % COLORS.length] }} />
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message={t.stats.categories.noData} />
-          )}
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-white">{formatCurrency(cat.amount)}</p>
+                  <p className="text-xs text-gray-400">{cat.percent.toFixed(1)}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
 
+      {/* All-time stats from DB */}
+      {stats && (
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <TrendingDown className="w-5 h-5 text-red-400" />
-            {t.stats.topExpenses.title}
+            <Activity className="w-5 h-5 text-purple-400" />
+            {locale === 'ru' ? 'Общая статистика' : 'All-time Statistics'}
           </h3>
-          {expensesByCategory.length > 0 ? (
-            <div className="space-y-3">
-              {expensesByCategory.slice(0, 5).map((cat, idx) => (
-                <div key={cat.category} className="flex items-center gap-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
-                    style={{ backgroundColor: `${COLORS[idx % COLORS.length]}20`, color: COLORS[idx % COLORS.length] }}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{cat.category}</p>
-                    <div className="w-full bg-gray-700 rounded-full h-1.5 mt-1">
-                      <div
-                        className="h-1.5 rounded-full transition-all"
-                        style={{
-                          width: `${cat.percent}%`,
-                          backgroundColor: COLORS[idx % COLORS.length],
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-white">{formatCurrency(cat.amount)}</p>
-                    <p className="text-xs text-gray-400">{cat.percent.toFixed(1)}%</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message={t.stats.categories.noData} />
-          )}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              { label: locale === 'ru' ? 'Уровень' : 'Level', value: String(stats.level), color: '#a78bfa' },
+              { label: locale === 'ru' ? 'Всего XP' : 'Total XP', value: String(stats.total_xp_earned), color: '#8B5CF6' },
+              { label: locale === 'ru' ? 'Доход' : 'Income', value: formatCurrency(Number(stats.total_income)), color: '#22c55e' },
+              { label: locale === 'ru' ? 'Действия' : 'Actions', value: String(stats.total_actions), color: '#3b82f6' },
+              { label: locale === 'ru' ? 'Продажи' : 'Sales', value: String(stats.total_sales), color: '#f59e0b' },
+              { label: locale === 'ru' ? 'Клиенты' : 'Clients', value: String(stats.total_clients), color: '#06b6d4' },
+            ].map((s, i) => (
+              <div key={i} className="bg-gray-900 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-400 mb-1">{s.label}</div>
+                <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
 // ============= Sub-components =============
 
-function OverviewCard({
-  icon, label, value, change, color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  change?: React.ReactNode;
-  color: string;
+function OverviewCard({ icon, label, value, color }: {
+  icon: React.ReactNode; label: string; value: string; color: string;
 }) {
   const bgColors: Record<string, string> = {
     green: 'bg-green-500/10 border-green-500/20',
@@ -797,34 +640,23 @@ function OverviewCard({
     amber: 'bg-amber-500/10 border-amber-500/20',
     cyan: 'bg-cyan-500/10 border-cyan-500/20',
   };
-
   return (
     <div className={`rounded-xl border p-4 ${bgColors[color] || bgColors.purple}`}>
-      <div className="flex items-center justify-between mb-2">
-        {icon}
-        {change}
-      </div>
+      <div className="flex items-center justify-between mb-2">{icon}</div>
       <p className="text-xs text-gray-400 mb-1">{label}</p>
       <p className="text-lg font-bold text-white truncate">{value}</p>
     </div>
   );
 }
 
-function CategoryLegend({
-  categories, formatCurrency, labels,
-}: {
-  categories: CategoryStat[];
-  formatCurrency: (n: number) => string;
-  labels: { category: string; amount: string; percent: string };
+function CategoryLegend({ categories, formatCurrency }: {
+  categories: CategoryStat[]; formatCurrency: (n: number) => string;
 }) {
   return (
     <div className="w-full mt-4 space-y-2">
       {categories.slice(0, 6).map((cat, idx) => (
         <div key={cat.category} className="flex items-center gap-2 text-sm">
-          <div
-            className="w-3 h-3 rounded-full shrink-0"
-            style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-          />
+          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
           <span className="text-gray-300 flex-1 truncate">{cat.category}</span>
           <span className="text-white font-medium">{formatCurrency(cat.amount)}</span>
           <span className="text-gray-500 w-12 text-right">{cat.percent.toFixed(1)}%</span>
