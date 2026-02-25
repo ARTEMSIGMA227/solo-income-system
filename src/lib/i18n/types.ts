@@ -848,4 +848,72 @@ export interface TranslationDictionary {
     bestStreak: string;
     sales: string;
   };
+
+  stats: {
+    title: string;
+    subtitle: string;
+    exportPdf: string;
+    period: string;
+    periods: {
+      week: string;
+      month: string;
+      quarter: string;
+      year: string;
+      all: string;
+    };
+    overview: {
+      title: string;
+      totalIncome: string;
+      totalExpenses: string;
+      netProfit: string;
+      transactionCount: string;
+      avgTransaction: string;
+      profitMargin: string;
+    };
+    charts: {
+      incomeVsExpenses: string;
+      incomeByCategory: string;
+      expensesByCategory: string;
+      dailyTrend: string;
+      monthlyComparison: string;
+      income: string;
+      expenses: string;
+      profit: string;
+    };
+    categories: {
+      title: string;
+      category: string;
+      amount: string;
+      percent: string;
+      count: string;
+      noData: string;
+    };
+    trends: {
+      title: string;
+      growing: string;
+      declining: string;
+      stable: string;
+      comparedToPrev: string;
+      changePercent: string;
+    };
+    topSources: {
+      title: string;
+      source: string;
+      total: string;
+      average: string;
+    };
+    topExpenses: {
+      title: string;
+    };
+    streaks: {
+      title: string;
+      currentStreak: string;
+      longestStreak: string;
+      days: string;
+      totalActiveDays: string;
+    };
+    noData: string;
+    loading: string;
+    export: string;
+  };
 }

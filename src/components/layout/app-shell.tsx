@@ -404,7 +404,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         onClose={() => setMobileSidebarOpen(false)}
         pathname={pathname}
       />
-      <main className="min-h-screen pt-[72px] pb-20 lg:pt-0 lg:pb-0 lg:pl-60">
+      <main className="min-h-screen pt-18 pb-20 lg:pt-0 lg:pb-0 lg:pl-60">
         <div className="mx-auto max-w-7xl p-4 lg:p-6">{children}</div>
       </main>
       <BottomBar pathname={pathname} />

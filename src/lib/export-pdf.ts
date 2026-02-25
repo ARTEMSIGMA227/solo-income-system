@@ -332,3 +332,261 @@ export async function exportAnalyticsPdf(data: PdfExportData): Promise<void> {
 
   doc.save('solo-analytics-' + new Date().toISOString().split('T')[0] + '.pdf');
 }
+
+// ===== STATS PAGE PDF EXPORT =====
+
+interface StatsExportData {
+  displayName: string;
+  period: string;
+  overview: {
+    income: number;
+    expenses: number;
+    netProfit: number;
+    count: number;
+    avgTransaction: number;
+    profitMargin: number;
+  };
+  incomeByCategory: { category: string; amount: number; percent: number }[];
+  expensesByCategory: { category: string; amount: number; percent: number }[];
+  streaks: { current: number; longest: number; total: number };
+  locale?: 'ru' | 'en';
+  currency?: 'RUB' | 'USD';
+}
+
+interface StatsLabels {
+  reportTitle: string;
+  periodLabel: string;
+  overviewTitle: string;
+  metric: string;
+  value: string;
+  totalIncome: string;
+  totalExpenses: string;
+  netProfit: string;
+  transactions: string;
+  avgTransaction: string;
+  profitMargin: string;
+  incomeByCat: string;
+  expensesByCat: string;
+  category: string;
+  amount: string;
+  share: string;
+  streaksTitle: string;
+  currentStreak: string;
+  longestStreak: string;
+  activeDays: string;
+  days: string;
+}
+
+const statsLabelsRu: StatsLabels = {
+  reportTitle: 'Финансовый отчёт',
+  periodLabel: 'Период',
+  overviewTitle: 'Обзор',
+  metric: 'Метрика',
+  value: 'Значение',
+  totalIncome: 'Общий доход',
+  totalExpenses: 'Общие расходы',
+  netProfit: 'Чистая прибыль',
+  transactions: 'Транзакций',
+  avgTransaction: 'Средняя транзакция',
+  profitMargin: 'Маржа прибыли',
+  incomeByCat: 'Доход по категориям',
+  expensesByCat: 'Расходы по категориям',
+  category: 'Категория',
+  amount: 'Сумма',
+  share: 'Доля',
+  streaksTitle: 'Активность',
+  currentStreak: 'Текущая серия',
+  longestStreak: 'Лучшая серия',
+  activeDays: 'Активных дней',
+  days: 'дн.',
+};
+
+const statsLabelsEn: StatsLabels = {
+  reportTitle: 'Financial Report',
+  periodLabel: 'Period',
+  overviewTitle: 'Overview',
+  metric: 'Metric',
+  value: 'Value',
+  totalIncome: 'Total Income',
+  totalExpenses: 'Total Expenses',
+  netProfit: 'Net Profit',
+  transactions: 'Transactions',
+  avgTransaction: 'Avg Transaction',
+  profitMargin: 'Profit Margin',
+  incomeByCat: 'Income by Category',
+  expensesByCat: 'Expenses by Category',
+  category: 'Category',
+  amount: 'Amount',
+  share: 'Share',
+  streaksTitle: 'Activity',
+  currentStreak: 'Current Streak',
+  longestStreak: 'Longest Streak',
+  activeDays: 'Active Days',
+  days: 'd.',
+};
+
+export async function exportStatsPdf(data: StatsExportData): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+
+  const locale = data.locale ?? 'ru';
+  const currency = data.currency ?? 'RUB';
+  const L = locale === 'ru' ? statsLabelsRu : statsLabelsEn;
+  const money = (n: number) => formatMoney(n, locale, currency);
+
+  const doc = new jsPDF();
+
+  doc.addFileToVFS('Roboto.ttf', ROBOTO_BASE64);
+  doc.addFont('Roboto.ttf', 'Roboto', 'normal');
+  doc.setFont('Roboto', 'normal');
+
+  const pageW = doc.internal.pageSize.getWidth();
+
+  const tableFont = {
+    font: 'Roboto',
+    fontStyle: 'normal' as const,
+  };
+
+  function getLastY(): number {
+    return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  }
+
+  // ===== HEADER =====
+  doc.setFillColor(124, 58, 237);
+  doc.rect(0, 0, pageW, 35, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.text('SOLO INCOME SYSTEM', 14, 18);
+
+  doc.setFontSize(10);
+  doc.text(L.reportTitle + ' | ' + formatDate(locale), 14, 27);
+
+  // ===== PLAYER + PERIOD =====
+  doc.setFillColor(18, 18, 26);
+  doc.roundedRect(14, 42, pageW - 28, 22, 3, 3, 'F');
+
+  doc.setTextColor(167, 139, 250);
+  doc.setFontSize(16);
+  doc.text(data.displayName, 22, 56);
+
+  doc.setTextColor(148, 163, 184);
+  doc.setFontSize(10);
+  doc.text(L.periodLabel + ': ' + data.period, pageW - 22, 56, { align: 'right' });
+
+  // ===== OVERVIEW TABLE =====
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.text(L.overviewTitle, 14, 76);
+
+  autoTable(doc, {
+    startY: 80,
+    head: [[L.metric, L.value]],
+    body: [
+      [L.totalIncome, money(data.overview.income)],
+      [L.totalExpenses, money(data.overview.expenses)],
+      [L.netProfit, money(data.overview.netProfit)],
+      [L.transactions, String(data.overview.count)],
+      [L.avgTransaction, money(data.overview.avgTransaction)],
+      [L.profitMargin, data.overview.profitMargin.toFixed(1) + '%'],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [124, 58, 237], textColor: [255, 255, 255], fontSize: 11, ...tableFont },
+    bodyStyles: { fillColor: [22, 22, 31], textColor: [226, 232, 240], fontSize: 10, ...tableFont },
+    alternateRowStyles: { fillColor: [18, 18, 26] },
+    styles: { cellPadding: 6, lineColor: [30, 30, 46], lineWidth: 0.5, ...tableFont },
+    margin: { left: 14, right: 14 },
+  });
+
+  // ===== STREAKS =====
+  let y = getLastY() + 14;
+
+  doc.setFont('Roboto', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.text(L.streaksTitle, 14, y);
+
+  autoTable(doc, {
+    startY: y + 4,
+    head: [[L.metric, L.value]],
+    body: [
+      [L.currentStreak, data.streaks.current + ' ' + L.days],
+      [L.longestStreak, data.streaks.longest + ' ' + L.days],
+      [L.activeDays, String(data.streaks.total)],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [245, 158, 11], textColor: [255, 255, 255], fontSize: 11, ...tableFont },
+    bodyStyles: { fillColor: [22, 22, 31], textColor: [226, 232, 240], fontSize: 10, ...tableFont },
+    alternateRowStyles: { fillColor: [18, 18, 26] },
+    styles: { cellPadding: 5, lineColor: [30, 30, 46], lineWidth: 0.5, ...tableFont },
+    margin: { left: 14, right: 14 },
+  });
+
+  // ===== INCOME BY CATEGORY =====
+  y = getLastY() + 14;
+
+  if (data.incomeByCategory.length > 0) {
+    if (y > 230) { doc.addPage(); y = 20; }
+
+    doc.setFont('Roboto', 'normal');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.text(L.incomeByCat, 14, y);
+
+    autoTable(doc, {
+      startY: y + 4,
+      head: [[L.category, L.amount, L.share]],
+      body: data.incomeByCategory.map((c) => [c.category, money(c.amount), c.percent.toFixed(1) + '%']),
+      theme: 'grid',
+      headStyles: { fillColor: [34, 197, 94], textColor: [255, 255, 255], fontSize: 11, ...tableFont },
+      bodyStyles: { fillColor: [22, 22, 31], textColor: [226, 232, 240], fontSize: 10, ...tableFont },
+      alternateRowStyles: { fillColor: [18, 18, 26] },
+      styles: { cellPadding: 5, lineColor: [30, 30, 46], lineWidth: 0.5, ...tableFont },
+      margin: { left: 14, right: 14 },
+    });
+  }
+
+  // ===== EXPENSES BY CATEGORY =====
+  y = getLastY() + 14;
+
+  if (data.expensesByCategory.length > 0) {
+    if (y > 230) { doc.addPage(); y = 20; }
+
+    doc.setFont('Roboto', 'normal');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.text(L.expensesByCat, 14, y);
+
+    autoTable(doc, {
+      startY: y + 4,
+      head: [[L.category, L.amount, L.share]],
+      body: data.expensesByCategory.map((c) => [c.category, money(c.amount), c.percent.toFixed(1) + '%']),
+      theme: 'grid',
+      headStyles: { fillColor: [239, 68, 68], textColor: [255, 255, 255], fontSize: 11, ...tableFont },
+      bodyStyles: { fillColor: [22, 22, 31], textColor: [226, 232, 240], fontSize: 10, ...tableFont },
+      alternateRowStyles: { fillColor: [18, 18, 26] },
+      styles: { cellPadding: 5, lineColor: [30, 30, 46], lineWidth: 0.5, ...tableFont },
+      margin: { left: 14, right: 14 },
+    });
+  }
+
+  // ===== FOOTER =====
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    const pageH = doc.internal.pageSize.getHeight();
+
+    doc.setFillColor(124, 58, 237);
+    doc.rect(0, pageH - 15, pageW, 15, 'F');
+
+    doc.setFont('Roboto', 'normal');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.text(
+      'Solo Income System | ' + formatDate(locale) + ' | ' + String(i) + '/' + String(pageCount),
+      pageW / 2, pageH - 5, { align: 'center' },
+    );
+  }
+
+  doc.save('solo-stats-' + new Date().toISOString().split('T')[0] + '.pdf');
+}
