@@ -57,6 +57,7 @@ export interface TranslationDictionary {
     focus: string;
     map: string;
     shop: string;
+    rewards: string;
     bosses: string;
     guilds: string;
     achievements: string;

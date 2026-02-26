@@ -57,6 +57,7 @@ export const en: TranslationDictionary = {
     focus: 'Focus',
     map: 'Map',
     shop: 'Shop',
+    rewards: 'Rewards',
     bosses: 'Bosses',
     guilds: 'Guilds',
     achievements: 'Achievements',

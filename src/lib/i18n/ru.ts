@@ -57,6 +57,7 @@ export const ru: TranslationDictionary = {
     focus: 'Фокус',
     map: 'Карта',
     shop: 'Магазин',
+    rewards: 'Награды',
     bosses: 'Боссы',
     guilds: 'Гильдии',
     achievements: 'Ачивки',
