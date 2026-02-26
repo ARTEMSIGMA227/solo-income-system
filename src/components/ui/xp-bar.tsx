@@ -28,9 +28,19 @@ function useStatsLevel() {
           .from('stats')
           .select('level, current_xp')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
-        if (!data) return null;
+        // Если строки нет — создаём
+        if (!data) {
+          const { data: created } = await supabase
+            .from('stats')
+            .insert({ user_id: user.id, level: 1, current_xp: 0 })
+            .select('level, current_xp')
+            .maybeSingle();
+
+          const lvl = created?.level ?? 1;
+          return { level: lvl, currentXP: created?.current_xp ?? 0, xpToNext: xpToNextLevel(lvl) };
+        }
 
         const level = data.level || 1;
         const currentXP = data.current_xp || 0;
