@@ -1,303 +1,501 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { formatNumber } from '@/lib/utils';
-import type { SkillBranch, SkillEffectType } from '@/lib/skill-tree';
-import { useSkills } from '@/hooks/use-skills';
-import SkillBranchColumn from '@/components/skills/SkillBranchColumn';
-import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import GoalItem, { type Goal } from './GoalItem';
+import CreateGoalModal from './CreateGoalModal';
+import NotesModal from './NotesModal';
+import { toast } from 'sonner';
+import {
+  Plus, Loader2, ChevronDown, ChevronRight, Pencil, Trash2,
+  FileText, Archive, Zap, Target,
+} from 'lucide-react';
 
-const branchOrder: SkillBranch[] = [
-  'communication',
-  'intellect',
-  'discipline',
-  'precision',
-  'willpower',
-  'defense',
-];
+interface Skill {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  goal: string | null;
+  emoji: string;
+  level: number;
+  current_xp: number;
+  xp_to_next: number;
+  checklist: { text: string; done: boolean }[];
+  is_active: boolean;
+  created_at: string;
+}
 
 export default function SkillsPage() {
-  const [userId, setUserId] = useState<string | undefined>();
-  const [level, setLevel] = useState(1);
-  const [gold, setGold] = useState(0);
+  const { t, locale } = useT();
+  const ru = locale === 'ru';
+  const supabase = createClient();
+
+  const [userId, setUserId] = useState<string>('');
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showEffects, setShowEffects] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const router = useRouter();
-  const { t } = useT();
+  const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
+  const [showArchive, setShowArchive] = useState(false);
 
-  const {
-    allocated,
-    totalPoints,
-    usedPoints,
-    availablePoints,
-    effects,
-    loading: skillsLoading,
-    allocatePoint,
-    resetSkills,
-  } = useSkills(userId, level);
+  // Modals
+  const [showCreateSkill, setShowCreateSkill] = useState(false);
+  const [editSkill, setEditSkill] = useState<Skill | null>(null);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [editGoal, setEditGoal] = useState<Goal | null>(null);
+  const [goalParentId, setGoalParentId] = useState<string | null>(null);
+  const [notesGoalId, setNotesGoalId] = useState<string | null>(null);
+  const [notesSkillId, setNotesSkillId] = useState<string | null>(null);
+  const [notesType, setNotesType] = useState<'goal' | 'skill'>('goal');
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/auth');
-        return;
-      }
-      setUserId(user.id);
+  // Skill form state
+  const [skillName, setSkillName] = useState('');
+  const [skillDesc, setSkillDesc] = useState('');
+  const [skillGoal, setSkillGoal] = useState('');
+  const [skillEmoji, setSkillEmoji] = useState('⚡');
+  const [skillChecklist, setSkillChecklist] = useState<string[]>([]);
 
-      const { data: stats } = await supabase
-        .from('stats')
-        .select('level, gold')
-        .eq('user_id', user.id)
-        .single();
+  useEffect(() => { loadData(); }, []);
 
-      if (stats) {
-        setLevel(stats.level);
-        setGold(stats.gold || 0);
-      }
-      setLoading(false);
-    }
-    load();
-  }, [router]);
+  async function loadData() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setUserId(user.id);
 
-  async function handleAllocate(skillId: string) {
-    await allocatePoint(skillId);
+    const [{ data: skillsData }, { data: goalsData }] = await Promise.all([
+      supabase.from('user_skills').select('*').eq('user_id', user.id).order('sort_order'),
+      supabase.from('goals').select('*').eq('user_id', user.id).order('sort_order'),
+    ]);
+
+    setSkills(skillsData || []);
+    setGoals(goalsData || []);
+    setLoading(false);
   }
 
-  async function handleReset() {
-    if (!confirmReset) {
-      setConfirmReset(true);
-      toast(t.skills.resetConfirmToast, { icon: '⚠️' });
-      setTimeout(() => setConfirmReset(false), 5000);
-      return;
+  // Build goal tree for a skill
+  function buildGoalTree(skillId: string | null, archived: boolean): Goal[] {
+    const filtered = goals.filter(g =>
+      g.skill_id === skillId && g.is_archived === archived
+    );
+    const map = new Map<string | null, Goal[]>();
+    filtered.forEach(g => {
+      const pid = g.parent_id;
+      if (!map.has(pid)) map.set(pid, []);
+      map.get(pid)!.push(g);
+    });
+
+    function attachChildren(parentId: string | null): Goal[] {
+      const children = map.get(parentId) || [];
+      return children.map(g => ({
+        ...g,
+        children: attachChildren(g.id),
+      }));
     }
-    const success = await resetSkills();
-    if (success) {
-      setGold((prev) => prev - 500);
-      setConfirmReset(false);
-    }
+
+    return attachChildren(null);
   }
 
-  if (loading || skillsLoading) {
+  const archivedCount = (skillId: string | null) =>
+    goals.filter(g => g.skill_id === skillId && g.is_archived).length;
+
+  // Create/edit skill
+  function openCreateSkill() {
+    setEditSkill(null);
+    setSkillName(''); setSkillDesc(''); setSkillGoal(''); setSkillEmoji('⚡'); setSkillChecklist([]);
+    setShowCreateSkill(true);
+  }
+
+  function openEditSkill(skill: Skill) {
+    setEditSkill(skill);
+    setSkillName(skill.name);
+    setSkillDesc(skill.description || '');
+    setSkillGoal(skill.goal || '');
+    setSkillEmoji(skill.emoji);
+    setSkillChecklist(skill.checklist.map(c => c.text));
+    setShowCreateSkill(true);
+  }
+
+  async function saveSkill() {
+    if (!skillName.trim()) return;
+    const data = {
+      user_id: userId,
+      name: skillName.trim(),
+      description: skillDesc.trim() || null,
+      goal: skillGoal.trim() || null,
+      emoji: skillEmoji || '⚡',
+      checklist: skillChecklist.filter(t => t.trim()).map(text => ({ text, done: false })),
+    };
+
+    if (editSkill) {
+      await supabase.from('user_skills').update(data).eq('id', editSkill.id);
+      toast.success(ru ? 'Обновлено' : 'Updated');
+    } else {
+      await supabase.from('user_skills').insert(data);
+      toast.success(ru ? 'Навык создан' : 'Skill created');
+    }
+    setShowCreateSkill(false);
+    loadData();
+  }
+
+  async function deleteSkill(id: string) {
+    if (!confirm(ru ? 'Удалить навык и все его цели?' : 'Delete skill and all its goals?')) return;
+    await supabase.from('goals').delete().eq('skill_id', id);
+    await supabase.from('user_skills').delete().eq('id', id);
+    if (activeSkillId === id) setActiveSkillId(null);
+    toast.success(ru ? 'Удалено' : 'Deleted');
+    loadData();
+  }
+
+  // Toggle skill checklist item
+  async function toggleSkillChecklist(skill: Skill, idx: number) {
+    const items = [...skill.checklist];
+    items[idx] = { ...items[idx], done: !items[idx].done };
+    await supabase.from('user_skills').update({ checklist: items }).eq('id', skill.id);
+    loadData();
+  }
+
+  // Open goal create
+  function openCreateGoal(parentId: string | null = null) {
+    setEditGoal(null);
+    setGoalParentId(parentId);
+    setShowGoalModal(true);
+  }
+
+  function openEditGoal(goal: Goal) {
+    setEditGoal(goal);
+    setGoalParentId(goal.parent_id);
+    setShowGoalModal(true);
+  }
+
+  // Unarchive all
+  async function unarchiveAll(skillId: string | null) {
+    const ids = goals.filter(g => g.skill_id === skillId && g.is_archived).map(g => g.id);
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      await supabase.from('goals').update({ is_archived: false, is_completed: false, completed_at: null }).eq('id', id);
+    }
+    loadData();
+  }
+
+  if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#0a0a0f',
-          color: '#a78bfa',
-          fontSize: '24px',
-        }}
-      >
-        {t.skills.loading}
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
       </div>
     );
   }
 
-  const activeEffects = Object.entries(effects).filter(([, v]) => v > 0);
+  const activeSkill = skills.find(s => s.id === activeSkillId);
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#0a0a0f',
-        color: '#e2e8f0',
-        padding: '16px',
-        maxWidth: '600px',
-        margin: '0 auto',
-      }}
-    >
+    <div className="space-y-6">
       {/* Header */}
-      <div style={{ marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: '#a78bfa' }}>
-              ⚔️ {t.skills.title}
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-              {t.skills.subtitle}
-            </div>
-          </div>
-          <div
-            style={{
-              padding: '6px 12px',
-              borderRadius: '12px',
-              fontSize: '13px',
-              fontWeight: 600,
-              backgroundColor: '#f59e0b20',
-              color: '#f59e0b',
-              border: '1px solid #f59e0b30',
-            }}
-          >
-            🪙 {formatNumber(gold)}
-          </div>
-        </div>
-      </div>
-
-      {/* Skill Points Bar */}
-      <div
-        style={{
-          backgroundColor: '#12121a',
-          border: '1px solid #1e1e2e',
-          borderRadius: '12px',
-          padding: '14px 16px',
-          marginBottom: '12px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <div style={{ fontSize: '13px', color: '#94a3b8' }}>{t.skills.points}</div>
-            <div
-              style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}
-            >
-              <span
-                style={{
-                  fontSize: '28px',
-                  fontWeight: 900,
-                  color: availablePoints > 0 ? '#22c55e' : '#64748b',
-                  textShadow: availablePoints > 0 ? '0 0 20px #22c55e40' : 'none',
-                }}
-              >
-                {availablePoints}
-              </span>
-              <span style={{ fontSize: '13px', color: '#64748b' }}>
-                / {totalPoints} ({t.skills.used} {usedPoints})
-              </span>
-            </div>
-          </div>
-          <div style={{ fontSize: '12px', color: '#64748b' }}>LV. {level}</div>
-        </div>
-
-        {availablePoints > 0 && (
-          <div
-            style={{
-              marginTop: '8px',
-              padding: '6px 10px',
-              backgroundColor: '#22c55e10',
-              borderRadius: '8px',
-              fontSize: '11px',
-              color: '#22c55e',
-              textAlign: 'center',
-              animation: 'skillPointsPulse 2s ease-in-out infinite',
-            }}
-          >
-            {t.skills.unallocatedHint}
-          </div>
-        )}
-      </div>
-
-      {/* Active Effects Toggle */}
-      {activeEffects.length > 0 && (
-        <button
-          onClick={() => setShowEffects(!showEffects)}
-          style={{
-            width: '100%',
-            padding: '10px 16px',
-            backgroundColor: '#12121a',
-            border: '1px solid #1e1e2e',
-            borderRadius: '12px',
-            color: '#94a3b8',
-            cursor: 'pointer',
-            fontSize: '13px',
-            textAlign: 'left',
-            marginBottom: '12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{t.skills.activeEffects(activeEffects.length)}</span>
-          <span style={{ fontSize: '11px' }}>{showEffects ? '▲' : '▼'}</span>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Zap className="w-7 h-7 text-purple-400" />
+          {ru ? 'Навыки' : 'Skills'}
+        </h1>
+        <button onClick={openCreateSkill}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500">
+          <Plus className="w-4 h-4" /> {ru ? 'Навык' : 'Skill'}
         </button>
-      )}
+      </div>
 
-      {showEffects && activeEffects.length > 0 && (
-        <div
-          style={{
-            backgroundColor: '#12121a',
-            border: '1px solid #1e1e2e',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '12px',
-          }}
-        >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            {activeEffects.map(([key, value]) => (
-              <div
-                key={key}
-                style={{
-                  fontSize: '11px',
-                  color: '#a78bfa',
-                  padding: '6px 8px',
-                  backgroundColor: '#a78bfa08',
-                  borderRadius: '6px',
-                }}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Skills List (sidebar) */}
+        <div className="lg:col-span-4 space-y-3">
+          {skills.length === 0 && (
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-8 text-center">
+              <Zap className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+              <p className="text-gray-400 mb-4">{ru ? 'Создайте первый навык' : 'Create your first skill'}</p>
+              <button onClick={openCreateSkill}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
+                <Plus className="w-4 h-4 inline mr-1" /> {ru ? 'Создать навык' : 'Create Skill'}
+              </button>
+            </div>
+          )}
+
+          {skills.map(skill => {
+            const isActive = activeSkillId === skill.id;
+            const goalCount = goals.filter(g => g.skill_id === skill.id && !g.is_archived).length;
+            const pct = skill.xp_to_next > 0 ? (skill.current_xp / skill.xp_to_next) * 100 : 0;
+
+            return (
+              <button
+                key={skill.id}
+                onClick={() => setActiveSkillId(isActive ? null : skill.id)}
+                className={`w-full text-left bg-gray-800/50 border rounded-xl p-4 transition-all ${
+                  isActive ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-gray-700 hover:border-gray-600'
+                }`}
               >
-                +{value}
-                {t.skills.effectLabels[key as SkillEffectType] ||
-                  key}
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{skill.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-white truncate">{skill.name}</h3>
+                      <span className="text-xs text-gray-400 shrink-0">
+                        {ru ? 'Ур.' : 'Lv.'} {skill.level}
+                      </span>
+                    </div>
+                    {/* XP bar */}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500">{skill.current_xp}/{skill.xp_to_next}</span>
+                    </div>
+                    {goalCount > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {goalCount} {ru ? 'целей' : 'goals'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Skill Detail + Goals */}
+        <div className="lg:col-span-8">
+          {!activeSkill ? (
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-12 text-center">
+              <Target className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500">{ru ? 'Выберите навык слева' : 'Select a skill on the left'}</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Skill header card */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{activeSkill.emoji}</span>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{activeSkill.name}</h2>
+                      {activeSkill.description && (
+                        <p className="text-sm text-gray-400">{activeSkill.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => { setNotesType('skill'); setNotesSkillId(activeSkill.id); }}
+                      className="p-2 text-gray-500 hover:text-yellow-400" title={ru ? 'Заметки' : 'Notes'}>
+                      <FileText className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => openEditSkill(activeSkill)}
+                      className="p-2 text-gray-500 hover:text-amber-400" title={ru ? 'Редактировать' : 'Edit'}>
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => deleteSkill(activeSkill.id)}
+                      className="p-2 text-gray-500 hover:text-red-400" title={ru ? 'Удалить' : 'Delete'}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Goal text */}
+                {activeSkill.goal && (
+                  <div className="mb-3 p-3 bg-gray-900 rounded-lg">
+                    <p className="text-xs text-gray-500 mb-1">{ru ? 'Цель навыка' : 'Skill Goal'}</p>
+                    <p className="text-sm text-gray-300">{activeSkill.goal}</p>
+                  </div>
+                )}
+
+                {/* Level + XP */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-purple-400">{ru ? 'Ур.' : 'Lv.'} {activeSkill.level}</span>
+                  <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all"
+                      style={{ width: `${(activeSkill.current_xp / activeSkill.xp_to_next) * 100}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-400">{activeSkill.current_xp} / {activeSkill.xp_to_next} XP</span>
+                </div>
+
+                {/* Skill checklist */}
+                {activeSkill.checklist.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <p className="text-xs text-gray-500 mb-2">{ru ? 'Чек-лист' : 'Checklist'}</p>
+                    <div className="space-y-1.5">
+                      {activeSkill.checklist.map((item, idx) => (
+                        <button key={idx} onClick={() => toggleSkillChecklist(activeSkill, idx)}
+                          className="flex items-center gap-2 text-sm w-full text-left hover:bg-gray-800 rounded px-2 py-1 transition-colors">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                            item.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-600'
+                          }`}>
+                            {item.done && '✓'}
+                          </span>
+                          <span className={item.done ? 'text-gray-500 line-through' : 'text-gray-300'}>{item.text}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+
+              {/* Goals section */}
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">{ru ? 'Цели' : 'Goals'}</h3>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openCreateGoal()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
+                      <Plus className="w-3.5 h-3.5" /> {ru ? 'Цель' : 'Goal'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active goals tree */}
+                {buildGoalTree(activeSkillId, false).length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">{ru ? 'Нет целей. Создайте первую!' : 'No goals yet. Create one!'}</p>
+                ) : (
+                  <div>
+                    {buildGoalTree(activeSkillId, false).map(goal => (
+                      <GoalItem
+                        key={goal.id}
+                        goal={goal}
+                        locale={locale}
+                        onRefresh={loadData}
+                        onEdit={openEditGoal}
+                        onAddSub={(pid) => { setGoalParentId(pid); setEditGoal(null); setShowGoalModal(true); }}
+                        onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Archive */}
+                {archivedCount(activeSkillId) > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <button onClick={() => setShowArchive(!showArchive)}
+                      className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
+                      {showArchive ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      <Archive className="w-4 h-4" />
+                      {ru ? 'Архив' : 'Archive'} ({archivedCount(activeSkillId)})
+                    </button>
+                    {showArchive && (
+                      <div className="mt-3 opacity-60">
+                        {buildGoalTree(activeSkillId, true).map(goal => (
+                          <GoalItem
+                            key={goal.id}
+                            goal={goal}
+                            locale={locale}
+                            onRefresh={loadData}
+                            onEdit={openEditGoal}
+                            onAddSub={() => {}}
+                            onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
+                          />
+                        ))}
+                        <button onClick={() => unarchiveAll(activeSkillId)}
+                          className="mt-2 text-xs text-purple-400 hover:text-purple-300">
+                          {ru ? 'Восстановить все' : 'Restore all'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Create/Edit Skill Modal */}
+      {showCreateSkill && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowCreateSkill(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold">{editSkill ? (ru ? 'Редактировать навык' : 'Edit Skill') : (ru ? 'Новый навык' : 'New Skill')}</h3>
+              <button onClick={() => setShowCreateSkill(false)} className="p-1 text-gray-400 hover:text-white">
+                <span className="text-xl">×</span>
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Emoji selector */}
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">{ru ? 'Иконка' : 'Icon'}</label>
+                <div className="flex gap-2 flex-wrap">
+                  {['⚡', '💪', '🧠', '📚', '💰', '🎯', '🏋️', '🎨', '💻', '🗣️', '🎵', '🔬'].map(e => (
+                    <button key={e} onClick={() => setSkillEmoji(e)}
+                      className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${
+                        skillEmoji === e ? 'bg-purple-600 ring-2 ring-purple-400' : 'bg-gray-800 hover:bg-gray-700'
+                      }`}>
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">{ru ? 'Название навыка' : 'Skill Name'}</label>
+                <input value={skillName} onChange={e => setSkillName(e.target.value)}
+                  placeholder={ru ? 'Например: Английский' : 'e.g., English'}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">{ru ? 'Что я хочу от навыка' : 'What I want from this skill'}</label>
+                <input value={skillGoal} onChange={e => setSkillGoal(e.target.value)}
+                  placeholder={ru ? 'Например: Сдать IELTS на 7+' : 'e.g., Pass IELTS 7+'}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400 mb-1 block">{ru ? 'Описание' : 'Description'}</label>
+                <textarea value={skillDesc} onChange={e => setSkillDesc(e.target.value)} rows={2}
+                  placeholder={ru ? 'Опционально...' : 'Optional...'}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" />
+              </div>
+              {/* Checklist */}
+              <div>
+                <label className="text-sm text-gray-400 mb-2 block">{ru ? 'Чек-лист навыка' : 'Skill Checklist'}</label>
+                {skillChecklist.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input value={item} onChange={e => { const c = [...skillChecklist]; c[idx] = e.target.value; setSkillChecklist(c); }}
+                      placeholder={`${ru ? 'Пункт' : 'Item'} ${idx + 1}`}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-purple-500 focus:outline-none" />
+                    <button onClick={() => setSkillChecklist(skillChecklist.filter((_, i) => i !== idx))}
+                      className="p-1 text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                ))}
+                <button onClick={() => setSkillChecklist([...skillChecklist, ''])}
+                  className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-sm text-gray-400 hover:text-white hover:border-gray-500 flex items-center justify-center gap-1">
+                  <Plus className="w-4 h-4" /> {ru ? 'Добавить пункт' : 'Add item'}
+                </button>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-700 flex gap-3">
+              <button onClick={() => setShowCreateSkill(false)} className="flex-1 px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700">
+                {ru ? 'Отмена' : 'Cancel'}
+              </button>
+              <button onClick={saveSkill} disabled={!skillName.trim()}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500 disabled:opacity-50">
+                {editSkill ? (ru ? 'Сохранить' : 'Save') : (ru ? 'Создать' : 'Create')}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Skill Branches */}
-      {branchOrder.map((branch) => (
-        <SkillBranchColumn
-          key={branch}
-          branch={branch}
-          allocated={allocated}
-          availablePoints={availablePoints}
-          onAllocate={handleAllocate}
-        />
-      ))}
+      {/* Create/Edit Goal Modal */}
+      <CreateGoalModal
+        open={showGoalModal}
+        onClose={() => { setShowGoalModal(false); setEditGoal(null); setGoalParentId(null); }}
+        onSaved={loadData}
+        locale={locale}
+        userId={userId}
+        skillId={activeSkillId}
+        parentId={goalParentId}
+        editGoal={editGoal}
+      />
 
-      {/* Reset Button */}
-      {usedPoints > 0 && (
-        <button
-          onClick={handleReset}
-          style={{
-            width: '100%',
-            padding: '12px',
-            backgroundColor: confirmReset ? '#ef444420' : '#12121a',
-            border: `1px solid ${confirmReset ? '#ef4444' : '#1e1e2e'}`,
-            borderRadius: '12px',
-            color: confirmReset ? '#ef4444' : '#64748b',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
-            marginBottom: '12px',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {confirmReset ? t.skills.resetConfirmButton : t.skills.resetButtonLabel}
-        </button>
-      )}
-
-      <div style={{ height: '32px' }} />
-
-      <style>{`
-        @keyframes skillPointsPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+      {/* Notes Modal */}
+      <NotesModal
+        open={notesGoalId !== null || notesSkillId !== null}
+        onClose={() => { setNotesGoalId(null); setNotesSkillId(null); }}
+        goalId={notesGoalId}
+        skillId={notesSkillId}
+        userId={userId}
+        locale={locale}
+        type={notesType}
+      />
     </div>
   );
 }
