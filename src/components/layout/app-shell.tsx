@@ -28,6 +28,7 @@ import {
   Medal,
   Bot,
   Activity,
+  Gift,
 } from "lucide-react";
 
 const NAV_ITEMS_CONFIG: Array<{
@@ -42,6 +43,7 @@ const NAV_ITEMS_CONFIG: Array<{
   { href: "/focus", labelKey: "focus", icon: Timer, mobileBottom: true },
   { href: "/map", labelKey: "map", icon: Map, mobileBottom: false },
   { href: "/shop", labelKey: "shop", icon: ShoppingBag, mobileBottom: false },
+  { href: "/rewards", labelKey: "rewards", icon: Gift, mobileBottom: false },
   { href: "/bosses", labelKey: "bosses", icon: Skull, mobileBottom: false },
   { href: "/guilds", labelKey: "guilds", icon: Users, mobileBottom: false },
   { href: "/achievements", labelKey: "achievements", icon: Trophy, mobileBottom: false },
@@ -411,3 +413,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
