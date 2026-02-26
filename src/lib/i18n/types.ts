@@ -66,6 +66,7 @@ export interface TranslationDictionary {
     leaderboard: string;
     advisor: string;
     stats: string;
+    subscription: string;
     more: string;
     menu: string;
     openMenu: string;

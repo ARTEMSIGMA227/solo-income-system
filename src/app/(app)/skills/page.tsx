@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useT } from '@/lib/i18n';
 import GoalItem, { type Goal } from './GoalItem';
 import CreateGoalModal from './CreateGoalModal';
 import NotesModal from './NotesModal';
+import TemplatesTab from './TemplatesTab';
+import SaveTemplateModal from './SaveTemplateModal';
+import { canCreateSkill } from '@/lib/pro';
 import { toast } from 'sonner';
 import {
   Plus, Loader2, ChevronDown, ChevronRight, Pencil, Trash2,
-  FileText, Archive, Zap, Target,
+  FileText, Archive, Zap, Target, Crown, Bookmark,
 } from 'lucide-react';
 
 interface Skill {
@@ -38,6 +41,8 @@ export default function SkillsPage() {
   const [loading, setLoading] = useState(true);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [showArchive, setShowArchive] = useState(false);
+  const [mainTab, setMainTab] = useState<'skills' | 'templates'>('skills');
+  const [isPro, setIsPro] = useState(false);
 
   // Modals
   const [showCreateSkill, setShowCreateSkill] = useState(false);
@@ -48,6 +53,8 @@ export default function SkillsPage() {
   const [notesGoalId, setNotesGoalId] = useState<string | null>(null);
   const [notesSkillId, setNotesSkillId] = useState<string | null>(null);
   const [notesType, setNotesType] = useState<'goal' | 'skill'>('goal');
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [saveTemplateSkill, setSaveTemplateSkill] = useState<Skill | null>(null);
 
   // Skill form state
   const [skillName, setSkillName] = useState('');
@@ -70,6 +77,15 @@ export default function SkillsPage() {
 
     setSkills(skillsData || []);
     setGoals(goalsData || []);
+
+    // Load PRO status
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('is_pro')
+      .eq('id', user.id)
+      .maybeSingle();
+    setIsPro(profileData?.is_pro ?? false);
+
     setLoading(false);
   }
 
@@ -101,6 +117,14 @@ export default function SkillsPage() {
 
   // Create/edit skill
   function openCreateSkill() {
+    if (!canCreateSkill(skills.length, isPro)) {
+      toast.error(
+        ru
+          ? `Максимум ${5} навыков на Free. Оформите PRO!`
+          : `Max ${5} skills on Free plan. Upgrade to PRO!`
+      );
+      return;
+    }
     setEditSkill(null);
     setSkillName(''); setSkillDesc(''); setSkillGoal(''); setSkillEmoji('⚡'); setSkillChecklist([]);
     setShowCreateSkill(true);
@@ -178,6 +202,35 @@ export default function SkillsPage() {
     loadData();
   }
 
+  // Create skill from template
+  async function createFromTemplate(data: {
+    name: string;
+    emoji: string;
+    description?: string;
+    goal?: string;
+    checklist?: { text: string; done: boolean }[];
+  }) {
+    if (!canCreateSkill(skills.length, isPro)) {
+      toast.error(
+        ru
+          ? `Максимум ${5} навыков на Free. Оформите PRO!`
+          : `Max ${5} skills on Free plan. Upgrade to PRO!`
+      );
+      return;
+    }
+    await supabase.from('user_skills').insert({
+      user_id: userId,
+      name: data.name,
+      emoji: data.emoji,
+      description: data.description || null,
+      goal: data.goal || null,
+      checklist: data.checklist || [],
+    });
+    toast.success(ru ? 'Навык создан из шаблона!' : 'Skill created from template!');
+    setMainTab('skills');
+    loadData();
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -196,209 +249,270 @@ export default function SkillsPage() {
           <Zap className="w-7 h-7 text-purple-400" />
           {ru ? 'Навыки' : 'Skills'}
         </h1>
-        <button onClick={openCreateSkill}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500">
-          <Plus className="w-4 h-4" /> {ru ? 'Навык' : 'Skill'}
+        {mainTab === 'skills' && (
+          <button onClick={openCreateSkill}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-500">
+            <Plus className="w-4 h-4" /> {ru ? 'Навык' : 'Skill'}
+          </button>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setMainTab('skills')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mainTab === 'skills'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:text-white'
+          }`}
+        >
+          <Zap className="w-4 h-4 inline mr-1.5" />
+          {ru ? 'Навыки' : 'Skills'}
+          <span className="ml-1.5 text-xs opacity-60">({skills.length})</span>
+        </button>
+        <button
+          onClick={() => setMainTab('templates')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mainTab === 'templates'
+              ? 'bg-purple-600 text-white'
+              : 'bg-gray-800 text-gray-400 hover:text-white'
+          }`}
+        >
+          <FileText className="w-4 h-4 inline mr-1.5" />
+          {ru ? 'Шаблоны' : 'Templates'}
+          {!isPro && <Crown className="w-3 h-3 inline ml-1.5 text-yellow-400" />}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Skills List (sidebar) */}
-        <div className="lg:col-span-4 space-y-3">
-          {skills.length === 0 && (
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-8 text-center">
-              <Zap className="w-10 h-10 text-purple-400 mx-auto mb-3" />
-              <p className="text-gray-400 mb-4">{ru ? 'Создайте первый навык' : 'Create your first skill'}</p>
-              <button onClick={openCreateSkill}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
-                <Plus className="w-4 h-4 inline mr-1" /> {ru ? 'Создать навык' : 'Create Skill'}
-              </button>
-            </div>
-          )}
+      {/* Templates tab */}
+      {mainTab === 'templates' && (
+        <TemplatesTab
+          userId={userId}
+          locale={locale}
+          isPro={isPro}
+          onCreateFromTemplate={createFromTemplate}
+        />
+      )}
 
-          {skills.map(skill => {
-            const isActive = activeSkillId === skill.id;
-            const goalCount = goals.filter(g => g.skill_id === skill.id && !g.is_archived).length;
-            const pct = skill.xp_to_next > 0 ? (skill.current_xp / skill.xp_to_next) * 100 : 0;
+      {/* Skills tab */}
+      {mainTab === 'skills' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Skills List (sidebar) */}
+          <div className="lg:col-span-4 space-y-3">
+            {skills.length === 0 && (
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-8 text-center">
+                <Zap className="w-10 h-10 text-purple-400 mx-auto mb-3" />
+                <p className="text-gray-400 mb-4">{ru ? 'Создайте первый навык' : 'Create your first skill'}</p>
+                <button onClick={openCreateSkill}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
+                  <Plus className="w-4 h-4 inline mr-1" /> {ru ? 'Создать навык' : 'Create Skill'}
+                </button>
+              </div>
+            )}
 
-            return (
-              <button
-                key={skill.id}
-                onClick={() => setActiveSkillId(isActive ? null : skill.id)}
-                className={`w-full text-left bg-gray-800/50 border rounded-xl p-4 transition-all ${
-                  isActive ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-gray-700 hover:border-gray-600'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{skill.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-white truncate">{skill.name}</h3>
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {ru ? 'Ур.' : 'Lv.'} {skill.level}
-                      </span>
-                    </div>
-                    {/* XP bar */}
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-500">{skill.current_xp}/{skill.xp_to_next}</span>
-                    </div>
-                    {goalCount > 0 && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {goalCount} {ru ? 'целей' : 'goals'}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+            {/* PRO limit hint */}
+            {!isPro && skills.length >= 3 && (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-center">
+                <p className="text-xs text-yellow-400">
+                  {ru
+                    ? `${skills.length}/5 навыков на Free`
+                    : `${skills.length}/5 skills on Free`}
+                  {' · '}
+                  <a href="/subscription" className="underline hover:text-yellow-300">
+                    {ru ? 'PRO' : 'PRO'}
+                  </a>
+                </p>
+              </div>
+            )}
 
-        {/* Skill Detail + Goals */}
-        <div className="lg:col-span-8">
-          {!activeSkill ? (
-            <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-12 text-center">
-              <Target className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-500">{ru ? 'Выберите навык слева' : 'Select a skill on the left'}</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Skill header card */}
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
-                <div className="flex items-start justify-between mb-3">
+            {skills.map(skill => {
+              const isActive = activeSkillId === skill.id;
+              const goalCount = goals.filter(g => g.skill_id === skill.id && !g.is_archived).length;
+              const pct = skill.xp_to_next > 0 ? (skill.current_xp / skill.xp_to_next) * 100 : 0;
+
+              return (
+                <button
+                  key={skill.id}
+                  onClick={() => setActiveSkillId(isActive ? null : skill.id)}
+                  className={`w-full text-left bg-gray-800/50 border rounded-xl p-4 transition-all ${
+                    isActive ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-gray-700 hover:border-gray-600'
+                  }`}
+                >
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">{activeSkill.emoji}</span>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">{activeSkill.name}</h2>
-                      {activeSkill.description && (
-                        <p className="text-sm text-gray-400">{activeSkill.description}</p>
+                    <span className="text-2xl">{skill.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-white truncate">{skill.name}</h3>
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {ru ? 'Ур.' : 'Lv.'} {skill.level}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-500">{skill.current_xp}/{skill.xp_to_next}</span>
+                      </div>
+                      {goalCount > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {goalCount} {ru ? 'целей' : 'goals'}
+                        </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => { setNotesType('skill'); setNotesSkillId(activeSkill.id); }}
-                      className="p-2 text-gray-500 hover:text-yellow-400" title={ru ? 'Заметки' : 'Notes'}>
-                      <FileText className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => openEditSkill(activeSkill)}
-                      className="p-2 text-gray-500 hover:text-amber-400" title={ru ? 'Редактировать' : 'Edit'}>
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => deleteSkill(activeSkill.id)}
-                      className="p-2 text-gray-500 hover:text-red-400" title={ru ? 'Удалить' : 'Delete'}>
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                </button>
+              );
+            })}
+          </div>
 
-                {/* Goal text */}
-                {activeSkill.goal && (
-                  <div className="mb-3 p-3 bg-gray-900 rounded-lg">
-                    <p className="text-xs text-gray-500 mb-1">{ru ? 'Цель навыка' : 'Skill Goal'}</p>
-                    <p className="text-sm text-gray-300">{activeSkill.goal}</p>
-                  </div>
-                )}
-
-                {/* Level + XP */}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-purple-400">{ru ? 'Ур.' : 'Lv.'} {activeSkill.level}</span>
-                  <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all"
-                      style={{ width: `${(activeSkill.current_xp / activeSkill.xp_to_next) * 100}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-400">{activeSkill.current_xp} / {activeSkill.xp_to_next} XP</span>
-                </div>
-
-                {/* Skill checklist */}
-                {activeSkill.checklist.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <p className="text-xs text-gray-500 mb-2">{ru ? 'Чек-лист' : 'Checklist'}</p>
-                    <div className="space-y-1.5">
-                      {activeSkill.checklist.map((item, idx) => (
-                        <button key={idx} onClick={() => toggleSkillChecklist(activeSkill, idx)}
-                          className="flex items-center gap-2 text-sm w-full text-left hover:bg-gray-800 rounded px-2 py-1 transition-colors">
-                          <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
-                            item.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-600'
-                          }`}>
-                            {item.done && '✓'}
-                          </span>
-                          <span className={item.done ? 'text-gray-500 line-through' : 'text-gray-300'}>{item.text}</span>
+          {/* Skill Detail + Goals */}
+          <div className="lg:col-span-8">
+            {!activeSkill ? (
+              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-12 text-center">
+                <Target className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-500">{ru ? 'Выберите навык слева' : 'Select a skill on the left'}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Skill header card */}
+                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{activeSkill.emoji}</span>
+                      <div>
+                        <h2 className="text-xl font-bold text-white">{activeSkill.name}</h2>
+                        {activeSkill.description && (
+                          <p className="text-sm text-gray-400">{activeSkill.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { setNotesType('skill'); setNotesSkillId(activeSkill.id); }}
+                        className="p-2 text-gray-500 hover:text-yellow-400" title={ru ? 'Заметки' : 'Notes'}>
+                        <FileText className="w-4 h-4" />
+                      </button>
+                      {isPro && (
+                        <button
+                          onClick={() => { setSaveTemplateSkill(activeSkill); setShowSaveTemplate(true); }}
+                          className="p-2 text-gray-500 hover:text-purple-400"
+                          title={ru ? 'Сохранить как шаблон' : 'Save as Template'}
+                        >
+                          <Bookmark className="w-4 h-4" />
                         </button>
-                      ))}
+                      )}
+                      <button onClick={() => openEditSkill(activeSkill)}
+                        className="p-2 text-gray-500 hover:text-amber-400" title={ru ? 'Редактировать' : 'Edit'}>
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => deleteSkill(activeSkill.id)}
+                        className="p-2 text-gray-500 hover:text-red-400" title={ru ? 'Удалить' : 'Delete'}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Goals section */}
-              <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">{ru ? 'Цели' : 'Goals'}</h3>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => openCreateGoal()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
-                      <Plus className="w-3.5 h-3.5" /> {ru ? 'Цель' : 'Goal'}
-                    </button>
+                  {activeSkill.goal && (
+                    <div className="mb-3 p-3 bg-gray-900 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">{ru ? 'Цель навыка' : 'Skill Goal'}</p>
+                      <p className="text-sm text-gray-300">{activeSkill.goal}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-purple-400">{ru ? 'Ур.' : 'Lv.'} {activeSkill.level}</span>
+                    <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all"
+                        style={{ width: `${(activeSkill.current_xp / activeSkill.xp_to_next) * 100}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-400">{activeSkill.current_xp} / {activeSkill.xp_to_next} XP</span>
                   </div>
+
+                  {activeSkill.checklist.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-700">
+                      <p className="text-xs text-gray-500 mb-2">{ru ? 'Чек-лист' : 'Checklist'}</p>
+                      <div className="space-y-1.5">
+                        {activeSkill.checklist.map((item, idx) => (
+                          <button key={idx} onClick={() => toggleSkillChecklist(activeSkill, idx)}
+                            className="flex items-center gap-2 text-sm w-full text-left hover:bg-gray-800 rounded px-2 py-1 transition-colors">
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${
+                              item.done ? 'bg-green-500 border-green-500 text-white' : 'border-gray-600'
+                            }`}>
+                              {item.done && '✓'}
+                            </span>
+                            <span className={item.done ? 'text-gray-500 line-through' : 'text-gray-300'}>{item.text}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Active goals tree */}
-                {buildGoalTree(activeSkillId, false).length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">{ru ? 'Нет целей. Создайте первую!' : 'No goals yet. Create one!'}</p>
-                ) : (
-                  <div>
-                    {buildGoalTree(activeSkillId, false).map(goal => (
-                      <GoalItem
-                        key={goal.id}
-                        goal={goal}
-                        locale={locale}
-                        onRefresh={loadData}
-                        onEdit={openEditGoal}
-                        onAddSub={(pid) => { setGoalParentId(pid); setEditGoal(null); setShowGoalModal(true); }}
-                        onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
-                      />
-                    ))}
+                {/* Goals section */}
+                <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">{ru ? 'Цели' : 'Goals'}</h3>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => openCreateGoal()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-500">
+                        <Plus className="w-3.5 h-3.5" /> {ru ? 'Цель' : 'Goal'}
+                      </button>
+                    </div>
                   </div>
-                )}
 
-                {/* Archive */}
-                {archivedCount(activeSkillId) > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-700">
-                    <button onClick={() => setShowArchive(!showArchive)}
-                      className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
-                      {showArchive ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      <Archive className="w-4 h-4" />
-                      {ru ? 'Архив' : 'Archive'} ({archivedCount(activeSkillId)})
-                    </button>
-                    {showArchive && (
-                      <div className="mt-3 opacity-60">
-                        {buildGoalTree(activeSkillId, true).map(goal => (
-                          <GoalItem
-                            key={goal.id}
-                            goal={goal}
-                            locale={locale}
-                            onRefresh={loadData}
-                            onEdit={openEditGoal}
-                            onAddSub={() => {}}
-                            onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
-                          />
-                        ))}
-                        <button onClick={() => unarchiveAll(activeSkillId)}
-                          className="mt-2 text-xs text-purple-400 hover:text-purple-300">
-                          {ru ? 'Восстановить все' : 'Restore all'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {buildGoalTree(activeSkillId, false).length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">{ru ? 'Нет целей. Создайте первую!' : 'No goals yet. Create one!'}</p>
+                  ) : (
+                    <div>
+                      {buildGoalTree(activeSkillId, false).map(goal => (
+                        <GoalItem
+                          key={goal.id}
+                          goal={goal}
+                          locale={locale}
+                          onRefresh={loadData}
+                          onEdit={openEditGoal}
+                          onAddSub={(pid) => { setGoalParentId(pid); setEditGoal(null); setShowGoalModal(true); }}
+                          onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {archivedCount(activeSkillId) > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-700">
+                      <button onClick={() => setShowArchive(!showArchive)}
+                        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white">
+                        {showArchive ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        <Archive className="w-4 h-4" />
+                        {ru ? 'Архив' : 'Archive'} ({archivedCount(activeSkillId)})
+                      </button>
+                      {showArchive && (
+                        <div className="mt-3 opacity-60">
+                          {buildGoalTree(activeSkillId, true).map(goal => (
+                            <GoalItem
+                              key={goal.id}
+                              goal={goal}
+                              locale={locale}
+                              onRefresh={loadData}
+                              onEdit={openEditGoal}
+                              onAddSub={() => {}}
+                              onNotes={(gid) => { setNotesType('goal'); setNotesGoalId(gid); }}
+                            />
+                          ))}
+                          <button onClick={() => unarchiveAll(activeSkillId)}
+                            className="mt-2 text-xs text-purple-400 hover:text-purple-300">
+                            {ru ? 'Восстановить все' : 'Restore all'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Create/Edit Skill Modal */}
       {showCreateSkill && (
@@ -411,7 +525,6 @@ export default function SkillsPage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
-              {/* Emoji selector */}
               <div>
                 <label className="text-sm text-gray-400 mb-1 block">{ru ? 'Иконка' : 'Icon'}</label>
                 <div className="flex gap-2 flex-wrap">
@@ -443,7 +556,6 @@ export default function SkillsPage() {
                   placeholder={ru ? 'Опционально...' : 'Optional...'}
                   className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none resize-none" />
               </div>
-              {/* Checklist */}
               <div>
                 <label className="text-sm text-gray-400 mb-2 block">{ru ? 'Чек-лист навыка' : 'Skill Checklist'}</label>
                 {skillChecklist.map((item, idx) => (
@@ -496,6 +608,17 @@ export default function SkillsPage() {
         locale={locale}
         type={notesType}
       />
+
+      {/* Save Template Modal */}
+      {showSaveTemplate && saveTemplateSkill && (
+        <SaveTemplateModal
+          open={showSaveTemplate}
+          onClose={() => { setShowSaveTemplate(false); setSaveTemplateSkill(null); }}
+          skill={saveTemplateSkill}
+          userId={userId}
+          locale={locale}
+        />
+      )}
     </div>
   );
 }

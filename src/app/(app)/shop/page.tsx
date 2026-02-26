@@ -9,6 +9,7 @@ import { useT } from '@/lib/i18n';
 import type { ShopItem, InventoryItem, Stats } from '@/types/database';
 import { loadSkillEffectsFromDB, applyShopDiscount } from '@/lib/skill-effects';
 import type { SkillEffectType } from '@/lib/skill-tree';
+import { grantLootbox } from '@/lib/lootbox-rewards';
 
 export default function ShopPage() {
   const [items, setItems] = useState<ShopItem[]>([]);
@@ -282,6 +283,48 @@ export default function ShopPage() {
     }
   }
 
+  async function buyLootbox(boxType: 'common' | 'rare' | 'epic') {
+    if (!userId || !stats) return;
+    const prices: Record<string, number> = { common: 100, rare: 500, epic: 2000 };
+    const price = prices[boxType];
+    const gold = stats.gold || 0;
+
+    if (gold < price) {
+      toast.error(
+        locale === 'ru'
+          ? `Нужно ${price} 🪙, у вас ${gold}`
+          : `Need ${price} 🪙, you have ${gold}`
+      );
+      return;
+    }
+
+    const supabase = createClient();
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
+
+    const newGold = gold - price;
+    const newSpent = (stats.total_gold_spent || 0) + price;
+    await supabase
+      .from('stats')
+      .update({ gold: newGold, total_gold_spent: newSpent, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+
+    await supabase.from('gold_events').insert({
+      user_id: userId,
+      amount: -price,
+      event_type: 'shop_purchase',
+      description: `Lootbox: ${boxType}`,
+      event_date: today,
+    });
+
+    await grantLootbox(supabase, userId, boxType, 'shop', `bought_${boxType}`);
+    setStats({ ...stats, gold: newGold, total_gold_spent: newSpent });
+    toast.success(
+      locale === 'ru'
+        ? `🎁 ${boxType} лутбокс куплен!`
+        : `🎁 ${boxType} lootbox purchased!`
+    );
+  }  
+
   if (loading) {
     return (
       <div
@@ -548,6 +591,57 @@ export default function ShopPage() {
               </div>
             );
           })}
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #1e1e2e' }}>
+            <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '12px' }}>
+              🎁 {locale === 'ru' ? 'Лутбоксы' : 'Lootboxes'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+              {([
+                { type: 'common' as const, icon: '⚪', price: 100, color: '#94a3b8' },
+                { type: 'rare' as const, icon: '🔵', price: 500, color: '#3b82f6' },
+                { type: 'epic' as const, icon: '🟣', price: 2000, color: '#a855f7' },
+              ]).map((box) => {
+                const canAfford = gold >= box.price;
+                return (
+                  <div
+                    key={box.type}
+                    style={{
+                      backgroundColor: '#12121a',
+                      border: `1px solid ${box.color}30`,
+                      borderRadius: '12px',
+                      padding: '16px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>{box.icon}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: box.color, textTransform: 'capitalize', marginBottom: '4px' }}>
+                      {box.type}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '12px' }}>
+                      {locale === 'ru' ? 'Случайная награда' : 'Random reward'}
+                    </div>
+                    <button
+                      onClick={() => buyLootbox(box.type)}
+                      disabled={!canAfford}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: canAfford ? '#f59e0b' : '#16161f',
+                        color: canAfford ? '#000' : '#475569',
+                        cursor: canAfford ? 'pointer' : 'not-allowed',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                      }}
+                    >
+                      🪙 {box.price}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>          
         </>
       ) : (
         <>

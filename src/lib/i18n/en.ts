@@ -66,6 +66,7 @@ export const en: TranslationDictionary = {
     leaderboard: 'Leaderboard',
     advisor: 'Advisor',
     stats: 'Stats',
+    subscription: 'Subscription',
     more: 'More',
     menu: 'Menu',
     openMenu: 'Open menu',

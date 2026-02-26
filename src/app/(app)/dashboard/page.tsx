@@ -30,6 +30,12 @@ import {
 } from '@/lib/skill-effects';
 import { addXPToActiveTerritory } from '@/lib/territory-integration';
 import { useT } from '@/lib/i18n';
+import Link from 'next/link';
+import {
+  grantLootbox,
+  getLootboxTypeForLevel,
+  getLootboxTypeForStreak,
+} from '@/lib/lootbox-rewards';
 
 function getToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -69,6 +75,7 @@ export default function DashboardPage() {
   const [deathMisses, setDeathMisses] = useState(0);
   const [xpPulsing, setXpPulsing] = useState(false);
   const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>({});
+  const [unopenedLootboxes, setUnopenedLootboxes] = useState(0);
 
   const router = useRouter();
   const { trackProgress } = useMissionTracker();
@@ -121,6 +128,13 @@ export default function DashboardPage() {
         setStats(s);
         prevLevelRef.current = s.level;
       }
+
+      const { count: unopenedCount } = await supabase
+        .from('lootboxes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', authUser.id)
+        .eq('is_opened', false);
+      setUnopenedLootboxes(unopenedCount || 0);
 
       const { data: cc } = await supabase
         .from('character_config')
@@ -328,6 +342,12 @@ export default function DashboardPage() {
               ? { ...prev, streak_current: newStreak, streak_best: newBest, consecutive_misses: 0 }
               : prev
           );
+
+          const streakBoxType = getLootboxTypeForStreak(newStreak);
+          if (streakBoxType) {
+            await grantLootbox(supabase, authUser.id, streakBoxType, 'streak', `streak_${newStreak}`);
+            setUnopenedLootboxes(prev => prev + 1);
+          }
           void trackProgress('login_streak', 1);
         }
       }
@@ -427,6 +447,12 @@ export default function DashboardPage() {
         : prev
     );
     if (newStreak > 1) toast(t.dashboard.toast.streak(newStreak), { icon: '🔥' });
+    const streakBoxType2 = getLootboxTypeForStreak(newStreak);
+    if (streakBoxType2) {
+      await grantLootbox(supabase, user.id, streakBoxType2, 'streak', `streak_${newStreak}`);
+      setUnopenedLootboxes(prev => prev + 1);
+      toast.success(locale === 'ru' ? '🎁 Лутбокс за стрик!' : '🎁 Streak lootbox!');
+    }
     void trackProgress('login_streak', 1);
   }, [user, profile, trackProgress, t]);
 
@@ -484,7 +510,12 @@ export default function DashboardPage() {
     setTimeout(() => addFloat(`+${finalGold} 🪙`, '#f59e0b', event), 150);
     triggerXpPulse();
 
-    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
+    if (oldLevel < newLevel) {
+      setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
+      await grantLootbox(supabase, user.id, getLootboxTypeForLevel(newLevel), 'level_up', `level_${newLevel}`);
+      setUnopenedLootboxes(prev => prev + 1);
+      toast.success(locale === 'ru' ? '🎁 Новый лутбокс!' : '🎁 New lootbox!');
+    }
     prevLevelRef.current = newLevel;
     void trackProgress('complete_quests', 1);
 
@@ -558,7 +589,12 @@ export default function DashboardPage() {
     setTimeout(() => addFloat(`+${fmtCurrency(amount)}`, '#22c55e', event), 300);
     triggerXpPulse();
 
-    if (oldLevel < newLevel) setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
+    if (oldLevel < newLevel) {
+      setLevelUpData({ level: newLevel, title: (t.titles[levelInfo.titleKey] || levelInfo.title) });
+      await grantLootbox(supabase, user.id, getLootboxTypeForLevel(newLevel), 'level_up', `level_${newLevel}`);
+      setUnopenedLootboxes(prev => prev + 1);
+      toast.success(locale === 'ru' ? '🎁 Новый лутбокс!' : '🎁 New lootbox!');
+    }
     prevLevelRef.current = newLevel;
     void trackProgress('earn_income', amount);
     void trackProgress('complete_quests', 1);
@@ -624,6 +660,11 @@ export default function DashboardPage() {
           <div style={{ padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#f59e0b20', color: '#f59e0b', border: '1px solid #f59e0b30' }}>
             🪙 {formatNumber(stats?.gold || 0)}
           </div>
+            {unopenedLootboxes > 0 && (
+            <Link href="/rewards" style={{ padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 600, backgroundColor: '#a78bfa20', color: '#a78bfa', border: '1px solid #a78bfa30', textDecoration: 'none' }}>
+              📦 {unopenedLootboxes}
+            </Link>
+          )}
           {activeSkillCount > 0 && (
             <div style={{ padding: '6px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, backgroundColor: '#a78bfa15', color: '#a78bfa', border: '1px solid #a78bfa30' }}>
               🧬 {activeSkillCount}

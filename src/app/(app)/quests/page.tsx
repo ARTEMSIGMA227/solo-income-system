@@ -6,6 +6,7 @@ import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
 import type { Quest, Completion, Stats } from '@/types/database';
+import { grantLootbox } from '@/lib/lootbox-rewards';
 
 export default function QuestsPage() {
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -24,7 +25,7 @@ export default function QuestsPage() {
   const [formTarget, setFormTarget] = useState(1);
 
   const supabase = createClient();
-  const { t } = useT();
+  const { t, locale } = useT();
 
   function getToday() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -133,6 +134,13 @@ export default function QuestsPage() {
     });
 
     toast.success(`+${xp} XP — ${quest.title}`);
+    
+    const newProgress = current + 1;
+    if (newProgress >= quest.target_count) {
+      const boxType = quest.quest_type === 'daily_mandatory' ? 'common' as const : 'rare' as const;
+      await grantLootbox(supabase, userId!, boxType, 'quest', quest.quest_type);
+      toast.success(locale === 'ru' ? '🎁 Лутбокс за квест!' : '🎁 Quest lootbox!');
+    }
   }
 
   function openAddForm() {

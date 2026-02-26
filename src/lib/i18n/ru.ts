@@ -66,6 +66,7 @@ export const ru: TranslationDictionary = {
     leaderboard: 'Лидеры',
     advisor: 'Советник',
     stats: 'Статы',
+    subscription: 'Подписка',
     more: 'Ещё',
     menu: 'Меню',
     openMenu: 'Открыть меню',

@@ -9,6 +9,7 @@ import { useT } from '@/lib/i18n';
 import type { Boss, Stats } from '@/types/database';
 import { loadSkillEffectsFromDB, applyBossDamageBonus } from '@/lib/skill-effects';
 import type { SkillEffectType } from '@/lib/skill-tree';
+import { grantLootbox } from '@/lib/lootbox-rewards';
 
 // Map boss_type to boss key for i18n lookup
 const BOSS_KEY_MAP: Record<string, string> = {
@@ -25,7 +26,7 @@ export default function BossesPage() {
   const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>(
     {},
   );
-  const { t, formatCurrency: fmtCurrency } = useT();
+  const { t, locale, formatCurrency: fmtCurrency } = useT();
 
   // Resolve boss title via i18n — try by boss_type key map, then fallback to DB
   function getBossTitle(boss: Boss): string {
@@ -227,6 +228,10 @@ export default function BossesPage() {
     const bonusText =
       finalReward > baseReward ? ` (${t.boss.bonusText(finalReward - baseReward)})` : '';
     toast.success(`${t.boss.bossKilled(bossTitle, finalReward)}${bonusText}`);
+    
+    const bossBoxType = boss.boss_type === 'monthly' ? 'legendary' as const : 'epic' as const;
+    await grantLootbox(supabase, userId!, bossBoxType, 'boss', boss.boss_type);
+    toast.success(locale === 'ru' ? '🎁 Лутбокс за босса!' : '🎁 Boss lootbox!');
   }
 
   if (loading) {
