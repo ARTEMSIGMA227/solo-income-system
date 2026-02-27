@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = new Set([
-  '/auth',           // ← добавлено
+  '/auth',
   '/register',
   '/auth/callback',
   '/api/telegram/webhook',
@@ -13,6 +13,8 @@ const PUBLIC_PATHS = new Set([
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true
   if (pathname.startsWith('/api/telegram/')) return true
+  if (pathname.startsWith('/api/cron/')) return true
+  if (pathname.startsWith('/api/payments/')) return true
   if (pathname.startsWith('/_next/')) return true
   if (pathname.startsWith('/favicon')) return true
   if (pathname === '/manifest.json') return true
@@ -59,7 +61,6 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    // ← ИСПРАВЛЕНО: редирект на /auth вместо /login
     const authUrl = new URL('/auth', request.url)
     authUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(authUrl)
