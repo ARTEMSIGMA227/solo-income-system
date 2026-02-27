@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useT } from '@/lib/i18n'
 
-/* ─── settings ─── */
 const CELL = 13
 const GAP = 3
 const STEP = CELL + GAP
@@ -25,7 +24,6 @@ const MONTHS_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','
 const DAY_LABELS_RU: [number, string][] = [[0, 'Пн'], [2, 'Ср'], [4, 'Пт']]
 const DAY_LABELS_EN: [number, string][] = [[0, 'Mo'], [2, 'We'], [4, 'Fr']]
 
-/* ─── utils ─── */
 function fmtDate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -46,7 +44,6 @@ function level(n: number): number {
   return 4
 }
 
-/* ─── types ─── */
 interface CellData {
   key: string
   col: number
@@ -56,11 +53,10 @@ interface CellData {
   tip: string
 }
 
-/* ─── component ─── */
 export default function ActivityCalendar() {
   const supabase = createClient()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const { t, locale } = useT()
+  const { locale } = useT()
 
   const MONTHS = locale === 'ru' ? MONTHS_RU : MONTHS_EN
   const DAY_LABELS = locale === 'ru' ? DAY_LABELS_RU : DAY_LABELS_EN
@@ -73,65 +69,63 @@ export default function ActivityCalendar() {
       } = await supabase.auth.getUser()
       if (!user) return { counts: new Map<string, number>(), firstDate: null as string | null }
 
-      // Get user's first activity date
+      // completions uses completion_date (DATE type)
+      // xp_events uses event_date (DATE type)
       const [{ data: firstComp }, { data: firstXp }] = await Promise.all([
         supabase
           .from('completions')
-          .select('completed_at')
+          .select('completion_date')
           .eq('user_id', user.id)
-          .order('completed_at', { ascending: true })
+          .order('completion_date', { ascending: true })
           .limit(1),
         supabase
           .from('xp_events')
-          .select('created_at')
+          .select('event_date')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: true })
+          .order('event_date', { ascending: true })
           .limit(1),
       ])
 
       const dates: string[] = []
-      if (firstComp?.[0]?.completed_at) dates.push(firstComp[0].completed_at)
-      if (firstXp?.[0]?.created_at) dates.push(firstXp[0].created_at)
+      if (firstComp?.[0]?.completion_date) dates.push(firstComp[0].completion_date)
+      if (firstXp?.[0]?.event_date) dates.push(firstXp[0].event_date)
 
       if (dates.length === 0) {
         return { counts: new Map<string, number>(), firstDate: null }
       }
 
       const firstDate = dates.sort()[0]
-      const startISO = firstDate.split('T')[0] + 'T00:00:00'
-      const endISO = fmtDate(new Date()) + 'T23:59:59'
 
       const [{ data: comp }, { data: xp }] = await Promise.all([
         supabase
           .from('completions')
-          .select('completed_at')
+          .select('completion_date, count_done')
           .eq('user_id', user.id)
-          .gte('completed_at', startISO)
-          .lte('completed_at', endISO),
+          .gte('completion_date', firstDate)
+          .lte('completion_date', fmtDate(new Date())),
         supabase
           .from('xp_events')
-          .select('created_at')
+          .select('event_date')
           .eq('user_id', user.id)
-          .gte('created_at', startISO)
-          .lte('created_at', endISO),
+          .gte('event_date', firstDate)
+          .lte('event_date', fmtDate(new Date())),
       ])
 
       const map = new Map<string, number>()
       comp?.forEach((r) => {
-        const k = fmtDate(new Date(r.completed_at))
-        map.set(k, (map.get(k) ?? 0) + 1)
+        const k = r.completion_date
+        map.set(k, (map.get(k) ?? 0) + (r.count_done || 1))
       })
       xp?.forEach((r) => {
-        const k = fmtDate(new Date(r.created_at))
+        const k = r.event_date
         map.set(k, (map.get(k) ?? 0) + 1)
       })
 
-      return { counts: map, firstDate: firstDate.split('T')[0] }
+      return { counts: map, firstDate }
     },
     staleTime: 5 * 60_000,
   })
 
-  // Auto-scroll to the right (most recent)
   useEffect(() => {
     if (!isLoading && scrollRef.current) {
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth
@@ -154,7 +148,7 @@ export default function ActivityCalendar() {
       <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-bold text-white">
-            📅 {locale === 'ru' ? 'Активность' : 'Activity'}
+            {locale === 'ru' ? 'Активность' : 'Activity'}
           </h3>
         </div>
         <div className="text-center text-zinc-500 py-6 text-sm">
@@ -164,11 +158,8 @@ export default function ActivityCalendar() {
     )
   }
 
-  /* ── build grid ── */
   const today = new Date()
   const start = new Date(firstDate)
-
-  // Align start to Monday of that week
   const startOffset = mondayIdx(start)
   start.setDate(start.getDate() - startOffset)
 
@@ -220,7 +211,6 @@ export default function ActivityCalendar() {
   const totalActions = Array.from(counts.values()).reduce((s, v) => s + v, 0)
   const activeDays = Array.from(counts.values()).filter((v) => v > 0).length
 
-  // Calculate total days tracked
   const firstD = new Date(firstDate)
   const totalDays = Math.ceil((today.getTime() - firstD.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
@@ -229,8 +219,8 @@ export default function ActivityCalendar() {
   const daysLabel = locale === 'ru' ? 'дн' : 'd'
   const actionsShort = locale === 'ru' ? 'действий' : 'actions'
   const titleText = locale === 'ru'
-    ? `📅 Активность за ${totalDays} дней`
-    : `📅 Activity over ${totalDays} days`
+    ? `Активность за ${totalDays} дней`
+    : `Activity over ${totalDays} days`
 
   return (
     <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 mb-4">
@@ -243,7 +233,6 @@ export default function ActivityCalendar() {
 
       <div ref={scrollRef} className="overflow-x-auto pb-1" style={{ scrollBehavior: 'smooth' }}>
         <svg width={svgW} height={svgH}>
-          {/* month labels */}
           {monthMarks.map((mm, i) => (
             <text
               key={`m${i}`}
@@ -256,7 +245,6 @@ export default function ActivityCalendar() {
             </text>
           ))}
 
-          {/* day labels */}
           {DAY_LABELS.map(([row, label]) => (
             <text
               key={`d${row}`}
@@ -269,7 +257,6 @@ export default function ActivityCalendar() {
             </text>
           ))}
 
-          {/* cells */}
           {cells.map((c) => (
             <rect
               key={c.key}
@@ -288,7 +275,6 @@ export default function ActivityCalendar() {
         </svg>
       </div>
 
-      {/* legend */}
       <div className="flex items-center justify-end gap-1.5 mt-3">
         <span className="text-[10px] text-zinc-500 mr-1">{lessLabel}</span>
         {[0, 1, 2, 3, 4].map((l) => (
