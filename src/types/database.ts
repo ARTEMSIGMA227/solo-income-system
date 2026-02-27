@@ -11,6 +11,8 @@ export interface Profile {
   consecutive_misses: number;
   focus_duration_minutes: number;
   notifications_enabled: boolean;
+  is_pro: boolean;
+  pro_until: string | null;
   created_at: string;
   updated_at: string;
 }

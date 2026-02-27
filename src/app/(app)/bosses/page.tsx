@@ -6,12 +6,14 @@ import { formatNumber } from '@/lib/utils';
 import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import { useProfile } from '@/hooks/use-profile';
+import { ProGate, ProLimitBadge } from '@/components/ui/pro-gate';
+import { PRO_LIMITS } from '@/lib/pro';
 import type { Boss, Stats } from '@/types/database';
 import { loadSkillEffectsFromDB, applyBossDamageBonus } from '@/lib/skill-effects';
 import type { SkillEffectType } from '@/lib/skill-tree';
 import { grantLootbox } from '@/lib/lootbox-rewards';
 
-// Map boss_type to boss key for i18n lookup
 const BOSS_KEY_MAP: Record<string, string> = {
   weekly: 'routine_guard',
   monthly: 'shadow_monarch',
@@ -23,12 +25,12 @@ export default function BossesPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number>(0);
-  const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>(
-    {},
-  );
+  const [skillEffects, setSkillEffects] = useState<Partial<Record<SkillEffectType, number>>>({});
   const { t, locale, formatCurrency: fmtCurrency } = useT();
+  const { data: profile } = useProfile();
 
-  // Resolve boss title via i18n — try by boss_type key map, then fallback to DB
+  const isPro = profile?.is_pro === true;
+
   function getBossTitle(boss: Boss): string {
     const key = BOSS_KEY_MAP[boss.boss_type];
     if (key && t.boss.bossNames[key]) {
@@ -84,7 +86,6 @@ export default function BossesPage() {
         const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
         const monthDeadlineStr = lastDay.toLocaleDateString('en-CA');
 
-        // Store with neutral keys in DB, display via i18n
         await supabase.from('bosses').insert([
           {
             user_id: user.id,
@@ -228,7 +229,7 @@ export default function BossesPage() {
     const bonusText =
       finalReward > baseReward ? ` (${t.boss.bonusText(finalReward - baseReward)})` : '';
     toast.success(`${t.boss.bossKilled(bossTitle, finalReward)}${bonusText}`);
-    
+
     const bossBoxType = boss.boss_type === 'monthly' ? 'legendary' as const : 'epic' as const;
     await grantLootbox(supabase, userId!, bossBoxType, 'boss', boss.boss_type);
     toast.success(locale === 'ru' ? '🎁 Лутбокс за босса!' : '🎁 Boss lootbox!');
@@ -383,9 +384,7 @@ export default function BossesPage() {
           <span style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 600 }}>
             🏆 {applyBossDamageBonus(boss.xp_reward, skillEffects)} XP
             {dmgBonus > 0 && (
-              <span
-                style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '4px' }}
-              >
+              <span style={{ fontSize: '10px', color: '#a78bfa', marginLeft: '4px' }}>
                 (+bonus)
               </span>
             )}
@@ -423,9 +422,18 @@ export default function BossesPage() {
         margin: '0 auto',
       }}
     >
-      <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px' }}>
-        👹 {t.boss.title}
-      </h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>
+          👹 {t.boss.title}
+        </h1>
+        {!isPro && (
+          <ProLimitBadge
+            current={bosses.filter(b => !b.is_defeated).length}
+            max={PRO_LIMITS.FREE_MAX_ACTIVE_BOSSES}
+            isPro={isPro}
+          />
+        )}
+      </div>
 
       {weekly.length === 0 && monthly.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px 16px', color: '#475569' }}>
@@ -435,6 +443,7 @@ export default function BossesPage() {
         </div>
       )}
 
+      {/* Weekly boss — always visible */}
       {weekly.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
           <div
@@ -453,6 +462,7 @@ export default function BossesPage() {
         </div>
       )}
 
+      {/* Monthly boss — PRO only for free users */}
       {monthly.length > 0 && (
         <div>
           <div
@@ -466,8 +476,26 @@ export default function BossesPage() {
             }}
           >
             {t.boss.monthly}
+            {!isPro && (
+              <span style={{
+                marginLeft: '8px',
+                fontSize: '10px',
+                color: '#a78bfa',
+                fontWeight: 400,
+                textTransform: 'none',
+                letterSpacing: '0',
+              }}>
+                — PRO
+              </span>
+            )}
           </div>
-          {monthly.map(renderBoss)}
+          {isPro ? (
+            monthly.map(renderBoss)
+          ) : (
+            <ProGate label={locale === 'ru' ? 'Месячный босс — PRO' : 'Monthly Boss — PRO'}>
+              {monthly.map(renderBoss)}
+            </ProGate>
+          )}
         </div>
       )}
     </div>

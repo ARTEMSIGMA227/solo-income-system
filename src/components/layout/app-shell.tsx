@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   MoreHorizontal,
+  Shield,
   ChevronDown,
   Trophy,
   GitBranch,
@@ -51,7 +52,7 @@ const NAV_ITEMS_CONFIG: Array<{
   { href: "/leaderboard", labelKey: "leaderboard", icon: Medal, mobileBottom: false },
   { href: "/advisor", labelKey: "advisor", icon: Bot, mobileBottom: false },
   { href: "/stats", labelKey: "stats", icon: Activity, mobileBottom: false },
-  { href: "/analytics", labelKey: "analytics", icon: BarChart3, mobileBottom: false },
+  { href: "/profile", labelKey: "profile", icon: Shield, mobileBottom: false },
   { href: "/subscription", labelKey: "subscription", icon: Crown, mobileBottom: false },
   { href: "/settings", labelKey: "settings", icon: Settings, mobileBottom: false },
 ];

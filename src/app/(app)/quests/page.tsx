@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase/client';
 import { getLevelInfo } from '@/lib/xp';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import { useProfile } from '@/hooks/use-profile';
+import { canCreateQuest, PRO_LIMITS } from '@/lib/pro';
+import { ProLimitBadge } from '@/components/ui/pro-gate';
 import type { Quest, Completion, Stats } from '@/types/database';
 import { grantLootbox } from '@/lib/lootbox-rewards';
 
@@ -26,6 +29,11 @@ export default function QuestsPage() {
 
   const supabase = createClient();
   const { t, locale } = useT();
+  const { data: profile } = useProfile();
+
+  const isPro = profile?.is_pro === true;
+  const activeQuestCount = quests.length;
+  const canCreate = canCreateQuest(activeQuestCount, isPro);
 
   function getToday() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -134,7 +142,7 @@ export default function QuestsPage() {
     });
 
     toast.success(`+${xp} XP — ${quest.title}`);
-    
+
     const newProgress = current + 1;
     if (newProgress >= quest.target_count) {
       const boxType = quest.quest_type === 'daily_mandatory' ? 'common' as const : 'rare' as const;
@@ -144,6 +152,14 @@ export default function QuestsPage() {
   }
 
   function openAddForm() {
+    if (!canCreate) {
+      toast.error(
+        locale === 'ru'
+          ? `Лимит: ${PRO_LIMITS.FREE_MAX_ACTIVE_QUESTS} квестов. Оформите PRO для безлимита!`
+          : `Limit: ${PRO_LIMITS.FREE_MAX_ACTIVE_QUESTS} quests. Get PRO for unlimited!`
+      );
+      return;
+    }
     setFormTitle('');
     setFormDescription('');
     setFormCategory('other');
@@ -191,6 +207,11 @@ export default function QuestsPage() {
         toast.success(t.quests.questUpdated);
       }
     } else {
+      if (!canCreate) {
+        toast.error(locale === 'ru' ? 'Лимит квестов достигнут!' : 'Quest limit reached!');
+        return;
+      }
+
       const { data: newQuest } = await supabase
         .from('quests')
         .insert({
@@ -248,7 +269,7 @@ export default function QuestsPage() {
   function getCategoryIcon(cat: string) {
     switch (cat) {
       case 'income_action':
-        return '📞';
+        return '💰';
       case 'strategy':
         return '🧠';
       case 'skill':
@@ -399,7 +420,7 @@ export default function QuestsPage() {
   ];
 
   const categoryOptions = [
-    { value: 'income_action', label: t.quests.categories.income_action || '📞 Income' },
+    { value: 'income_action', label: t.quests.categories.income_action || '💰 Income' },
     { value: 'strategy', label: t.quests.categories.strategy || '🧠 Strategy' },
     { value: 'skill', label: t.quests.categories.skill || '📚 Skill' },
     { value: 'fitness', label: t.quests.categories.fitness || '💪 Fitness' },
@@ -425,21 +446,30 @@ export default function QuestsPage() {
           marginBottom: '16px',
         }}
       >
-        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>📋 {t.quests.title}</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 700 }}>📋 {t.quests.title}</h1>
+          <ProLimitBadge
+            current={activeQuestCount}
+            max={PRO_LIMITS.FREE_MAX_ACTIVE_QUESTS}
+            isPro={isPro}
+          />
+        </div>
         <button
           onClick={openAddForm}
+          disabled={!canCreate}
           style={{
             padding: '8px 16px',
-            backgroundColor: '#7c3aed',
-            color: '#fff',
+            backgroundColor: canCreate ? '#7c3aed' : '#1e1e2e',
+            color: canCreate ? '#fff' : '#475569',
             border: 'none',
             borderRadius: '8px',
-            cursor: 'pointer',
+            cursor: canCreate ? 'pointer' : 'not-allowed',
             fontSize: '13px',
             fontWeight: 600,
+            opacity: canCreate ? 1 : 0.6,
           }}
         >
-          {t.quests.newQuest}
+          {canCreate ? t.quests.newQuest : `🔒 ${t.quests.newQuest}`}
         </button>
       </div>
 

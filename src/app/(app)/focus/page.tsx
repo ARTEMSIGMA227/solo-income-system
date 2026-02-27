@@ -6,11 +6,14 @@ import { getLevelInfo } from '@/lib/xp';
 import { XP_REWARDS } from '@/lib/constants';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import { useProfile } from '@/hooks/use-profile';
+import { canUseFocus, PRO_LIMITS } from '@/lib/pro';
+import { ProLimitBadge } from '@/components/ui/pro-gate';
 import type { Stats, Profile } from '@/types/database';
 
 export default function FocusPage() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [localProfile, setLocalProfile] = useState<Profile | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +24,11 @@ export default function FocusPage() {
   const [sessionsToday, setSessionsToday] = useState(0);
   const [selectedMinutes, setSelectedMinutes] = useState(90);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const { t } = useT();
+  const { t, locale } = useT();
+  const { data: proProfile } = useProfile();
+
+  const isPro = proProfile?.is_pro === true;
+  const canStart = canUseFocus(sessionsToday, isPro);
 
   useEffect(() => {
     const supabase = createClient();
@@ -44,7 +51,7 @@ export default function FocusPage() {
         .select('*')
         .eq('id', user.id)
         .single();
-      setProfile(p);
+      setLocalProfile(p);
       if (p) setSelectedMinutes(p.focus_duration_minutes || 90);
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' });
@@ -66,6 +73,15 @@ export default function FocusPage() {
   }, []);
 
   function startTimer() {
+    if (!canStart) {
+      toast.error(
+        locale === 'ru'
+          ? `Лимит: ${PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY} сессий/день. Оформите PRO для безлимита!`
+          : `Limit: ${PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY} sessions/day. Get PRO for unlimited!`
+      );
+      return;
+    }
+
     const seconds = selectedMinutes * 60;
     setTimeLeft(seconds);
     setTotalTime(seconds);
@@ -209,16 +225,16 @@ export default function FocusPage() {
         alignItems: 'center',
       }}
     >
-      <h1
-        style={{
-          fontSize: '24px',
-          fontWeight: 700,
-          marginBottom: '8px',
-          alignSelf: 'flex-start',
-        }}
-      >
-        {t.focus.title}
-      </h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', alignSelf: 'flex-start', width: '100%' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700 }}>
+          {t.focus.title}
+        </h1>
+        <ProLimitBadge
+          current={sessionsToday}
+          max={PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY}
+          isPro={isPro}
+        />
+      </div>
       <div
         style={{
           fontSize: '13px',
@@ -227,7 +243,7 @@ export default function FocusPage() {
           alignSelf: 'flex-start',
         }}
       >
-        {t.focus.sessionsToday}: {sessionsToday} | +{XP_REWARDS.focus_bonus} XP +25 🪙{' '}
+        {t.focus.sessionsToday}: {sessionsToday}{!isPro ? `/${PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY}` : ''} | +{XP_REWARDS.focus_bonus} XP +25 🪙{' '}
         {t.focus.perBlock}
       </div>
 
@@ -325,19 +341,21 @@ export default function FocusPage() {
         {!isRunning ? (
           <button
             onClick={startTimer}
+            disabled={!canStart}
             style={{
               flex: 1,
               padding: '16px',
               borderRadius: '12px',
               border: 'none',
-              backgroundColor: '#7c3aed',
-              color: '#fff',
-              cursor: 'pointer',
+              backgroundColor: canStart ? '#7c3aed' : '#1e1e2e',
+              color: canStart ? '#fff' : '#475569',
+              cursor: canStart ? 'pointer' : 'not-allowed',
               fontSize: '18px',
               fontWeight: 700,
+              opacity: canStart ? 1 : 0.6,
             }}
           >
-            {t.focus.start}
+            {canStart ? t.focus.start : `🔒 ${t.focus.start}`}
           </button>
         ) : (
           <>
@@ -375,6 +393,38 @@ export default function FocusPage() {
           </>
         )}
       </div>
+
+      {/* Limit warning */}
+      {!canStart && !isRunning && (
+        <div
+          style={{
+            marginTop: '16px',
+            padding: '12px 16px',
+            backgroundColor: '#7c3aed10',
+            border: '1px solid #7c3aed30',
+            borderRadius: '10px',
+            textAlign: 'center',
+            width: '100%',
+            maxWidth: '300px',
+          }}
+        >
+          <div style={{ fontSize: '13px', color: '#a78bfa', marginBottom: '4px' }}>
+            {locale === 'ru'
+              ? `Лимит ${PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY} сессии/день исчерпан`
+              : `${PRO_LIMITS.FREE_MAX_FOCUS_PER_DAY} sessions/day limit reached`}
+          </div>
+          <a
+            href="/subscription"
+            style={{
+              fontSize: '12px',
+              color: '#c084fc',
+              textDecoration: 'underline',
+            }}
+          >
+            {locale === 'ru' ? '👑 Безлимит с PRO' : '👑 Unlimited with PRO'}
+          </a>
+        </div>
+      )}
 
       {/* Rules */}
       <div

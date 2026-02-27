@@ -17,6 +17,8 @@ export interface Profile {
   focus_duration_minutes: number
   notifications_enabled: boolean
   streak_shield_active: boolean
+  is_pro: boolean
+  pro_until: string | null
   created_at: string
   updated_at: string
 }
