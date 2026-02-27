@@ -8,6 +8,7 @@ import {
   Wallet, MessageCircle, Clock, Shield, Star,
   ChevronDown, ChevronUp, Rocket,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type PayMethod = 'crypto' | 'stars' | null;
 
@@ -21,6 +22,8 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [payMethod, setPayMethod] = useState<PayMethod>(null);
   const [showFaq, setShowFaq] = useState<number | null>(null);
+  const [tgLinked, setTgLinked] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   useEffect(() => {
     loadStatus();
@@ -40,6 +43,12 @@ export default function SubscriptionPage() {
         setIsPro(data.is_pro || false);
         setProUntil(data.pro_until);
       }
+      const { data: link } = await supabase
+        .from('telegram_links')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setTgLinked(!!link);
     } catch (err) {
       console.error(err);
     } finally {
@@ -47,14 +56,29 @@ export default function SubscriptionPage() {
     }
   }
 
+  async function handleCryptoPay(asset: string) {
+    setCreatingInvoice(true);
+    try {
+      const res = await fetch('/api/payments/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset }),
+      });
+      const data = await res.json();
+      if (data.invoice_url) {
+        window.open(data.invoice_url, '_blank');
+      } else {
+        toast.error(ru ? 'Ошибка создания счёта' : 'Failed to create invoice');
+      }
+    } catch {
+      toast.error(ru ? 'Ошибка' : 'Error');
+    } finally {
+      setCreatingInvoice(false);
+    }
+  }
+
   const PRICE_USD = 15;
   const PRICE_STARS = 750;
-
-  const PAYMENT_LINKS = {
-    cryptoBot: 'https://t.me/send?start=IVKbbnVJ3EDc',
-    xRocket: 'https://t.me/xrocket?start=inv_ngKqkFWuPU5Bzwx',
-    bot: 'https://t.me/SOLOINCOMESYSTEMBOT',
-  };
 
   const freeFeatures = ru
     ? [
@@ -274,100 +298,100 @@ export default function SubscriptionPage() {
             </button>
           </div>
 
-          {/* Crypto Payment */}
           {payMethod === 'crypto' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-400 text-center">
-                {ru
-                  ? `Оплатите ${PRICE_USD} USDT через один из сервисов. После оплаты напишите боту @SOLOINCOMESYSTEMBOT для активации.`
-                  : `Pay ${PRICE_USD} USDT via one of the services. After payment, message @SOLOINCOMESYSTEMBOT for activation.`}
-              </p>
-
-              {/* CryptoBot */}
-              <a
-                href={PAYMENT_LINKS.cryptoBot}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group"
-              >
-                <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center shrink-0">
-                  <MessageCircle className="w-6 h-6 text-blue-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-white font-semibold group-hover:text-blue-400 transition-colors">
-                    CryptoBot
+              {!tgLinked ? (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
+                  <p className="text-sm text-red-400 font-medium mb-2">
+                    {ru ? '⚠️ Сначала привяжите Telegram' : '⚠️ Link Telegram first'}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {ru ? 'USDT, TON, BTC и другие' : 'USDT, TON, BTC and more'}
+                  <p className="text-xs text-gray-400 mb-3">
+                    {ru
+                      ? 'Для автоматической активации PRO нужна привязка Telegram-аккаунта'
+                      : 'Telegram account link is required for automatic PRO activation'}
                   </p>
+                  <a
+                    href="/settings"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-500"
+                  >
+                    {ru ? 'Перейти в настройки' : 'Go to Settings'}
+                  </a>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-white">${PRICE_USD}</p>
-                  <ExternalLink className="w-4 h-4 text-gray-500 ml-auto" />
-                </div>
-              </a>
-
-              {/* xRocket */}
-              <a
-                href={PAYMENT_LINKS.xRocket}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all group"
-              >
-                <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center shrink-0">
-                  <Rocket className="w-6 h-6 text-purple-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-white font-semibold group-hover:text-purple-400 transition-colors">
-                    xRocket
+              ) : (
+                <>
+                  <p className="text-sm text-gray-400 text-center">
+                    {ru
+                      ? `Выберите валюту для оплаты $${PRICE_USD}. PRO активируется автоматически!`
+                      : `Choose currency to pay $${PRICE_USD}. PRO activates automatically!`}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {ru ? 'USDT, TON и другие' : 'USDT, TON and more'}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-white">${PRICE_USD}</p>
-                  <ExternalLink className="w-4 h-4 text-gray-500 ml-auto" />
-                </div>
-              </a>
 
-              {/* After payment */}
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
-                <p className="text-sm font-semibold text-white mb-3">
-                  {ru ? 'После оплаты:' : 'After payment:'}
-                </p>
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <span className="bg-blue-500/20 text-blue-400 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0">1</span>
-                    <span className="text-sm text-gray-300">
-                      {ru ? 'Сделайте скриншот или скопируйте хеш транзакции' : 'Take a screenshot or copy the transaction hash'}
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="bg-blue-500/20 text-blue-400 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0">2</span>
-                    <span className="text-sm text-gray-300">
-                      {ru ? 'Отправьте боту @SOLOINCOMESYSTEMBOT' : 'Send it to @SOLOINCOMESYSTEMBOT'}
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="bg-green-500/20 text-green-400 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shrink-0">✓</span>
-                    <span className="text-sm text-gray-300">
-                      {ru ? 'PRO активируется в течение 1 часа!' : 'PRO activates within 1 hour!'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                  {/* CryptoBot — USDT */}
+                  <button
+                    onClick={() => handleCryptoPay('USDT')}
+                    disabled={creatingInvoice}
+                    className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group disabled:opacity-50"
+                  >
+                    <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Wallet className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-white font-semibold group-hover:text-blue-400 transition-colors">
+                        USDT
+                      </p>
+                      <p className="text-xs text-gray-500">CryptoBot</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-white">${PRICE_USD}</p>
+                    </div>
+                  </button>
 
-              <a
-                href={PAYMENT_LINKS.bot}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-500 transition-colors"
-              >
-                <MessageCircle className="w-5 h-5" />
-                {ru ? 'Написать боту' : 'Message Bot'}
-                <ExternalLink className="w-4 h-4" />
-              </a>
+                  {/* CryptoBot — TON */}
+                  <button
+                    onClick={() => handleCryptoPay('TON')}
+                    disabled={creatingInvoice}
+                    className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all group disabled:opacity-50"
+                  >
+                    <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Rocket className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-white font-semibold group-hover:text-purple-400 transition-colors">
+                        TON
+                      </p>
+                      <p className="text-xs text-gray-500">CryptoBot</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-white">${PRICE_USD}</p>
+                    </div>
+                  </button>
+
+                  {/* CryptoBot — BTC */}
+                  <button
+                    onClick={() => handleCryptoPay('BTC')}
+                    disabled={creatingInvoice}
+                    className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-yellow-500/50 hover:bg-yellow-500/5 transition-all group disabled:opacity-50"
+                  >
+                    <div className="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Wallet className="w-6 h-6 text-yellow-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-white font-semibold group-hover:text-yellow-400 transition-colors">
+                        BTC
+                      </p>
+                      <p className="text-xs text-gray-500">CryptoBot</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-white">${PRICE_USD}</p>
+                    </div>
+                  </button>
+
+                  {creatingInvoice && (
+                    <p className="text-center text-sm text-gray-400 animate-pulse">
+                      {ru ? 'Создаём счёт...' : 'Creating invoice...'}
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -414,7 +438,7 @@ export default function SubscriptionPage() {
               </div>
 
               <a
-                href={PAYMENT_LINKS.bot}
+                href="https://t.me/SOLOINCOMESYSTEMBOT"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-500 transition-colors"

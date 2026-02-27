@@ -8,6 +8,7 @@ import {
   Shield, Crown, Search, UserCheck, UserX,
   Loader2, AlertTriangle, Clock, Users,
 } from 'lucide-react';
+import { activateProAction, deactivateProAction } from './actions';
 
 interface UserRow {
   id: string;
@@ -108,22 +109,10 @@ export default function AdminPage() {
     }
   }
 
-  async function activatePro(userId: string) {
+async function activatePro(userId: string) {
     setActivating(true);
     try {
-      const proUntil = new Date();
-      proUntil.setDate(proUntil.getDate() + days);
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_pro: true,
-          pro_until: proUntil.toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
+      const result = await activateProAction(userId, days);
 
       toast.success(
         ru
@@ -131,9 +120,8 @@ export default function AdminPage() {
           : `PRO activated for ${days} days!`
       );
 
-      // Обновляем результат поиска
       if (searchResult && searchResult.id === userId) {
-        setSearchResult({ ...searchResult, is_pro: true, pro_until: proUntil.toISOString() });
+        setSearchResult({ ...searchResult, is_pro: true, pro_until: result.pro_until });
       }
       await loadRecentPro();
     } catch (err) {
@@ -144,20 +132,11 @@ export default function AdminPage() {
     }
   }
 
-  async function deactivatePro(userId: string) {
+async function deactivatePro(userId: string) {
     if (!confirm(ru ? 'Деактивировать PRO?' : 'Deactivate PRO?')) return;
     setActivating(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          is_pro: false,
-          pro_until: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
-      if (error) throw error;
+      await deactivateProAction(userId);
 
       toast.success(ru ? 'PRO деактивирован' : 'PRO deactivated');
 
