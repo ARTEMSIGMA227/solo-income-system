@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 const CRYPTOBOT_API = 'https://pay.crypt.bot/api';
-const PRICE_USD = 15;
+const PRICE_USD = 1;
 
 async function getUser() {
   const cookieStore = await cookies();
