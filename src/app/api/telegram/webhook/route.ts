@@ -247,7 +247,7 @@ async function handleStatus(chatId: number, userId: string, messageId?: number) 
   if (messageId) {
     await editMessage(chatId, messageId, text, backToMain());
   } else {
-    await sendMessage(chatId, text, mainMenu(!!profile?.is_pro));
+    await sendMessage(chatId, text, backToMain());
   }
 }
 
