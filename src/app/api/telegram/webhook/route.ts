@@ -719,7 +719,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (text === '/status' || text === '/menu') {
+    if (text === '/menu') {
+      const supabase = createAdminClient();
+      const { data: prof } = await supabase.from('profiles').select('is_pro').eq('id', userId).single();
+      await sendMessage(chatId, '⚔️ <b>Solo Income System</b>\n\nВыбери действие 👇', mainMenu(!!prof?.is_pro));
+    } else if (text === '/status') {
       await handleStatus(chatId, userId);
     } else if (text === '/pro') {
       const supabase = createAdminClient();
