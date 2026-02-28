@@ -583,7 +583,15 @@ export async function POST(request: NextRequest) {
 
       await answerCallback(cb.id);
 
-      if (data === 'main' || data === 'status') {
+      if (data === 'main') {
+        const supabase = createAdminClient();
+        const { data: prof } = await supabase.from('profiles').select('is_pro').eq('id', userId).single();
+        await editMessage(chatId, messageId,
+          '⚔️ <b>Solo Income System</b>\n\nВыбери действие 👇',
+          mainMenu(!!prof?.is_pro),
+        );
+      } else if (data === 'status') {
+        await handleStatus(chatId, userId, messageId);
         await handleStatus(chatId, userId, messageId);
       } else if (data === 'stats_menu') {
         await editMessage(chatId, messageId, '📈 <b>Статистика</b>\n\nВыберите период:', statsMenu());
