@@ -241,7 +241,8 @@ async function handleStatus(chatId: number, userId: string, messageId?: number) 
     + `🔥 Серия: ${profile?.streak_current || 0} дней${proLine}\n\n`
     + `📋 Сегодня: ${todayActions}/${target}\n`
     + `${progressBar} ${percent}%\n`
-    + (percent >= 100 ? '\n✅ План выполнен! 🎉' : `\n⏳ Осталось ${target - todayActions} действий`);
+    + (percent >= 100 ? '\n✅ План выполнен! 🎉' : `\n⏳ Осталось ${target - todayActions} действий`)
+    + `\n\n🕐 ${new Date().toLocaleTimeString('ru-RU', { timeZone: tz, hour: '2-digit', minute: '2-digit' })}`;
 
   if (messageId) {
     await editMessage(chatId, messageId, text, mainMenu(!!profile?.is_pro));
