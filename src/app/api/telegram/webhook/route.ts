@@ -245,7 +245,7 @@ async function handleStatus(chatId: number, userId: string, messageId?: number) 
     + `\n\n🕐 ${new Date().toLocaleTimeString('ru-RU', { timeZone: tz, hour: '2-digit', minute: '2-digit' })}`;
 
   if (messageId) {
-    await editMessage(chatId, messageId, text, mainMenu(!!profile?.is_pro));
+    await editMessage(chatId, messageId, text, backToMain());
   } else {
     await sendMessage(chatId, text, mainMenu(!!profile?.is_pro));
   }
