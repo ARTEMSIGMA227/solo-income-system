@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-const XROCKET_API = 'https://pay.ton-rocket.com';
+const XROCKET_API = 'https://pay.xrocket.tg';
 const PRICE_USD = 15;
 
 async function getUser() {
