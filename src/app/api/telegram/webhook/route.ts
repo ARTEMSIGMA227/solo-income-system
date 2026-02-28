@@ -112,7 +112,7 @@ function mainMenu(isPro: boolean) {
 
 function backToMain() {
   return {
-    inline_keyboard: [[{ text: '« Назад', callback_data: 'main' }]],
+    inline_keyboard: [[{ text: '« Назад в меню', callback_data: 'main' }]],
   };
 }
 
