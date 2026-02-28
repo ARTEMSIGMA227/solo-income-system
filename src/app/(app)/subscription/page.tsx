@@ -77,6 +77,27 @@ export default function SubscriptionPage() {
     }
   }
 
+  async function handleXRocketPay(currency: string) {
+    setCreatingInvoice(true);
+    try {
+      const res = await fetch('/api/payments/create-invoice-xrocket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currency }),
+      });
+      const data = await res.json();
+      if (data.invoice_url) {
+        window.open(data.invoice_url, '_blank');
+      } else {
+        toast.error(ru ? 'Ошибка создания счёта' : 'Failed to create invoice');
+      }
+    } catch {
+      toast.error(ru ? 'Ошибка' : 'Error');
+    } finally {
+      setCreatingInvoice(false);
+    }
+  }
+
   const PRICE_USD = 15;
   const PRICE_STARS = 750;
 
@@ -379,6 +400,46 @@ export default function SubscriptionPage() {
                         BTC
                       </p>
                       <p className="text-xs text-gray-500">CryptoBot</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-white">${PRICE_USD}</p>
+                    </div>
+                  </button>
+
+                  {/* xRocket — USDT */}
+                  <button
+                    onClick={() => handleXRocketPay('USDT')}
+                    disabled={creatingInvoice}
+                    className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-green-500/50 hover:bg-green-500/5 transition-all group disabled:opacity-50"
+                  >
+                    <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Rocket className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-white font-semibold group-hover:text-green-400 transition-colors">
+                        USDT
+                      </p>
+                      <p className="text-xs text-gray-500">xRocket</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-white">${PRICE_USD}</p>
+                    </div>
+                  </button>
+
+                  {/* xRocket — TON */}
+                  <button
+                    onClick={() => handleXRocketPay('TON')}
+                    disabled={creatingInvoice}
+                    className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-green-500/50 hover:bg-green-500/5 transition-all group disabled:opacity-50"
+                  >
+                    <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center shrink-0">
+                      <Rocket className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-white font-semibold group-hover:text-green-400 transition-colors">
+                        TON
+                      </p>
+                      <p className="text-xs text-gray-500">xRocket</p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-white">${PRICE_USD}</p>
