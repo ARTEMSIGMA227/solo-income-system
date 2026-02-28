@@ -428,7 +428,7 @@ export default function SubscriptionPage() {
 
                   {/* xRocket — TON */}
                   <button
-                    onClick={() => handleXRocketPay('TON')}
+                    onClick={() => handleXRocketPay('TONCOIN')}
                     disabled={creatingInvoice}
                     className="flex items-center gap-4 w-full bg-gray-900 border border-gray-700 rounded-xl p-4 hover:border-green-500/50 hover:bg-green-500/5 transition-all group disabled:opacity-50"
                   >
