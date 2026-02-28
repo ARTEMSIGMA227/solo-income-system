@@ -39,9 +39,10 @@ export async function POST(request: NextRequest) {
         'Crypto-Pay-API-Token': process.env.CRYPTOBOT_API_TOKEN!,
       },
       body: JSON.stringify({
-        currency_type: 'crypto',
-        asset,
+        currency_type: 'fiat',
+        fiat: 'USD',
         amount: String(PRICE_USD),
+        accepted_assets: asset,
         description: 'Solo Income System PRO — 30 days',
         payload: user.id,
         paid_btn_name: 'openBot',

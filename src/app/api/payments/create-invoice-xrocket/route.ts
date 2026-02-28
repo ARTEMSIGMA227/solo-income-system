@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const currency = body.currency || 'USDT';
 
-    const res = await fetch(`${XROCKET_API}/tg-invoices`, {
+    const res = await fetch(`${XROCKET_API}/app/invoices`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,8 +39,10 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         amount: PRICE_USD,
+        minPayment: PRICE_USD,
         currency,
         description: 'Solo Income System PRO — 30 days',
+        hiddenMessage: user.id,
         payload: user.id,
       }),
     });
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      invoice_url: data.data?.link,
+      invoice_url: data.data?.link || data.data?.botInvoiceUrl,
       invoice_id: data.data?.id,
     });
   } catch (err) {
