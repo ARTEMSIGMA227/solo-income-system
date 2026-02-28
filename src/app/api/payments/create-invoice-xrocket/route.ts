@@ -21,6 +21,21 @@ async function getUser() {
   return user;
 }
 
+async function getRate(currency: string): Promise<number> {
+  try {
+    const ids: Record<string, string> = { TONCOIN: 'the-open-network', USDT: 'tether' };
+    const id = ids[currency];
+    if (!id || currency === 'USDT') return 1;
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
+    );
+    const data = await res.json();
+    return data[id]?.usd || 1;
+  } catch {
+    return 1;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getUser();
@@ -31,6 +46,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const currency = body.currency || 'USDT';
 
+    const rate = await getRate(currency);
+    const cryptoAmount = currency === 'USDT' ? PRICE_USD : +(PRICE_USD / rate).toFixed(4);
+
     const res = await fetch(`${XROCKET_API}/tg-invoices`, {
       method: 'POST',
       headers: {
@@ -38,7 +56,7 @@ export async function POST(request: NextRequest) {
         'Rocket-Pay-Key': process.env.XROCKET_API_TOKEN!,
       },
       body: JSON.stringify({
-        amount: PRICE_USD,
+        amount: cryptoAmount,
         currency,
         description: 'Solo Income System PRO — 30 days',
         payload: user.id,
@@ -46,7 +64,6 @@ export async function POST(request: NextRequest) {
     });
 
     const data = await res.json();
-    console.log('xRocket response:', JSON.stringify(data));
 
     if (!data.success) {
       console.error('xRocket createInvoice error:', data);
