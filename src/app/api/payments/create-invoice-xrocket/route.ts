@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     });
 
     const data = await res.json();
+    console.log('xRocket response:', JSON.stringify(data));
 
     if (!data.success) {
       console.error('xRocket createInvoice error:', data);
