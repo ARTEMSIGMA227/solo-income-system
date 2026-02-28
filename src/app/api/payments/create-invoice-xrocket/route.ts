@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const currency = body.currency || 'USDT';
 
-    const res = await fetch(`${XROCKET_API}/app/invoices`, {
+    const res = await fetch(`${XROCKET_API}/tg-invoices`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
