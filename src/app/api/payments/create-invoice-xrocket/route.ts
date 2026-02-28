@@ -39,10 +39,8 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         amount: PRICE_USD,
-        minPayment: PRICE_USD,
         currency,
         description: 'Solo Income System PRO — 30 days',
-        hiddenMessage: user.id,
         payload: user.id,
       }),
     });
