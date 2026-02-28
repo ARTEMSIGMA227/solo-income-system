@@ -31,6 +31,7 @@ export default function SettingsPage() {
   const [tgToken, setTgToken] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState("");
   const [tgLoading, setTgLoading] = useState(false);
+  const [notificationHours, setNotificationHours] = useState<number[]>([10, 18, 21]);
 
   const { t, locale, setLocale } = useT();
 
@@ -55,6 +56,7 @@ export default function SettingsPage() {
         setMonthlyTarget(p.monthly_income_target || 150000);
         setPenaltyXP(p.penalty_xp || 100);
         setNotificationsEnabled(p.notifications_enabled ?? true);
+        setNotificationHours(p.notification_hours ?? [10, 18, 21]);
       }
 
       try {
@@ -81,6 +83,7 @@ export default function SettingsPage() {
       monthly_income_target: monthlyTarget,
       penalty_xp: penaltyXP,
       notifications_enabled: notificationsEnabled,
+      notification_hours: notificationHours,
       updated_at: new Date().toISOString(),
     }).eq("id", user.id);
 
@@ -264,10 +267,52 @@ export default function SettingsPage() {
       {/* Notifications */}
       <div style={cardStyle}>
         <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>{t.settings.notifications.title}</div>
-        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "16px" }}>
           <input type="checkbox" checked={notificationsEnabled} onChange={(e) => setNotificationsEnabled(e.target.checked)} style={{ accentColor: "#7c3aed", width: "18px", height: "18px" }} />
           <span style={{ fontSize: "14px" }}>{t.settings.notifications.push}</span>
         </label>
+
+        {notificationsEnabled && (
+          <div>
+            <label style={labelStyle}>{locale === 'ru' ? 'Часы уведомлений (нажмите для выбора)' : 'Notification hours (tap to select)'}</label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px", marginTop: "8px" }}>
+              {Array.from({ length: 24 }, (_, h) => {
+                const active = notificationHours.includes(h);
+                return (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => {
+                      if (active) {
+                        setNotificationHours(notificationHours.filter(x => x !== h));
+                      } else {
+                        setNotificationHours([...notificationHours, h].sort((a, b) => a - b));
+                      }
+                    }}
+                    style={{
+                      padding: "8px 4px",
+                      borderRadius: "8px",
+                      border: active ? "2px solid #7c3aed" : "1px solid #1e1e2e",
+                      backgroundColor: active ? "#7c3aed20" : "#16161f",
+                      color: active ? "#a78bfa" : "#64748b",
+                      fontSize: "13px",
+                      fontWeight: active ? 700 : 400,
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {String(h).padStart(2, "0")}
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ fontSize: "11px", color: "#64748b", marginTop: "8px" }}>
+              {locale === 'ru'
+                ? `Выбрано: ${notificationHours.length > 0 ? notificationHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ') : 'нет'}`
+                : `Selected: ${notificationHours.length > 0 ? notificationHours.map(h => `${String(h).padStart(2, '0')}:00`).join(', ') : 'none'}`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Telegram */}

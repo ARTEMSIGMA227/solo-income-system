@@ -15,6 +15,17 @@ webpush.setVapidDetails(
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
 
+const MOTIVATIONAL_RU = [
+  "💪 Каждое действие приближает тебя к цели!",
+  "🔥 Ты сильнее, чем думаешь. Продолжай!",
+  "⚡ Маленькие шаги — большие результаты.",
+  "🎯 Фокус на действиях, результат придёт.",
+  "🚀 Дисциплина побеждает мотивацию.",
+  "💎 Инвестируй в себя каждый день.",
+  "🏆 Победители не сдаются. Ты — победитель.",
+  "⭐ Сегодня — лучший день для прогресса.",
+];
+
 interface SubscriptionRow {
   id: string;
   user_id: string;
@@ -36,6 +47,8 @@ interface ProfileRow {
   timezone: string | null;
   notifications_enabled: boolean;
   daily_actions_target: number;
+  notification_hours: number[] | null;
+  is_pro: boolean;
 }
 
 interface WebPushError extends Error {
@@ -71,44 +84,58 @@ function getTodayForTz(tz: string): string {
   }
 }
 
+function getMotivational(): string {
+  return MOTIVATIONAL_RU[Math.floor(Math.random() * MOTIVATIONAL_RU.length)];
+}
+
 function getMessageForHour(
   hour: number,
+  hours: number[],
   name: string,
   streak: number,
   todayActions: number,
   target: number,
 ): { title: string; body: string } | null {
+  if (!hours.includes(hour)) return null;
+
   const percent = target > 0 ? Math.round((todayActions / target) * 100) : 0;
   const remaining = Math.max(target - todayActions, 0);
 
-  if (hour === 10) {
+  // Determine message type by position in schedule
+  const sorted = [...hours].sort((a, b) => a - b);
+  const idx = sorted.indexOf(hour);
+  const position = sorted.length === 1 ? "only" : idx === 0 ? "first" : idx === sorted.length - 1 ? "last" : "mid";
+
+  // Morning (first notification of the day)
+  if (position === "first" || (position === "only" && hour < 14)) {
     return {
       title: "🌅 Утренний квест",
       body: streak > 0
-        ? `${name}, начни день! Серия: ${streak} 🔥`
-        : `${name}, начни новую серию сегодня!`,
+        ? `${name}, начни день! Серия: ${streak} 🔥\n${getMotivational()}`
+        : `${name}, начни новую серию сегодня!\n${getMotivational()}`,
     };
   }
-  if (hour === 18) {
-    if (percent >= 100) {
-      return {
-        title: "✅ План выполнен!",
-        body: `${name}, ты выполнил ${todayActions}/${target} действий. Молодец!`,
-      };
-    }
-    return {
-      title: "⚡ Дневной статус",
-      body: `${name}, ${todayActions}/${target} (${percent}%). Осталось ${remaining} действий!`,
-    };
-  }
-  if (hour === 21) {
-    if (percent >= 100) return null; // Уже выполнил, не тревожим
+
+  // Last chance (last notification)
+  if (position === "last" || (position === "only" && hour >= 19)) {
+    if (percent >= 100) return null;
     return {
       title: "🌙 Последний шанс",
       body: `${name}, осталось ${remaining} действий! Не потеряй серию ${streak} 🔥`,
     };
   }
-  return null;
+
+  // Mid-day status
+  if (percent >= 100) {
+    return {
+      title: "✅ План выполнен!",
+      body: `${name}, ты выполнил ${todayActions}/${target} действий. Молодец! ${getMotivational()}`,
+    };
+  }
+  return {
+    title: "⚡ Дневной статус",
+    body: `${name}, ${todayActions}/${target} (${percent}%). Осталось ${remaining} действий!`,
+  };
 }
 
 async function sendTelegramMsg(chatId: number, text: string): Promise<boolean> {
@@ -132,13 +159,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // ═══════════════════════════════════════
-  // 1. Загружаем все данные
-  // ═══════════════════════════════════════
-
+  // Load all data
   const { data: profiles } = await supabaseAdmin
     .from("profiles")
-    .select("id, display_name, streak_current, timezone, notifications_enabled, daily_actions_target");
+    .select("id, display_name, streak_current, timezone, notifications_enabled, daily_actions_target, notification_hours, is_pro");
 
   if (!profiles || profiles.length === 0) {
     return NextResponse.json({ push_sent: 0, tg_sent: 0, reason: "no_profiles" });
@@ -147,7 +171,7 @@ export async function GET(request: NextRequest) {
   const typedProfiles = profiles as ProfileRow[];
   const userIds = typedProfiles.map((p) => p.id);
 
-  // Push подписки
+  // Push subscriptions
   const { data: subscriptions } = await supabaseAdmin
     .from("push_subscriptions")
     .select("id, user_id, endpoint, p256dh, auth_key")
@@ -155,7 +179,7 @@ export async function GET(request: NextRequest) {
 
   const typedSubs = (subscriptions ?? []) as SubscriptionRow[];
 
-  // Telegram привязки
+  // Telegram links
   const { data: tgLinks } = await supabaseAdmin
     .from("telegram_links")
     .select("user_id, chat_id, is_active")
@@ -164,17 +188,13 @@ export async function GET(request: NextRequest) {
 
   const typedTgLinks = (tgLinks ?? []) as TelegramLinkRow[];
 
-  // Действия за сегодня для каждого пользователя
   const profileMap = new Map<string, ProfileRow>();
   for (const p of typedProfiles) profileMap.set(p.id, p);
 
   const tgLinkMap = new Map<string, TelegramLinkRow>();
   for (const l of typedTgLinks) tgLinkMap.set(l.user_id, l);
 
-  // ═══════════════════════════════════════
-  // 2. Считаем действия за сегодня
-  // ═══════════════════════════════════════
-
+  // Today's actions per user
   const todayActionsMap = new Map<string, number>();
   for (const prof of typedProfiles) {
     const tz = prof.timezone ?? "Europe/Berlin";
@@ -192,10 +212,7 @@ export async function GET(request: NextRequest) {
     todayActionsMap.set(prof.id, total);
   }
 
-  // ═══════════════════════════════════════
-  // 3. Web Push уведомления
-  // ═══════════════════════════════════════
-
+  // Web Push notifications
   let pushSent = 0;
   let pushSkipped = 0;
   let pushFailed = 0;
@@ -209,11 +226,13 @@ export async function GET(request: NextRequest) {
 
     const tz = profile.timezone ?? "Europe/Berlin";
     const currentHour = getHourInTimezone(tz);
+    const hours = profile.notification_hours ?? [10, 18, 21];
     const todayActions = todayActionsMap.get(profile.id) ?? 0;
     const target = profile.daily_actions_target ?? 30;
 
     const message = getMessageForHour(
       currentHour,
+      hours,
       profile.display_name ?? "Охотник",
       profile.streak_current ?? 0,
       todayActions,
@@ -242,10 +261,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ═══════════════════════════════════════
-  // 4. Telegram уведомления
-  // ═══════════════════════════════════════
-
+  // Telegram notifications
   let tgSent = 0;
   let tgSkipped = 0;
   let tgFailed = 0;
@@ -264,11 +280,13 @@ export async function GET(request: NextRequest) {
 
     const tz = prof.timezone ?? "Europe/Berlin";
     const currentHour = getHourInTimezone(tz);
+    const hours = prof.notification_hours ?? [10, 18, 21];
     const todayActions = todayActionsMap.get(prof.id) ?? 0;
     const target = prof.daily_actions_target ?? 30;
 
     const message = getMessageForHour(
       currentHour,
+      hours,
       prof.display_name ?? "Охотник",
       prof.streak_current ?? 0,
       todayActions,
