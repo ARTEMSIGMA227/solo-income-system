@@ -12,7 +12,7 @@ import { en } from './en';
 import type { Locale, TranslationDictionary } from './types';
 
 export type { Locale, TranslationDictionary };
-export type Currency = 'RUB' | 'USD';
+export type Currency = 'RUB' | 'USD' | 'EUR';
 
 const dictionaries: Record<Locale, TranslationDictionary> = { ru, en };
 
@@ -64,7 +64,7 @@ function getInitialCurrency(): Currency {
   if (typeof window === 'undefined') return 'RUB';
   try {
     const stored = localStorage.getItem(CURRENCY_KEY);
-    if (stored === 'RUB' || stored === 'USD') return stored;
+    if (stored === 'RUB' || stored === 'USD' || stored === 'EUR') return stored;
   } catch {
     // SSR or localStorage unavailable
   }
@@ -81,15 +81,62 @@ function buildFormatCurrency(locale: Locale, currency: Currency) {
     }).format(amount);
 }
 
+// Sync to database (fire and forget)
+async function syncToDb(field: 'locale' | 'currency', value: string) {
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('profiles').update({
+        [field]: value,
+        updated_at: new Date().toISOString(),
+      }).eq('id', user.id);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('ru');
   const [currency, setCurrencyState] = useState<Currency>('RUB');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setLocaleState(getInitialLocale());
-    setCurrencyState(getInitialCurrency());
+    const initLocale = getInitialLocale();
+    const initCurrency = getInitialCurrency();
+    setLocaleState(initLocale);
+    setCurrencyState(initCurrency);
     setMounted(true);
+
+    // Sync from DB on load (DB is source of truth if available)
+    (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('locale, currency')
+            .eq('id', user.id)
+            .single();
+          if (profile) {
+            if (profile.locale && (profile.locale === 'ru' || profile.locale === 'en')) {
+              setLocaleState(profile.locale);
+              localStorage.setItem(STORAGE_KEY, profile.locale);
+            }
+            if (profile.currency && ['RUB', 'USD', 'EUR'].includes(profile.currency)) {
+              setCurrencyState(profile.currency as Currency);
+              localStorage.setItem(CURRENCY_KEY, profile.currency);
+            }
+          }
+        }
+      } catch {
+        // ignore - use localStorage values
+      }
+    })();
   }, []);
 
   const setLocale = useCallback((newLocale: Locale) => {
@@ -102,6 +149,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (typeof document !== 'undefined') {
       document.documentElement.lang = newLocale;
     }
+    syncToDb('locale', newLocale);
   }, []);
 
   const setCurrency = useCallback((newCurrency: Currency) => {
@@ -111,6 +159,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    syncToDb('currency', newCurrency);
   }, []);
 
   const t = dictionaries[locale];

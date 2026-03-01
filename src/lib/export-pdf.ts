@@ -14,7 +14,7 @@ interface PdfExportData {
   quests: { title: string; xp: number; completions: number }[];
   recentEvents: { date: string; type: string; xp: number; description: string }[];
   locale?: 'ru' | 'en';
-  currency?: 'RUB' | 'USD';
+  currency?: 'RUB' | 'USD' | 'EUR';
 }
 
 function formatDate(locale: 'ru' | 'en'): string {
@@ -25,7 +25,7 @@ function formatDate(locale: 'ru' | 'en'): string {
   });
 }
 
-function formatMoney(n: number, locale: 'ru' | 'en', currency: 'RUB' | 'USD'): string {
+function formatMoney(n: number, locale: 'ru' | 'en', currency: 'RUB' | 'USD' | 'EUR'): string {
   return new Intl.NumberFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
     style: 'currency',
     currency,
@@ -350,7 +350,7 @@ interface StatsExportData {
   expensesByCategory: { category: string; amount: number; percent: number }[];
   streaks: { current: number; longest: number; total: number };
   locale?: 'ru' | 'en';
-  currency?: 'RUB' | 'USD';
+  currency?: 'RUB' | 'USD' | 'EUR';
 }
 
 interface StatsLabels {

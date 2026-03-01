@@ -33,7 +33,7 @@ export default function SettingsPage() {
   const [tgLoading, setTgLoading] = useState(false);
   const [notificationHours, setNotificationHours] = useState<number[]>([10, 18, 21]);
 
-  const { t, locale, setLocale } = useT();
+  const { t, locale, setLocale, currency, setCurrency } = useT();
 
   // Delete confirmation word depends on locale
   const deleteWord = locale === 'ru' ? 'УДАЛИТЬ' : 'DELETE';
@@ -209,14 +209,15 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Language */}
+      {/* Language & Currency */}
       <div style={cardStyle}>
-        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>{t.settings.language.title}</div>
-        <label style={labelStyle}>{t.settings.language.label}</label>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "12px" }}>{locale === 'ru' ? 'Язык и валюта' : 'Language & Currency'}</div>
+        
+        <label style={labelStyle}>{locale === 'ru' ? 'Язык' : 'Language'}</label>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
           {([
-            { value: 'en' as Locale, label: t.settings.language.en, flag: '🇬🇧' },
-            { value: 'ru' as Locale, label: t.settings.language.ru, flag: '🇷🇺' },
+            { value: 'en' as Locale, label: 'English', flag: '🇬🇧' },
+            { value: 'ru' as Locale, label: 'Русский', flag: '🇷🇺' },
           ]).map((lang) => {
             const isSelected = locale === lang.value;
             return (
@@ -243,6 +244,40 @@ export default function SettingsPage() {
               >
                 <span style={{ fontSize: "18px" }}>{lang.flag}</span>
                 {lang.label}
+                {isSelected && <span style={{ fontSize: "12px" }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <label style={labelStyle}>{locale === 'ru' ? 'Валюта' : 'Currency'}</label>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {([
+            { value: 'RUB' as const, label: '₽ RUB', color: '#22c55e' },
+            { value: 'USD' as const, label: '$ USD', color: '#3b82f6' },
+            { value: 'EUR' as const, label: '€ EUR', color: '#f59e0b' },
+          ]).map((cur) => {
+            const isSelected = currency === cur.value;
+            return (
+              <button
+                key={cur.value}
+                type="button"
+                onClick={() => setCurrency(cur.value)}
+                style={{
+                  flex: 1,
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: isSelected ? `2px solid ${cur.color}` : "1px solid #1e1e2e",
+                  backgroundColor: isSelected ? `${cur.color}15` : "#16161f",
+                  color: isSelected ? cur.color : "#94a3b8",
+                  fontSize: "14px",
+                  fontWeight: isSelected ? 700 : 500,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {cur.label}
+                {isSelected && <span style={{ fontSize: "12px" }}> ✓</span>}
               </button>
             );
           })}
