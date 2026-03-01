@@ -276,6 +276,7 @@ function mainMenu(isPro: boolean, t: typeof T.ru) {
       [{ text: t.btn_quests, callback_data: 'quests' }, { text: t.btn_bosses, callback_data: 'bosses' }],
       [{ text: t.btn_goals, callback_data: 'goals' }, { text: t.btn_notify, callback_data: 'notify_menu' }],
       [isPro ? { text: t.btn_pro_active, callback_data: 'pro_info' } : { text: t.btn_buy_pro, callback_data: 'buy_pro' }],
+      [{ text: '🇷🇺 Русский', callback_data: 'lang_ru' }, { text: '🇬🇧 English', callback_data: 'lang_en' }],
       [{ text: t.btn_app, url: APP_URL }],
     ],
   };
@@ -650,6 +651,13 @@ export async function POST(request: NextRequest) {
         } else {
           await sendStarsInvoice(chatId, userId);
         }
+      } else if (data === 'lang_ru' || data === 'lang_en') {
+        const newLang: Lang = data === 'lang_ru' ? 'ru' : 'en';
+        const supabase = createAdminClient();
+        await supabase.from('profiles').update({ locale: newLang, updated_at: new Date().toISOString() }).eq('id', userId);
+        const nt = T[newLang];
+        const { data: prof } = await supabase.from('profiles').select('is_pro').eq('id', userId).single();
+        await editMessage(chatId, mid, nt.menu_title, mainMenu(!!prof?.is_pro, nt));
       } else if (data === 'pro_info') {
         const supabase = createAdminClient();
         const { data: prof } = await supabase.from('profiles').select('pro_until').eq('id', userId).single();
